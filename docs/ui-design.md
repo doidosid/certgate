@@ -83,3 +83,10 @@
 - 가장 오래된 미전송 Event가 1분 이상 지연
 
 일반 경고는 대시보드와 보안 이벤트 화면에 표시하고 실시간 토스트는 Critical 등급에만 사용한다.
+
+## 10. 와이어프레임
+
+- [인터랙티브 와이어프레임](wireframes/certgate-console-wireframe.html)
+- [대시보드 대표 이미지](images/certgate-console-dashboard.png)
+
+와이어프레임은 구현 전 정보 구조와 핵심 상호작용을 검증하기 위한 자료이며, 실제 구현 화면과 구분한다.

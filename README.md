@@ -30,10 +30,17 @@ X.509 인증서와 mTLS를 이용해 네트워크 디바이스의 신원을 검�
 - [Management API 초안](docs/api-spec.md)
 - [데이터 모델 초안](docs/data-model.md)
 - [관리 콘솔 UI 설계](docs/ui-design.md)
+- [관리 콘솔 인터랙티브 와이어프레임](docs/wireframes/certgate-console-wireframe.html)
 - [개발 로드맵](docs/roadmap.md)
 - [테스트 전략](docs/testing.md)
 - [배포·운영 설계](docs/operations.md)
 - [AI 활용 및 검증 기록](docs/ai-usage.md)
+
+## 관리 콘솔 와이어프레임
+
+아래 화면은 구현 전 요구사항과 정보 구조를 검증하기 위한 와이어프레임입니다. 실제 구현 화면은 개발 진행에 따라 교체합니다.
+
+[![CertGate 관리 콘솔 대시보드 와이어프레임](docs/images/certgate-console-dashboard.png)](docs/wireframes/certgate-console-wireframe.html)
 
 ## 현재 상태
 
