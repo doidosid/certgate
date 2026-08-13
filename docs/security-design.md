@@ -14,7 +14,22 @@ VALID ── 유효기간 종료 ──► EXPIRED
 - **REVOKED**: 관리자가 신뢰를 철회한 상태
 - **REJECTED**: 관리자가 발급 요청을 거절한 상태
 
-## 2. 인증서 발급
+## 2. CA 계층 구조
+
+```text
+Root CA
+  └─ Intermediate CA
+       └─ Device Certificate
+```
+
+- **Root CA**는 최상위 Trust Anchor다. Intermediate CA 인증서 서명에만 사용하고 평상시 발급 과정에서는 사용하지 않는다.
+- **Intermediate CA**가 승인된 Device CSR에 서명해 실제 Device Certificate를 발급한다.
+- Gateway는 Root CA를 신뢰 기준으로 삼고 Device Certificate부터 Intermediate CA, Root CA까지 이어지는 Chain을 검증한다.
+- Root CA 개인키와 Intermediate CA 개인키는 모두 Git에서 제외한다.
+- 포트폴리오 MVP에서는 파일 기반으로 운영하지만, Root CA 개인키는 별도 위치에 보관하고 실행 중인 Management API에는 Intermediate CA Key만 주입한다.
+- 상용 환경의 HSM·KMS, Key Ceremony, CA 감사 통제는 구현 범위가 아니며 한계로 명시한다.
+
+## 4. 인증서 발급
 
 1. Device가 로컬에서 개인키를 생성한다.
 2. Device가 할당받은 Device Identity를 이용해 CSR을 생성한다.
@@ -31,7 +46,7 @@ VALID ── 유효기간 종료 ──► EXPIRED
 - SAN URI 형식은 `urn:certgate:device:{device-id}`로 고정한다.
 - Common Name은 사람을 위한 표시 정보로만 사용하며 인증 판단에 사용하지 않는다.
 
-## 4. 인증서 폐기
+## 5. 인증서 폐기
 
 MVP는 Management DB를 기준으로 폐기를 처리한다.
 
@@ -42,7 +57,7 @@ MVP는 Management DB를 기준으로 폐기를 처리한다.
 
 CRL과 OCSP는 제출 이후 확장 기능으로 둔다.
 
-## 5. 접근제어
+## 6. 접근제어
 
 접근제어는 Device Role과 HTTP Method·Path 규칙을 사용한다.
 
@@ -59,7 +74,7 @@ CRL과 OCSP는 제출 이후 확장 기능으로 둔다.
 - Gateway가 Method와 정규화된 Path를 이용해 정책을 평가한다.
 - Backend에 전달하는 신뢰된 Identity Header는 Gateway만 생성한다.
 
-## 6. Security Event 사유 코드
+## 7. Security Event 사유 코드
 
 - `CERTIFICATE_REQUIRED`
 - `INVALID_CERTIFICATE`
@@ -73,6 +88,6 @@ CRL과 OCSP는 제출 이후 확장 기능으로 둔다.
 
 이벤트에는 발생 시각, Device ID, 인증서 Serial Number, Method, Path, 처리 결과, 사유, Client IP, 처리 시간을 기록한다.
 
-## 7. 명시적인 한계
+## 8. 명시적인 한계
 
 CertGate는 상용 CA 보안을 구현했다고 주장하지 않는다. CA Key 보호, 감사 로그 무결성, 분산 폐기 검증, 자동 갱신, Rate Limit, Replay Protection, HA는 후속 개선 사항으로 문서화한다.
