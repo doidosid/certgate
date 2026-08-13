@@ -34,7 +34,10 @@
 - CSR 승인과 인증서 발급
 - 인증서 상태 조회와 폐기
 - Gateway용 Access Context 조회
-- Security Event 저장
+- SQLite Durable Event Outbox와 재전송
+- Security Event 중복 방지 저장
+- Critical Alert Rule과 Notification Outbox
+- 범용 Webhook 발송
 
 ## Phase 3 - 관리 콘솔
 
@@ -43,11 +46,14 @@
 - Certificate Requests
 - Certificates
 - Security Events
+- Alerts
 
 ## Phase 4 - 포트폴리오 완성도 강화
 
 - Docker Compose
 - End-to-End 시나리오 Script
+- 가상 Device A~F를 이용한 정상·실패 시나리오
+- Management API 장애·복구와 Outbox 재전송 테스트
 - 패킷 캡처와 TLS 실패 원인 분석
 - 화면 캡처와 아키텍처 다이어그램
 - 구현 상태, 한계, 기술 선택 문서화

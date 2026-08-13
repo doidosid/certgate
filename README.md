@@ -21,6 +21,8 @@ X.509 인증서와 mTLS를 이용해 네트워크 디바이스의 신원을 검�
 - [Management API 초안](docs/api-spec.md)
 - [데이터 모델 초안](docs/data-model.md)
 - [개발 로드맵](docs/roadmap.md)
+- [테스트 전략](docs/testing.md)
+- [배포·운영 설계](docs/operations.md)
 - [AI 활용 및 검증 기록](docs/ai-usage.md)
 
 ## 현재 상태

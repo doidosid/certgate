@@ -35,6 +35,8 @@ CertGate는 신뢰할 수 없는 네트워크에서 X.509 인증서로 디바이
 - **FR-08**: 관리자는 발급된 인증서를 폐기할 수 있다.
 - **FR-09**: 폐기된 인증서는 Backend Service에 접근할 수 없다.
 - **FR-10**: 관리 콘솔에서 Device·CSR·인증서·보안 이벤트를 확인할 수 있다.
+- **FR-11**: Critical Security Event 발생 시 Alert를 생성하고 범용 Webhook으로 알림을 발송한다.
+- **FR-12**: 관리자는 Alert를 조회하고 `OPEN / ACKNOWLEDGED / RESOLVED` 상태로 관리할 수 있다.
 
 ## 5. 비기능 요구사항
 
@@ -42,6 +44,8 @@ CertGate는 신뢰할 수 없는 네트워크에서 X.509 인증서로 디바이
 - CA 개인키는 실행 환경에 별도로 주입하며 Git에 올리지 않는다.
 - 새 환경에서도 문서화된 명령으로 실행 과정을 재현할 수 있어야 한다.
 - 핵심 허용·차단 시나리오는 자동 테스트로 검증한다.
+- Management API 장애 중에도 Security Event가 유실되지 않도록 Gateway의 영속 Outbox에 보관한다.
+- Event와 Notification은 고유 ID를 기준으로 중복 저장을 방지하고 실패 시 재시도한다.
 - 로그에 개인키, 비밀번호, 전체 민감 Payload를 남기지 않는다.
 - 제출 버전은 단일 노드 포트폴리오 시스템이며 상용 수준의 HA를 목표로 하지 않는다.
 

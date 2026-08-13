@@ -100,6 +100,24 @@ CRL과 OCSP는 제출 이후 확장 기능으로 둔다.
 
 이벤트에는 발생 시각, Device ID, 인증서 Serial Number, Method, Path, 처리 결과, 사유, Client IP, 처리 시간을 기록한다.
 
-## 8. 명시적인 한계
+## 8. Critical Alert
+
+다음 조건에서 Critical Alert를 생성한다.
+
+- 폐기된 인증서로 접속을 시도한 경우
+- 동일 IP에서 Invalid Certificate가 1분 안에 5회 이상 발생한 경우
+- CA 인증서 서명이 실패한 경우
+- Gateway의 미전송 Security Event가 100건 이상 누적된 경우
+- 가장 오래된 미전송 Event가 1분 이상 지연된 경우
+
+처리 원칙:
+
+- Spring이 Security Event 저장 후 Alert Rule을 평가한다.
+- Alert를 DB에 먼저 저장한 후 Notification Outbox를 통해 Webhook을 발송한다.
+- Webhook 실패 시 지수 Backoff로 재시도한다.
+- 같은 원인의 반복 Alert는 5분 Window에서 묶어 중복 알림을 억제한다.
+- Alert 상태는 `OPEN / ACKNOWLEDGED / RESOLVED`를 사용한다.
+
+## 9. 명시적인 한계
 
 CertGate는 상용 CA 보안을 구현했다고 주장하지 않는다. CA Key 보호, 감사 로그 무결성, 분산 폐기 검증, 자동 갱신, Rate Limit, Replay Protection, HA는 후속 개선 사항으로 문서화한다.

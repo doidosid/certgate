@@ -46,12 +46,21 @@
 | GET | `/security-events` | 시간·Device·결과·사유별 이벤트 검색 |
 | GET | `/dashboard/summary` | 관리 콘솔 요약 통계 조회 |
 
+## Alert API
+
+| Method | Path | 설명 |
+|---|---|---|
+| GET | `/alerts` | 상태·등급·기간별 Alert 조회 |
+| PATCH | `/alerts/{alertId}/acknowledge` | Alert 확인 처리 |
+| PATCH | `/alerts/{alertId}/resolve` | Alert 해결 처리 |
+
 ## Gateway 내부 조회 API
 
 | Method | Path | 설명 |
 |---|---|---|
 | GET | `/internal/access-context?serial={serial}` | 인증서·Device 상태, Role, 규칙 조회 |
-| POST | `/internal/cache-invalidations` | 상태 변경 후 Gateway Cache 무효화 알림. 선택 기능 |
+| POST | `/internal/security-events/batch` | Gateway Outbox의 Event 묶음 저장. Event ID로 중복 방지 |
+| POST | `/internal/cache-invalidations` | 상태 변경 후 Gateway Cache 무효화 알림 |
 
 ## 공통 오류 응답
 
