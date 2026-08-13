@@ -1,44 +1,42 @@
-# Roadmap
+# 개발 로드맵
 
-Target submission date: **2026-08-23**
+지원서 제출 목표: **2026년 8월 23일**
 
-## Submission definition of done
+## 제출 가능한 상태의 기준
 
-The submission is ready when:
+- Device가 CSR을 생성하고 승인된 인증서를 발급받는다.
+- 정상 Device가 mTLS 인증 후 Gateway를 통해 Backend에 접근한다.
+- 인증서 없음, 다른 CA, 만료, 폐기 인증서는 Backend에 접근하지 못한다.
+- 정상 인증서라도 권한이 없는 요청은 차단된다.
+- Device·인증서·Security Event가 React 관리 콘솔에 표시된다.
+- 핵심 시나리오를 명령 또는 자동 테스트로 재현할 수 있다.
+- README에서 구현 완료·진행 중·예정 기능을 명확히 구분한다.
+- CA 개인키, Device 개인키, Credential, 개인정보가 Git에 포함되지 않는다.
 
-- A device generates a CSR and receives an approved certificate.
-- A valid device completes mTLS and reaches the backend through the gateway.
-- A missing, foreign-CA, expired, or revoked certificate cannot reach the backend.
-- A valid but unauthorized device receives an access denial.
-- Device, certificate, and security event data appear in the React console.
-- Core scenarios are reproducible with documented commands or automated tests.
-- README clearly separates implemented, in-progress, and planned features.
-- No CA private key, device private key, credential, or personal data is committed.
+## Phase 0 - 설계
 
-## Phase 0 - Design
+- 요구사항, 아키텍처, 보안 정책, API, 데이터 모델 확정
+- 인증서 Identity와 폐기 Cache 방식 ADR 작성
+- 설계를 GitHub Issue로 분해
 
-- Finalize requirements, architecture, security decisions, API, and data model
-- Create ADRs for certificate identity and revocation caching
-- Turn the design into GitHub issues
+## Phase 1 - 핵심 보안 흐름
 
-## Phase 1 - Vertical security slice
+- Go Device의 개인키·CSR 생성
+- Private CA 초기화 Script
+- Go Gateway의 TLS 1.3·mTLS
+- 최소 Backend Service
+- 정상·비정상 인증서 테스트
 
-- Go device key/CSR generation
-- Private CA bootstrap scripts
-- Go gateway TLS 1.3 and mTLS
-- Minimal backend service
-- Valid and invalid certificate tests
+## Phase 2 - 관리 영역
 
-## Phase 2 - Management plane
+- Spring Boot와 PostgreSQL 구성
+- Device 등록
+- CSR 승인과 인증서 발급
+- 인증서 상태 조회와 폐기
+- Gateway용 Access Context 조회
+- Security Event 저장
 
-- Spring Boot project and PostgreSQL
-- Device registration
-- CSR approval and certificate issuance
-- Certificate status and revocation
-- Gateway access-context lookup
-- Security event ingestion
-
-## Phase 3 - Console
+## Phase 3 - 관리 콘솔
 
 - Dashboard
 - Devices
@@ -46,24 +44,24 @@ The submission is ready when:
 - Certificates
 - Security Events
 
-## Phase 4 - Portfolio hardening
+## Phase 4 - 포트폴리오 완성도 강화
 
 - Docker Compose
-- End-to-end scenario script
-- Packet capture and TLS failure analysis
-- Screenshots and architecture diagram
-- Implementation status, limitations, and design decisions
-- AI-assisted development and verification log
+- End-to-End 시나리오 Script
+- 패킷 캡처와 TLS 실패 원인 분석
+- 화면 캡처와 아키텍처 다이어그램
+- 구현 상태, 한계, 기술 선택 문서화
+- AI 활용 및 직접 검증 기록
 
-## After submission
+## 제출 이후
 
-- Policy editing UI
-- Cloud deployment and operational monitoring
-- Rate limiting and performance testing
-- CRL/OCSP
-- Message signing and replay protection
-- C++ test client or deeper Linux network-stack study
+- 정책 수정 UI
+- Cloud 배포와 운영 Monitoring
+- Rate Limit과 성능 테스트
+- CRL·OCSP
+- Message Signing과 Replay Protection
+- C++ Test Client 또는 Linux Network Stack 심화 학습
 
-## Scope rule
+## 범위 원칙
 
-Prefer one complete, demonstrable path over several disconnected features. Any incomplete feature must be labeled as in progress or planned.
+연결되지 않은 기능 여러 개보다 **처음부터 끝까지 동작하는 하나의 흐름**을 우선한다. 완료되지 않은 기능은 반드시 진행 중 또는 예정으로 표시한다.

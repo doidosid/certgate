@@ -1,26 +1,27 @@
-# AI-Assisted Development Log
+# AI 활용 및 검증 기록
 
-This document records how AI tools support CertGate and how their output is verified.
+이 문서는 CertGate 개발에서 AI Agent를 어떻게 사용했고, 결과를 어떻게 직접 검증했는지 기록한다.
 
-## Principles
+## 원칙
 
-- AI may propose code, tests, documentation, and design alternatives.
-- The developer remains responsible for architecture, security decisions, and final code.
-- Generated cryptographic logic is not accepted without checking official library documentation and tests.
-- Code that cannot be explained is not merged.
-- Secrets, private keys, production data, and personal information are not supplied to AI tools.
+- AI는 코드·테스트·문서·설계 대안을 제안할 수 있다.
+- 아키텍처와 보안 결정, 최종 코드의 책임은 개발자에게 있다.
+- 암호·인증 관련 코드는 공식 Library 문서와 테스트로 검증하기 전에는 채택하지 않는다.
+- 직접 설명할 수 없는 코드는 병합하지 않는다.
+- 개인키, 비밀번호, 운영 데이터, 개인정보를 AI에 제공하지 않는다.
+- AI가 틀린 제안을 한 경우 숨기지 않고 발견·수정 과정을 기록한다.
 
-## Entry template
+## 기록 양식
 
-### YYYY-MM-DD - Task
+### YYYY-MM-DD - 작업명
 
-- **Goal**:
-- **AI assistance**:
-- **Developer decision**:
-- **Verification**:
-- **Incorrect or rejected suggestions**:
-- **Related commit/PR**:
+- **목표**:
+- **AI가 도운 부분**:
+- **내가 내린 결정**:
+- **검증 방법**:
+- **틀렸거나 채택하지 않은 제안**:
+- **관련 Commit 또는 PR**:
 
-## Initial use
+## 초기 활용 기록
 
-AI was used to structure the project requirements and expose design trade-offs around certificate enrollment, revocation, authorization, and submission scope. Decisions remain drafts until verified during implementation.
+AI를 이용해 요구사항 구조와 인증서 발급, 폐기, 접근제어의 설계 선택지를 정리했다. 현재 문서는 구현 전 초안이며, 실제 개발과 테스트 과정에서 검증하고 수정한다.

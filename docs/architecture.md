@@ -1,54 +1,53 @@
-# Architecture
+# 전체 아키텍처
 
-## 1. Components
+## 1. 컴포넌트
 
-| Component | Technology | Responsibility |
+| 컴포넌트 | 기술 | 역할 |
 |---|---|---|
-| Device Agent | Go | Generates key/CSR, stores the issued certificate, connects through mTLS, sends heartbeat and telemetry |
-| Security Gateway | Go | Terminates mTLS, extracts certificate identity, checks status and policy, proxies permitted requests, emits events |
-| Management API | Java / Spring Boot | Manages devices, CSRs, certificates, roles, policies, and security events |
-| Admin Console | React | Provides operational views and certificate/device administration |
-| Database | PostgreSQL | Stores operational metadata and security events |
-| Private CA | OpenSSL initially | Signs approved CSRs; CA private key is runtime-only |
-| Backend Service | Minimal HTTP service | Demonstrates that only trusted requests cross the gateway |
+| Device Agent | Go | 개인키·CSR 생성, 인증서 보관, mTLS 접속, Heartbeat·Telemetry 전송 |
+| Security Gateway | Go | mTLS 종료, 인증서 신원 추출, 상태·정책 검사, 요청 전달, 이벤트 생성 |
+| Management API | Java / Spring Boot | Device·CSR·인증서·Role·정책·보안 이벤트 관리 |
+| Admin Console | React | 운영 현황 조회와 Device·인증서 관리 |
+| Database | PostgreSQL | 운영 메타데이터와 보안 이벤트 저장 |
+| Private CA | 초기 OpenSSL | 승인된 CSR 서명. CA 개인키는 실행 환경에서만 사용 |
+| Backend Service | 최소 HTTP 서비스 | 신뢰된 요청만 Gateway를 통과하는지 검증 |
 
-## 2. Runtime flow
+## 2. 전체 흐름
 
 ```text
 Device Agent
     │ TLS 1.3 / mTLS
     ▼
-Security Gateway ── device/certificate/policy lookup ──► Management API
-    │                                                       │
-    │ permitted request                                     ▼
-    ▼                                                   PostgreSQL
+Security Gateway ── Device·인증서·정책 조회 ──► Management API
+    │                                                │
+    │ 허용된 요청                                    ▼
+    ▼                                            PostgreSQL
 Backend Service
-    ▲
-    └──────────── security decision/event ─────────────── Gateway
 
-Administrator ── HTTPS ──► React Console ── REST ──► Management API
+Administrator ──► React Console ── REST API ──► Management API
 ```
 
-## 3. Trust boundaries
+## 3. 신뢰 경계
 
-- The device network is untrusted.
-- The gateway is the only entry point to the backend service.
-- The management API and database belong to the trusted management network.
-- The CA private key is more sensitive than ordinary application data and is isolated from source control and the browser.
-- Identity received from a device request is ignored; identity is derived from the verified client certificate.
+- Device가 존재하는 외부 네트워크는 신뢰하지 않는다.
+- Gateway만 Backend Service의 진입점으로 둔다.
+- Management API와 PostgreSQL은 신뢰된 관리 영역에 둔다.
+- CA 개인키는 일반 애플리케이션 데이터보다 높은 보호가 필요한 자산으로 취급한다.
+- Device가 HTTP Header나 Payload로 주장하는 Identity는 신뢰하지 않는다.
+- Device Identity는 검증된 Client Certificate에서만 추출한다.
 
-## 4. Gateway decision pipeline
+## 4. Gateway 처리 순서
 
-1. Complete TLS handshake with a certificate issued by the configured CA.
-2. Extract certificate serial number and device identity.
-3. Reject invalid or expired certificate chains.
-4. Query cached certificate/device status from the management API.
-5. Reject unregistered, disabled, or revoked identities.
-6. Evaluate role, HTTP method, and request path with default deny.
-7. Forward the request and attach trusted internal identity headers.
-8. Record the outcome and latency as a security event.
+1. 설정된 Private CA가 발급한 Client Certificate로 TLS Handshake를 수행한다.
+2. 인증서 Serial Number와 Device Identity를 추출한다.
+3. 인증서 체인과 유효기간을 확인한다.
+4. Management API에서 Device·인증서 상태와 Role을 조회한다.
+5. 미등록·비활성·폐기 상태라면 차단한다.
+6. Role, HTTP Method, Path를 기준으로 접근 정책을 평가한다.
+7. 허용된 요청에만 Gateway가 신뢰된 내부 Identity Header를 붙여 Backend로 전달한다.
+8. 결과와 처리 시간을 Security Event로 기록한다.
 
-## 5. Repository layout
+## 5. 저장소 구조
 
 ```text
 certgate/
@@ -63,6 +62,6 @@ certgate/
 └─ docs/
 ```
 
-## 6. Key constraint
+## 6. MVP의 기술적 한계
 
-Revocation in the MVP is enforced immediately after the TLS handshake and before backend forwarding. Native handshake-time CRL/OCSP validation is future work and must not be claimed as implemented.
+MVP에서는 인증서 폐기를 **TLS Handshake 이후, Backend 전달 이전**에 확인한다. CRL·OCSP를 이용한 Handshake 단계의 폐기 검증을 구현했다고 표현하지 않는다.

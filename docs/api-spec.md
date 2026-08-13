@@ -1,66 +1,66 @@
-# Management API Draft
+# Management API 초안
 
-Base path: `/api/v1`
+기본 경로: `/api/v1`
 
-## Devices
+## Device API
 
-| Method | Path | Purpose |
+| Method | Path | 설명 |
 |---|---|---|
-| POST | `/devices` | Register a device |
-| GET | `/devices` | List and filter devices |
-| GET | `/devices/{deviceId}` | Get device details |
-| PATCH | `/devices/{deviceId}/status` | Enable or disable a device |
-| PUT | `/devices/{deviceId}/role` | Assign a role |
+| POST | `/devices` | Device 등록 |
+| GET | `/devices` | Device 목록과 필터 조회 |
+| GET | `/devices/{deviceId}` | Device 상세 조회 |
+| PATCH | `/devices/{deviceId}/status` | Device 활성·비활성 변경 |
+| PUT | `/devices/{deviceId}/role` | Device Role 지정 |
 
-## Certificate requests
+## 인증서 발급 요청 API
 
-| Method | Path | Purpose |
+| Method | Path | 설명 |
 |---|---|---|
-| POST | `/certificate-requests` | Submit a CSR for a registered device |
-| GET | `/certificate-requests` | List pending and completed requests |
-| POST | `/certificate-requests/{requestId}/approve` | Sign an approved CSR |
-| POST | `/certificate-requests/{requestId}/reject` | Reject a CSR |
-| GET | `/certificate-requests/{requestId}/certificate` | Download the issued certificate |
+| POST | `/certificate-requests` | 등록된 Device의 CSR 제출 |
+| GET | `/certificate-requests` | 대기·완료 요청 조회 |
+| POST | `/certificate-requests/{requestId}/approve` | CSR 승인 및 인증서 서명 |
+| POST | `/certificate-requests/{requestId}/reject` | CSR 거절 |
+| GET | `/certificate-requests/{requestId}/certificate` | 발급 인증서 다운로드 |
 
-## Certificates
+## 인증서 API
 
-| Method | Path | Purpose |
+| Method | Path | 설명 |
 |---|---|---|
-| GET | `/certificates` | List certificates |
-| GET | `/certificates/{certificateId}` | Get certificate metadata |
-| POST | `/certificates/{certificateId}/revoke` | Revoke a certificate |
+| GET | `/certificates` | 인증서 목록 조회 |
+| GET | `/certificates/{certificateId}` | 인증서 메타데이터 조회 |
+| POST | `/certificates/{certificateId}/revoke` | 인증서 폐기 |
 
-## Policies
+## 정책 API
 
-| Method | Path | Purpose |
+| Method | Path | 설명 |
 |---|---|---|
-| GET | `/roles` | List roles and rules |
-| GET | `/roles/{roleName}` | Read a role policy |
-| PUT | `/roles/{roleName}` | Update a role policy (post-submission) |
+| GET | `/roles` | Role과 규칙 목록 조회 |
+| GET | `/roles/{roleName}` | 특정 Role 정책 조회 |
+| PUT | `/roles/{roleName}` | Role 정책 수정. 제출 이후 기능 |
 
-## Security events
+## 보안 이벤트 API
 
-| Method | Path | Purpose |
+| Method | Path | 설명 |
 |---|---|---|
-| POST | `/internal/security-events` | Gateway submits an access decision |
-| GET | `/security-events` | Search events by time, device, decision, or reason |
-| GET | `/dashboard/summary` | Return console summary metrics |
+| POST | `/internal/security-events` | Gateway의 접근 결과 저장 |
+| GET | `/security-events` | 시간·Device·결과·사유별 이벤트 검색 |
+| GET | `/dashboard/summary` | 관리 콘솔 요약 통계 조회 |
 
-## Gateway internal checks
+## Gateway 내부 조회 API
 
-| Method | Path | Purpose |
+| Method | Path | 설명 |
 |---|---|---|
-| GET | `/internal/access-context?serial={serial}` | Return device, certificate status, role, and rules |
-| POST | `/internal/cache-invalidations` | Notify gateway after a relevant state change (optional MVP optimization) |
+| GET | `/internal/access-context?serial={serial}` | 인증서·Device 상태, Role, 규칙 조회 |
+| POST | `/internal/cache-invalidations` | 상태 변경 후 Gateway Cache 무효화 알림. 선택 기능 |
 
-## Common error response
+## 공통 오류 응답
 
 ```json
 {
   "code": "CERTIFICATE_REVOKED",
-  "message": "The certificate is not trusted.",
+  "message": "신뢰할 수 없는 인증서입니다.",
   "traceId": "..."
 }
 ```
 
-The public management endpoints and gateway-internal endpoints must be separated by network configuration or service credentials before deployment.
+관리자용 API와 Gateway 내부 API는 배포 시 네트워크 분리 또는 Service Credential로 보호해야 한다.

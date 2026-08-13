@@ -1,66 +1,64 @@
-# Security Design
+# 보안 설계
 
-## 1. Certificate lifecycle
+## 1. 인증서 생명주기
 
 ```text
-PENDING ── approve/sign ──► VALID ── revoke ──► REVOKED
-    └────── reject ───────► REJECTED
-VALID ── validity period elapsed ──► EXPIRED
+PENDING ── 승인·서명 ──► VALID ── 폐기 ──► REVOKED
+    └────── 거절 ──────► REJECTED
+VALID ── 유효기간 종료 ──► EXPIRED
 ```
 
-Certificate states:
+- **PENDING**: CSR이 제출되어 관리자 결정을 기다리는 상태
+- **VALID**: 발급이 완료되어 인증에 사용할 수 있는 상태
+- **EXPIRED**: 인증서 유효기간이 종료된 상태
+- **REVOKED**: 관리자가 신뢰를 철회한 상태
+- **REJECTED**: 관리자가 발급 요청을 거절한 상태
 
-- **PENDING**: CSR submitted and awaiting an administrative decision
-- **VALID**: issued and available for authentication
-- **EXPIRED**: validity period has elapsed
-- **REVOKED**: trust was explicitly withdrawn
-- **REJECTED**: CSR issuance request was denied
+## 2. 인증서 발급
 
-## 2. Enrollment
+1. Device가 로컬에서 개인키를 생성한다.
+2. Device가 할당받은 Device Identity를 이용해 CSR을 생성한다.
+3. CSR을 Management API에 제출한다.
+4. 관리자가 CSR을 검토해 승인 또는 거절한다.
+5. 승인되면 Management API가 Private CA를 통해 CSR에 서명한다.
+6. Device에는 인증서와 CA Chain만 전달한다. 개인키는 Device 밖으로 이동하지 않는다.
 
-1. A device creates its private key locally.
-2. The device creates a CSR containing its assigned device identity.
-3. The CSR is submitted to the management API.
-4. An administrator verifies and approves or rejects it.
-5. On approval, the server signs the CSR through the private CA.
-6. Only the certificate and CA chain are returned. The device private key never leaves the device.
+## 3. 인증
 
-## 3. Authentication
+- Gateway는 TLS 1.3과 Client Certificate 필수를 적용한다.
+- Private CA를 Trust Anchor로 사용한다.
+- Device Identity는 인증서 필드에서 추출한 뒤 등록 정보와 대조한다.
+- Identity 필드는 구현 전 ADR에서 최종 결정한다. 현재 권장안은 SAN URI이며, Common Name은 MVP 대안으로만 고려한다.
 
-- Gateway accepts TLS 1.3 with mandatory client certificates.
-- The configured private CA is the trust anchor.
-- Device identity is mapped from an agreed certificate field and verified against registration data.
-- Exact identity mapping (SAN URI preferred; Common Name fallback only for MVP) will be recorded as an ADR before implementation.
+## 4. 인증서 폐기
 
-## 4. Revocation
+MVP는 Management DB를 기준으로 폐기를 처리한다.
 
-MVP revocation uses the management database:
+1. 관리자가 인증서를 `REVOKED`로 변경한다.
+2. Gateway가 TLS Handshake 후 인증서 Serial Number로 상태를 확인한다.
+3. 폐기 상태라면 Backend로 전달하지 않고 `CERTIFICATE_REVOKED` 이벤트를 남긴다.
+4. Gateway는 짧은 TTL Cache를 사용하고, 폐기 시 해당 Cache를 무효화한다.
 
-1. Administrator changes certificate state to `REVOKED`.
-2. Gateway checks the certificate serial number after the TLS handshake.
-3. Gateway denies forwarding and records `CERTIFICATE_REVOKED`.
-4. Gateway uses a short TTL status cache; a revocation operation invalidates the relevant cache entry.
+CRL과 OCSP는 제출 이후 확장 기능으로 둔다.
 
-CRL and OCSP remain explicitly out of scope for the initial submission.
+## 5. 접근제어
 
-## 5. Authorization
+접근제어는 Device Role과 HTTP Method·Path 규칙을 사용한다.
 
-Authorization uses role-based method/path rules.
-
-| Role | Allowed operations |
+| Role | 허용 동작 |
 |---|---|
 | SENSOR | `POST /telemetry`, `POST /heartbeat` |
-| OPERATOR | SENSOR operations plus `GET /commands` |
-| ADMIN_DEVICE | Reserved device administration operations |
+| OPERATOR | SENSOR 동작 + `GET /commands` |
+| ADMIN_DEVICE | Device용 관리 동작. 상세 범위는 추후 확정 |
 
-Rules:
+정책 원칙:
 
-- Default decision is **DENY**.
-- A successful mTLS authentication does not imply authorization.
-- Policy matching uses normalized HTTP methods and paths.
-- The gateway, not the device, supplies trusted identity headers to the backend.
+- 기본 결과는 **DENY**다.
+- mTLS 인증 성공이 모든 API 접근 허용을 의미하지 않는다.
+- Gateway가 Method와 정규화된 Path를 이용해 정책을 평가한다.
+- Backend에 전달하는 신뢰된 Identity Header는 Gateway만 생성한다.
 
-## 6. Security event reason codes
+## 6. Security Event 사유 코드
 
 - `CERTIFICATE_REQUIRED`
 - `INVALID_CERTIFICATE`
@@ -72,8 +70,8 @@ Rules:
 - `REQUEST_ALLOWED`
 - `INTERNAL_ERROR`
 
-Each event records timestamp, device ID when known, certificate serial number, method, path, decision, reason, client IP, and processing time.
+이벤트에는 발생 시각, Device ID, 인증서 Serial Number, Method, Path, 처리 결과, 사유, Client IP, 처리 시간을 기록한다.
 
-## 7. Security limitations
+## 7. 명시적인 한계
 
-The project does not claim production CA security. CA key protection, audit integrity, distributed revocation, certificate renewal, rate limiting, replay protection, and HA are documented future improvements.
+CertGate는 상용 CA 보안을 구현했다고 주장하지 않는다. CA Key 보호, 감사 로그 무결성, 분산 폐기 검증, 자동 갱신, Rate Limit, Replay Protection, HA는 후속 개선 사항으로 문서화한다.
