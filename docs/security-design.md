@@ -27,8 +27,9 @@ VALID ── 유효기간 종료 ──► EXPIRED
 
 - Gateway는 TLS 1.3과 Client Certificate 필수를 적용한다.
 - Private CA를 Trust Anchor로 사용한다.
-- Device Identity는 인증서 필드에서 추출한 뒤 등록 정보와 대조한다.
-- Identity 필드는 구현 전 ADR에서 최종 결정한다. 현재 권장안은 SAN URI이며, Common Name은 MVP 대안으로만 고려한다.
+- Device Identity는 인증서의 SAN URI에서 추출한 뒤 등록 정보와 대조한다.
+- SAN URI 형식은 `urn:certgate:device:{device-id}`로 고정한다.
+- Common Name은 사람을 위한 표시 정보로만 사용하며 인증 판단에 사용하지 않는다.
 
 ## 4. 인증서 폐기
 
