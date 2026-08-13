@@ -57,34 +57,12 @@
 - `http_method`, `request_path`
 - `decision`: ALLOWED 또는 DENIED
 - `reason_code`: 처리 사유
+- `severity`: INFO, WARNING, CRITICAL
 - `client_ip`: 접속 IP
 - `latency_ms`: 처리 시간
 - `trace_id`: 요청 추적 ID
 
-## Alert
-
-- `id`: UUID
-- `created_at`: 최초 발생 시각
-- `last_occurred_at`: 마지막 반복 발생 시각
-- `severity`: CRITICAL, HIGH, MEDIUM
-- `type`: Alert 종류
-- `status`: OPEN, ACKNOWLEDGED, RESOLVED
-- `source_key`: 중복 억제용 원인 식별자
-- `occurrence_count`: 묶인 반복 발생 횟수
-- `security_event_id`: 원인이 된 Event FK, null 가능
-- `acknowledged_at`, `resolved_at`
-
-## NotificationOutbox
-
-- `id`: UUID
-- `alert_id`: Alert FK
-- `destination`: Webhook 대상 식별자
-- `payload`: 발송 Payload
-- `status`: PENDING, SENT, FAILED
-- `attempt_count`: 시도 횟수
-- `next_attempt_at`: 다음 재시도 시각
-- `last_error`: 마지막 실패 사유
-- `created_at`, `sent_at`
+Critical 알림은 별도 테이블로 저장하지 않는다. `SecurityEvent.severity = CRITICAL`인 이벤트를 SSE로 전송하고, 원본 Event를 알림 이력으로 사용한다.
 
 Gateway의 Security Event Outbox는 PostgreSQL이 아니라 Gateway 로컬 SQLite에 저장하고 Docker Volume으로 보존한다.
 
@@ -96,8 +74,6 @@ Device 1 ─── N Certificate
 Role   1 ─── N Device
 Role   1 ─── N PolicyRule
 Device 1 ─── N SecurityEvent
-SecurityEvent 1 ─── 0..N Alert
-Alert 1 ─── N NotificationOutbox
 ```
 
 DB에는 인증서 메타데이터를 저장하되 Device 개인키는 저장하지 않는다. PEM 원문 보관과 Security Event 보존 기간은 MVP 구현 과정에서 다시 결정한다.

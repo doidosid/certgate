@@ -43,16 +43,12 @@
 | Method | Path | 설명 |
 |---|---|---|
 | POST | `/internal/security-events` | Gateway의 접근 결과 저장 |
-| GET | `/security-events` | 시간·Device·결과·사유별 이벤트 검색 |
-| GET | `/dashboard/summary` | 관리 콘솔 요약 통계 조회 |
+| GET | `/security-events` | 시간·Device·결과·사유·등급별 이벤트 검색 |
+| GET | `/security-events/{eventId}` | Security Event 상세 조회 |
+| GET | `/security-events/stream` | 접속 중인 콘솔에 Critical Event를 SSE로 전송 |
+| GET | `/dashboard/summary` | 관리 콘솔 요약 통계와 최근 Critical Event 조회 |
 
-## Alert API
-
-| Method | Path | 설명 |
-|---|---|---|
-| GET | `/alerts` | 상태·등급·기간별 Alert 조회 |
-| PATCH | `/alerts/{alertId}/acknowledge` | Alert 확인 처리 |
-| PATCH | `/alerts/{alertId}/resolve` | Alert 해결 처리 |
+SSE 알림은 별도 Alert 리소스를 만들지 않고 저장된 Security Event의 ID를 전달한다. 콘솔은 알림 클릭 시 해당 Event 상세 API로 이동한다.
 
 ## Gateway 내부 조회 API
 

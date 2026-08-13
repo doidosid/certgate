@@ -6,8 +6,8 @@
 |---|---|---|
 | Device Agent | Go | 개인키·CSR 생성, 인증서 보관, mTLS 접속, Heartbeat·Telemetry 전송 |
 | Security Gateway | Go | mTLS 종료, 인증서 신원 추출, 상태·정책 검사, 요청 전달, 이벤트 생성 |
-| Management API | Java / Spring Boot | Device·CSR·인증서·Role·정책·보안 이벤트 관리 |
-| Admin Console | React | 운영 현황 조회와 Device·인증서 관리 |
+| Management API | Java / Spring Boot | Device·CSR·인증서·Role·정책·보안 이벤트 관리, Critical Event SSE 전송 |
+| Admin Console | React | 운영 현황 조회와 Device·인증서 관리, 실시간 Critical 알림 표시 |
 | Database | PostgreSQL | 운영 메타데이터와 보안 이벤트 저장 |
 | Private CA | 초기 OpenSSL | 승인된 CSR 서명. CA 개인키는 실행 환경에서만 사용 |
 | Backend Service | 최소 HTTP 서비스 | 신뢰된 요청만 Gateway를 통과하는지 검증 |
@@ -27,8 +27,7 @@ Backend Service
 Gateway 내부
   └─ SQLite Durable Outbox ── 재시도 ──► Management API
 
-Management API
-  └─ Alert Rule ──► Notification Outbox ──► Webhook
+Management API ── Critical Event / SSE ──► React Console
 
 Administrator ──► React Console ── REST API ──► Management API
 ```
@@ -38,7 +37,8 @@ Administrator ──► React Console ── REST API ──► Management API
 - Device → Gateway: mTLS가 적용된 HTTPS REST
 - Gateway → Backend: Docker 내부망의 HTTP Proxy
 - Gateway → Management API: Service Token으로 보호된 내부 REST API
-- Console → Management API: REST API. 관리자 인증은 제출 이후에 추가
+- Console → Management API: REST API와 Critical Event 수신용 SSE. 관리자 인증은 제출 이후에 추가
+- SSE 연결이 끊긴 동안의 Critical Event는 재접속 후 Security Event API로 조회한다.
 - Gateway는 외부 요청의 `X-CertGate-Device-ID`, `X-CertGate-Role`을 삭제하고 검증 결과로 다시 생성한다.
 - 인증서 상태 Cache 기본 TTL은 30초이며 인증서 폐기 시 해당 항목을 즉시 무효화한다.
 

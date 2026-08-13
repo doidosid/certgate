@@ -12,9 +12,9 @@ X.509 인증서와 mTLS를 이용해 네트워크 디바이스의 신원을 검�
 | --- | --- | --- |
 | Device Agent | **Go** | 키·CSR 생성, 인증서 보관, mTLS 요청 및 가상 디바이스 테스트 |
 | Security Gateway | **Go** | TLS 핸드셰이크, X.509 인증서 검증, 접근 정책 적용, 요청 프록시 |
-| Management API | **Java, Spring Boot** | 디바이스·CSR·인증서·정책·이벤트·알림 관리 API |
+| Management API | **Java, Spring Boot** | 디바이스·CSR·인증서·정책·보안 이벤트 관리 API와 SSE 제공 |
 | Admin Console | **React, TypeScript, Vite, MUI** | 운영 대시보드와 디바이스·인증서·보안 이벤트 관리 화면 |
-| Database | **PostgreSQL** | 디바이스, 인증서, 접근 정책, 보안 이벤트 및 알림 저장 |
+| Database | **PostgreSQL** | 디바이스, 인증서, 접근 정책 및 보안 이벤트 저장 |
 | Event Outbox | **SQLite** | Gateway 이벤트 전송 실패 시 로컬 영속 보관 및 재전송 |
 | PKI / Network Security | **OpenSSL, X.509, mTLS, HTTPS/TLS** | Private CA 구성, 인증서 발급·폐기, 디바이스 상호 인증 |
 | Authorization | **RBAC, HTTP Method/Path Policy** | 디바이스 역할별 API 접근 허용 및 기본 거부 정책 |
@@ -29,6 +29,7 @@ X.509 인증서와 mTLS를 이용해 네트워크 디바이스의 신원을 검�
 - [보안 설계](docs/security-design.md)
 - [Management API 초안](docs/api-spec.md)
 - [데이터 모델 초안](docs/data-model.md)
+- [관리 콘솔 UI 설계](docs/ui-design.md)
 - [개발 로드맵](docs/roadmap.md)
 - [테스트 전략](docs/testing.md)
 - [배포·운영 설계](docs/operations.md)

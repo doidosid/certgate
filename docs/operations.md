@@ -10,8 +10,7 @@
 Docker 내부망
  ├─ Spring Management API
  ├─ PostgreSQL
- ├─ Backend Service
- └─ Webhook Receiver
+ └─ Backend Service
 ```
 
 - Backend Service와 PostgreSQL은 외부 포트를 공개하지 않는다.
@@ -26,7 +25,6 @@ Docker Volume으로 다음을 보존한다.
 - PostgreSQL 데이터
 - Gateway SQLite Event Outbox
 - 발급된 인증서 메타데이터
-- Spring Notification Outbox
 
 CA와 Device 개인키는 Git에서 제외된 별도 Runtime Directory에 둔다. Management API에는 Intermediate CA Key만 주입한다.
 
@@ -55,8 +53,7 @@ CA와 Device 개인키는 Git에서 제외된 별도 Runtime Directory에 둔다
 - PostgreSQL 연결 상태
 - Gateway Event Outbox 대기 건수
 - 가장 오래된 미전송 Event의 지연 시간
-- Notification Outbox 실패 건수
-- Webhook 발송 성공·실패 건수
+- SSE 연결 상태와 Critical Event 전송 건수
 
 ## 5. 환경
 

@@ -36,8 +36,7 @@
 - Gateway용 Access Context 조회
 - SQLite Durable Event Outbox와 재전송
 - Security Event 중복 방지 저장
-- Critical Alert Rule과 Notification Outbox
-- 범용 Webhook 발송
+- Critical Security Event 판정과 SSE 실시간 전송
 
 ## Phase 3 - 관리 콘솔
 
@@ -46,7 +45,7 @@
 - Certificate Requests
 - Certificates
 - Security Events
-- Alerts
+- 전역 Critical Event 토스트 알림
 
 ## Phase 4 - 포트폴리오 완성도 강화
 
@@ -63,6 +62,7 @@
 
 - 정책 수정 UI
 - Cloud 배포와 운영 Monitoring
+- 외부 메신저·이메일·Webhook 알림
 - Rate Limit과 성능 테스트
 - CRL·OCSP
 - Message Signing과 Replay Protection
