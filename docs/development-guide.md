@@ -1,0 +1,67 @@
+# 개발 환경과 규칙
+
+## 기준 Runtime
+
+정확한 Patch Version은 Foundation 구현 시 각 Build File과 Container Image에 고정한다.
+
+- Java 21 LTS
+- Java와 호환되는 안정 Spring Boot 3.x
+- Go 안정 버전
+- Node.js LTS
+- PostgreSQL 안정 Major
+- Docker Compose v2
+
+## 환경 구분
+
+- <code>dev</code>: 로컬 개발, Console·Management API Host 접근 허용
+- <code>test</code>: E2E 전용 DB와 실행 중 생성한 인증서
+- <code>prod</code>: 제출 이후 확장. 관리자 인증 없이는 외부 배포 금지
+
+환경값 이름은 [.env.example](../.env.example)을 계약으로 사용한다. 실제 <code>.env</code>와 Key는 Git에 올리지 않는다.
+
+## 코딩 규칙
+
+- Go: gofmt, go test, 오류 Wrapping, Context 전달
+- Java: 생성자 주입, Transaction 경계는 Service, Entity 직접 응답 금지
+- TypeScript: strict, API Type과 화면 Type 구분, any 금지
+- SQL: Migration으로만 Schema 변경
+- 시간 생성은 주입 가능한 Clock을 사용해 만료 테스트를 안정화
+- UUID 생성은 Application 경계에서 수행
+- 사용자에게 보여줄 Message와 내부 Reason Code를 분리
+
+## Git 작업 단위
+
+- 하나의 Issue는 하나의 검증 가능한 결과를 만든다.
+- Commit에는 설계만 바뀌었는지 동작이 바뀌었는지 드러나게 쓴다.
+- 기능 Commit과 대규모 Formatting을 섞지 않는다.
+- 완료 증거로 Test 명령과 결과를 Issue 또는 PR에 기록한다.
+
+## 필수 검증
+
+Foundation 이후 CI에서 다음을 실행한다.
+
+- Go: fmt 검사, vet, test
+- Spring: test, build
+- React: typecheck, test, build
+- Docker Compose Config 검증
+- Private Key, <code>.env</code>, Secret Pattern 검사
+- E2E는 안정화 후 CI에 포함
+
+## Definition of Done
+
+- 문서 계약과 구현이 일치한다.
+- 정상·실패 경로 Test가 있다.
+- 로그에 Secret·Private Key·민감 Payload가 없다.
+- 오류에 Reason Code와 Trace ID가 있다.
+- 실행 방법이 README 또는 서비스 README에 갱신된다.
+- 구현하지 않은 기능을 UI나 문서에서 완료로 표시하지 않는다.
+
+## 개발 시작 전 체크
+
+- [ ] Foundation 이슈 Branch
+- [ ] 서비스 Directory와 Build File
+- [ ] <code>.env.example</code> 기반 로컬 환경
+- [ ] Secret 제외 확인
+- [ ] Compose Network·Volume 이름 확정
+- [ ] 각 서비스 Health Endpoint
+- [ ] CI 최소 Build

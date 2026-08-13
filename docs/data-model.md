@@ -1,79 +1,135 @@
-# 데이터 모델 초안
+# 데이터 모델 v1
+
+PostgreSQL은 관리 영역의 Source of Truth다. Gateway 전송 대기는 별도 SQLite Outbox가 담당한다.
 
 ## Device
 
-- `id`: UUID
-- `device_key`: 외부에서 사용하는 고유 Device Identity
-- `name`: Device 표시 이름
-- `status`: ACTIVE, DISABLED
-- `role_name`: 지정된 Role
-- `created_at`: 등록 시각
-- `last_seen_at`: 마지막 정상 접속 시각
+- <code>id</code>: UUID, PK
+- <code>device_key</code>: varchar, Unique, 변경 불가
+- <code>name</code>: varchar
+- <code>status</code>: ACTIVE, DISABLED
+- <code>role_name</code>: Role FK
+- <code>created_at</code>, <code>updated_at</code>
+- <code>last_seen_at</code>: 마지막 허용 요청 시각, null 가능
+
+## EnrollmentCredential
+
+- <code>id</code>: UUID, PK
+- <code>device_id</code>: Device FK
+- <code>token_hash</code>: SHA-256 Hash, Unique
+- <code>expires_at</code>
+- <code>revoked_at</code>: 재발급·수동 폐기 시각
+- <code>created_at</code>
+- <code>last_used_at</code>
+
+평문 Token은 저장하지 않는다. Device별 활성 Credential은 하나만 허용한다.
 
 ## CertificateRequest
 
-- `id`: UUID
-- `device_id`: Device FK
-- `csr_pem`: 제출된 CSR
-- `status`: PENDING, APPROVED, REJECTED
-- `requested_at`: 요청 시각
-- `decided_at`: 결정 시각
-- `decision_note`: 승인·거절 사유
+- <code>id</code>: UUID, PK
+- <code>device_id</code>: Device FK
+- <code>enrollment_credential_id</code>: EnrollmentCredential FK
+- <code>csr_pem</code>: 공개 정보인 CSR 원문
+- <code>subject_dn</code>
+- <code>san_uri</code>
+- <code>public_key_algorithm</code>
+- <code>fingerprint_sha256</code>
+- <code>status</code>: PENDING, APPROVED, REJECTED
+- <code>requested_at</code>, <code>decided_at</code>
+- <code>decision_note</code>
+
+같은 Device에는 PENDING 요청을 하나만 허용한다.
 
 ## Certificate
 
-- `id`: UUID
-- `device_id`: Device FK
-- `request_id`: CertificateRequest FK
-- `serial_number`: 고유 Serial Number
-- `subject_dn`: 인증서 Subject
-- `fingerprint_sha256`: SHA-256 Fingerprint
-- `not_before`, `not_after`: 유효기간
-- `status`: VALID, EXPIRED, REVOKED
-- `issued_at`: 발급 시각
-- `revoked_at`: 폐기 시각
-- `revocation_reason`: 폐기 사유
+- <code>id</code>: UUID, PK
+- <code>device_id</code>: Device FK
+- <code>request_id</code>: CertificateRequest FK, Unique
+- <code>serial_number</code>: Unique
+- <code>certificate_pem</code>: 공개 인증서 원문
+- <code>subject_dn</code>, <code>san_uri</code>
+- <code>fingerprint_sha256</code>: Unique
+- <code>not_before</code>, <code>not_after</code>
+- <code>issued_at</code>
+- <code>revoked_at</code>
+- <code>revocation_reason</code>, <code>revocation_note</code>
+
+VALID, EXPIRING_SOON, EXPIRED, REVOKED는 별도 상태 Column이 아니라 시각과 revokedAt으로 계산한다.
 
 ## Role
 
-- `name`: Role 이름, PK
-- `description`: 설명
+- <code>name</code>: PK
+- <code>description</code>
+
+MVP Seed: SENSOR, OPERATOR. ADMIN_DEVICE는 실제 규칙이 생길 때 추가한다.
 
 ## PolicyRule
 
-- `id`: UUID
-- `role_name`: Role FK
-- `http_method`: 허용·차단 대상 Method
-- `path_pattern`: 요청 Path 규칙
-- `effect`: ALLOW 또는 DENY
-- `priority`: 규칙 평가 순서
+- <code>id</code>: UUID, PK
+- <code>role_name</code>: Role FK
+- <code>http_method</code>
+- <code>path_pattern</code>
+- <code>effect</code>: ALLOW
+- <code>priority</code>
+- Unique: role_name + http_method + path_pattern
+
+MVP는 ALLOW List와 기본 DENY만 사용한다.
 
 ## SecurityEvent
 
-- `id`: UUID
-- `occurred_at`: 발생 시각
-- `device_id`: Device FK, 식별 전 실패 시 null 가능
-- `certificate_serial`: 인증서 Serial Number
-- `http_method`, `request_path`
-- `decision`: ALLOWED 또는 DENIED
-- `reason_code`: 처리 사유
-- `severity`: INFO, WARNING, CRITICAL
-- `client_ip`: 접속 IP
-- `latency_ms`: 처리 시간
-- `trace_id`: 요청 추적 ID
+- <code>id</code>: UUID, PK. Gateway가 생성
+- <code>occurred_at</code>
+- <code>type</code>: ACCESS, TLS, SYSTEM, PKI
+- <code>severity</code>: INFO, WARNING, CRITICAL
+- <code>device_id</code>: Device FK, null 가능
+- <code>certificate_serial</code>: null 가능
+- <code>http_method</code>, <code>request_path</code>: null 가능
+- <code>decision</code>: ALLOWED, DENIED, ERROR
+- <code>reason_code</code>
+- <code>client_ip</code>: null 가능
+- <code>latency_ms</code>: null 가능
+- <code>trace_id</code>
+- <code>created_at</code>: Management API 저장 시각
 
-Critical 알림은 별도 테이블로 저장하지 않는다. `SecurityEvent.severity = CRITICAL`인 이벤트를 SSE로 전송하고, 원본 Event를 알림 이력으로 사용한다.
+Event는 수정·삭제 API를 제공하지 않는다. Critical 알림은 별도 Alert Table 없이 이 데이터의 severity로 표현한다.
 
-Gateway의 Security Event Outbox는 PostgreSQL이 아니라 Gateway 로컬 SQLite에 저장하고 Docker Volume으로 보존한다.
+## 필수 Index
+
+- Device: Unique(device_key)
+- EnrollmentCredential: Unique(token_hash), Index(device_id, expires_at)
+- CertificateRequest: Index(status, requested_at), Index(device_id, requested_at)
+- Certificate: Unique(serial_number), Unique(fingerprint_sha256), Index(device_id, not_after)
+- SecurityEvent: Index(occurred_at desc), Index(device_id, occurred_at desc), Index(severity, occurred_at desc), Index(reason_code, occurred_at desc)
+
+## SQLite EventOutbox
+
+Gateway 로컬 DB:
+
+- <code>event_id</code>: UUID, PK
+- <code>payload_json</code>
+- <code>attempt_count</code>
+- <code>next_attempt_at</code>
+- <code>last_error</code>
+- <code>created_at</code>
+
+전송 성공 응답을 받은 뒤에만 삭제한다. SQLite 파일은 Docker Volume으로 보존한다.
 
 ## 관계
 
-```text
-Device 1 ─── N CertificateRequest
-Device 1 ─── N Certificate
-Role   1 ─── N Device
-Role   1 ─── N PolicyRule
-Device 1 ─── N SecurityEvent
-```
+~~~text
+Role 1 ── N Device
+Role 1 ── N PolicyRule
+Device 1 ── N EnrollmentCredential
+Device 1 ── N CertificateRequest
+Device 1 ── N Certificate
+Device 1 ── N SecurityEvent
+CertificateRequest 1 ── 0..1 Certificate
+~~~
 
-DB에는 인증서 메타데이터를 저장하되 Device 개인키는 저장하지 않는다. PEM 원문 보관과 Security Event 보존 기간은 MVP 구현 과정에서 다시 결정한다.
+## 저장 금지 데이터
+
+- Device 개인키
+- Root·Intermediate CA 개인키 원문
+- Enrollment Token 평문
+- 비밀번호와 Service Token
+- 전체 Telemetry Payload

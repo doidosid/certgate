@@ -1,59 +1,49 @@
-# 테스트 전략
+# 테스트 전략 v1
 
-## 1. 테스트 방식
+## 원칙
 
-실제 물리 장비 대신 Go로 만든 가상 Device Agent를 사용한다. 가상 Device도 실제 TCP/TLS 연결과 실제 인증서를 사용하므로 mTLS Handshake, 인증서 검증, 접근 정책을 실제 흐름으로 검증할 수 있다.
+물리 장비 대신 Go Device Agent Profile을 사용하지만 실제 TCP/TLS 연결과 실제로 생성한 Certificate를 사용한다.
 
-## 2. 가상 Device
+## 테스트 계층
 
-| Device | 조건 | 기대 결과 |
+- Unit: CSR·SAN, Certificate 상태 계산, Policy Matching, Backoff, Critical 판정
+- Integration: Spring + PostgreSQL, Gateway + Management API, SQLite Outbox
+- Contract: 문서의 JSON Fixture와 Server·Console Type 일치
+- E2E: Device → Gateway → Backend
+- Failure: 인증서·권한·서비스 중단·재시작
+
+## 가상 Device
+
+| Profile | 조건 | 기대 |
 |---|---|---|
-| Device A | 정상 SENSOR | Heartbeat·Telemetry 허용 |
-| Device B | 폐기 인증서 | 접근 차단·Critical Alert |
-| Device C | 다른 CA 인증서 | TLS Handshake 실패 |
-| Device D | 만료 인증서 | 접근 차단 |
-| Device E | 정상 SENSOR | `/commands` 차단 |
-| Device F | 정상 OPERATOR | `/commands` 허용 |
+| A | 정상 SENSOR | Heartbeat·Telemetry 허용 |
+| B | 폐기 Certificate | 차단·CRITICAL Event |
+| C | 다른 CA | TLS 실패 |
+| D | 만료 Certificate | 차단 |
+| E | SENSOR /commands | ACCESS_DENIED |
+| F | OPERATOR /commands | 허용 |
 
-실행 예시:
+## 필수 시나리오
 
-```bash
-device-agent \
-  --device-id=device-a \
-  --cert=certs/device-a.crt \
-  --key=certs/device-a.key \
-  --action=heartbeat
-```
+1. Enrollment Token으로 CSR 제출
+2. 잘못된 Token 거절
+3. Device Key와 SAN URI 불일치 거절
+4. CSR 승인과 Chain 검증
+5. 정상 SENSOR Heartbeat·Telemetry 허용
+6. 다른 CA·만료·폐기 차단
+7. SENSOR /commands 차단, OPERATOR 허용
+8. 외부 Identity Header 제거·재생성
+9. Management API 중단 중 SQLite Outbox 보존
+10. Gateway 재시작 후 Outbox 보존
+11. API 복구 후 재전송과 Event ID 중복 방지
+12. Certificate 폐기 후 Cache 무효화
+13. CRITICAL Event 저장과 SSE 표시
+14. SSE 재연결 후 최근 Event 재조회
 
-## 3. 테스트 계층
+## 완료 기준
 
-- **Unit Test**: 인증서 Parsing, SAN URI Identity 추출, Policy Matching, Critical Event 판정
-- **Integration Test**: Gateway와 Management API, Spring과 PostgreSQL, Spring SSE와 React 연결
-- **E2E Test**: Device → Gateway → Backend 전체 흐름
-- **Failure Test**: 인증서 없음·다른 CA·만료·폐기·권한 없음·서비스 장애
-
-## 4. 필수 E2E 시나리오
-
-1. 정상 SENSOR의 Heartbeat 허용
-2. 정상 SENSOR의 Telemetry 허용
-3. 인증서 없는 Device 차단
-4. 다른 CA 인증서 차단
-5. 만료 인증서 차단
-6. 폐기 인증서 차단
-7. SENSOR의 `/commands` 접근 차단
-8. OPERATOR의 `/commands` 접근 허용
-9. Management API 중단 중 Event를 SQLite Outbox에 보관
-10. Management API 복구 후 Event 재전송과 중복 방지
-11. Gateway 재시작 이후에도 미전송 Event 보존
-12. 폐기 인증서 접속 시 Critical Security Event 저장과 SSE 알림 표시
-13. 동일 IP에서 인증 실패가 1분에 5회 발생하면 Critical Event 생성
-14. SSE 재연결 후 누락된 Critical Event를 API로 다시 조회
-
-## 5. 완료 기준
-
-- 허용된 요청만 Backend Service에 도착한다.
-- 차단 사유가 정확한 Reason Code로 기록된다.
-- 재전송 후 동일 Event UUID가 한 번만 저장된다.
-- Critical Security Event가 DB·Dashboard·실시간 토스트에 표시된다.
-- 테스트 인증서와 개인키는 실행 중 임시 생성되며 Git에 포함되지 않는다.
-- 문서화된 명령 한 번으로 핵심 결과를 재현할 수 있다.
+- 허용 요청만 Backend에 도착
+- 실패 원인과 Reason Code 일치
+- 동일 Event ID는 PostgreSQL에 한 번만 존재
+- Test Key·Certificate·Token은 Git과 로그에 없음
+- 핵심 E2E는 문서화된 단일 명령으로 실행

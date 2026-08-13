@@ -2,53 +2,59 @@
 
 X.509 인증서와 mTLS를 이용해 네트워크 디바이스의 신원을 검증하고, 인증·인가된 요청만 내부 서비스로 전달하는 보안 게이트웨이 및 관리 플랫폼입니다.
 
-> CertGate는 신뢰할 수 없는 네트워크에서 접속한 디바이스를 인증서로 식별하고, 접근 정책을 통과한 요청만 Backend Service에 전달합니다.
+> 특정 제품을 복제하지 않고, “서버는 접속한 네트워크 디바이스를 어떻게 신뢰할 수 있는가?”라는 문제를 일반 네트워크 장비 관리 환경으로 재해석합니다.
+
+## 핵심 흐름
+
+~~~text
+Device 등록 → 단기 Enrollment Token 발급 → Device에서 Key·CSR 생성
+→ 관리자 CSR 승인 → Device 인증서 발급 → Gateway mTLS 인증
+→ Device·Certificate·Policy 검증 → Backend 전달 또는 차단
+→ Security Event 저장 → Critical Event SSE 알림
+~~~
 
 ## 기술 스택
 
-현재 설계를 기준으로 한 구현 기술입니다. 실제 구현 진행에 따라 변경 사항을 계속 반영합니다.
-
 | 영역 | 기술 | 사용 목적 |
 | --- | --- | --- |
-| Device Agent | **Go** | 키·CSR 생성, 인증서 보관, mTLS 요청 및 가상 디바이스 테스트 |
-| Security Gateway | **Go** | TLS 핸드셰이크, X.509 인증서 검증, 접근 정책 적용, 요청 프록시 |
-| Management API | **Java, Spring Boot** | 디바이스·CSR·인증서·정책·보안 이벤트 관리 API와 SSE 제공 |
-| Admin Console | **React, TypeScript, Vite, MUI** | 운영 대시보드와 디바이스·인증서·보안 이벤트 관리 화면 |
-| Database | **PostgreSQL** | 디바이스, 인증서, 접근 정책 및 보안 이벤트 저장 |
-| Event Outbox | **SQLite** | Gateway 이벤트 전송 실패 시 로컬 영속 보관 및 재전송 |
-| PKI / Network Security | **OpenSSL, X.509, mTLS, HTTPS/TLS** | Private CA 구성, 인증서 발급·폐기, 디바이스 상호 인증 |
-| Authorization | **RBAC, HTTP Method/Path Policy** | 디바이스 역할별 API 접근 허용 및 기본 거부 정책 |
-| Infrastructure | **Docker Compose** | Gateway, API, Console, PostgreSQL의 로컬 통합 실행 |
-| CI / Collaboration | **GitHub, GitHub Actions** | 버전 관리, 이슈 기반 작업 관리, 빌드·테스트·비밀정보 검사 |
-| Development | **AI Agent 기반 개발** | 설계·구현 보조 후 테스트와 문서로 결과 검증 |
+| Device Agent | Go | 개인키·CSR 생성, 인증서 보관, mTLS 요청, 가상 디바이스 테스트 |
+| Security Gateway | Go | TLS 1.3, X.509 검증, 접근 정책, Reverse Proxy, Event Outbox |
+| Management API | Java, Spring Boot | Device·Enrollment·CSR·Certificate·Policy·Event API와 SSE |
+| Admin Console | React, TypeScript, Vite, MUI | 운영 정보 조회와 인증서 관리 |
+| Database | PostgreSQL | 운영 메타데이터와 Security Event 저장 |
+| Gateway Outbox | SQLite | Management API 장애 중 Event 영속 보관·재전송 |
+| PKI | OpenSSL, X.509 | Root·Intermediate CA와 Device 인증서 발급 |
+| Infrastructure | Docker Compose, GitHub Actions | 통합 실행, 빌드·테스트·비밀정보 검사 |
 
-## 설계 문서
+## 개발 기준 문서
 
 - [요구사항](docs/requirements.md)
 - [전체 아키텍처](docs/architecture.md)
 - [보안 설계](docs/security-design.md)
-- [Management API 초안](docs/api-spec.md)
-- [데이터 모델 초안](docs/data-model.md)
-- [관리 콘솔 UI 설계](docs/ui-design.md)
-- [관리 콘솔 인터랙티브 와이어프레임](docs/wireframes/certgate-console-wireframe.html)
-- [개발 로드맵](docs/roadmap.md)
+- [API 구현 계약](docs/api-spec.md)
+- [데이터 모델](docs/data-model.md)
+- [저장소·모듈 구조](docs/repository-structure.md)
+- [개발 환경과 규칙](docs/development-guide.md)
+- [구현 계획과 일정](docs/implementation-plan.md)
 - [테스트 전략](docs/testing.md)
 - [배포·운영 설계](docs/operations.md)
+- [ADR 목록](docs/adr)
 - [AI 활용 및 검증 기록](docs/ai-usage.md)
 
-## 관리 콘솔 와이어프레임
-
-아래 화면은 구현 전 요구사항과 정보 구조를 검증하기 위한 와이어프레임입니다. 실제 구현 화면은 개발 진행에 따라 교체합니다.
-
-[![CertGate 관리 콘솔 대시보드 와이어프레임](docs/images/certgate-console-dashboard.png)](docs/wireframes/certgate-console-wireframe.html)
+초기 화면 정보 구조는 [UI 설계](docs/ui-design.md)와 [와이어프레임](docs/wireframes/certgate-console-wireframe.html)에 보관합니다. 실제 구현 화면은 개발 과정에서 변경합니다.
 
 ## 현재 상태
 
-**설계 단계입니다. 아직 구현 완료를 주장하지 않습니다.**
+**설계 기준선과 개발 준비 문서를 확정한 상태이며 기능 구현 전입니다.**
 
-제출용 MVP는 다음 흐름을 우선 완성합니다.
+구현은 [Foundation 이슈 #5](https://github.com/doidosid/certgate/issues/5)부터 시작합니다. README는 구현이 완료될 때마다 <code>완료 / 진행 중 / 예정</code>을 구분해 갱신합니다.
 
-```text
-CSR 제출 → 인증서 발급 → mTLS 인증 → 접근 정책 검증
-→ Backend 전달 또는 차단 → Security Event 기록 → 관리 콘솔 확인
-```
+## 제출 목표
+
+2026년 8월 23일까지 다음 최소 흐름을 실제 코드와 테스트로 증명합니다.
+
+- Device가 자기 개인키와 CSR을 생성하고 인증서를 발급받는다.
+- 정상 인증서는 Gateway를 통과하고 폐기·만료·권한 없음은 차단된다.
+- Management API 장애 중에도 Security Event가 유실되지 않는다.
+- 관리 콘솔에서 Device·Certificate·Security Event를 확인한다.
+- Critical Security Event를 접속 중인 콘솔에 SSE로 알린다.

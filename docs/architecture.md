@@ -1,91 +1,83 @@
-# 전체 아키텍처
+# 전체 아키텍처 v1
 
-## 1. 컴포넌트
+## 컴포넌트
 
-| 컴포넌트 | 기술 | 역할 |
+| 컴포넌트 | 기술 | 책임 |
 |---|---|---|
-| Device Agent | Go | 개인키·CSR 생성, 인증서 보관, mTLS 접속, Heartbeat·Telemetry 전송 |
-| Security Gateway | Go | mTLS 종료, 인증서 신원 추출, 상태·정책 검사, 요청 전달, 이벤트 생성 |
-| Management API | Java / Spring Boot | Device·CSR·인증서·Role·정책·보안 이벤트 관리, Critical Event SSE 전송 |
-| Admin Console | React | 운영 현황 조회와 Device·인증서 관리, 실시간 Critical 알림 표시 |
-| Database | PostgreSQL | 운영 메타데이터와 보안 이벤트 저장 |
-| Private CA | 초기 OpenSSL | 승인된 CSR 서명. CA 개인키는 실행 환경에서만 사용 |
-| Backend Service | 최소 HTTP 서비스 | 신뢰된 요청만 Gateway를 통과하는지 검증 |
+| Device Agent | Go | Enrollment, Key·CSR 생성, Certificate 저장, mTLS 요청 |
+| Security Gateway | Go | TLS 종료, X.509·Device·Policy 검증, Proxy, Event Outbox |
+| Management API | Spring Boot | Device·Enrollment·PKI·Policy·Event 관리, SSE |
+| Admin Console | React | 관리 API 소비와 Critical Event 표시 |
+| PostgreSQL | PostgreSQL | 관리 영역 Source of Truth |
+| Private CA | OpenSSL 기반 | 승인 CSR에 대한 Intermediate CA 서명 |
+| Backend Service | Go 최소 HTTP | 허용 요청 도착 여부 검증 |
 
-## 2. 전체 흐름
+## 발급 흐름
 
-```text
+~~~text
+Administrator → Management API: Device 등록
+Management API → Administrator: Enrollment Token 한 번 반환
+Device Agent → Device Agent: Private Key + CSR 생성
+Device Agent → Management API: Token으로 CSR 제출
+Administrator → Management API: CSR 승인
+Management API → Intermediate CA: CSR 서명
+Device Agent → Management API: Certificate + Chain 수령
+~~~
+
+## 접근 흐름
+
+~~~text
 Device Agent
-    │ TLS 1.3 / mTLS
+    │ HTTPS / TLS 1.3 / mTLS
     ▼
-Security Gateway ── Device·인증서·정책 조회 ──► Management API
-    │                                                │
-    │ 허용된 요청                                    ▼
-    ▼                                            PostgreSQL
+Security Gateway ── Access Context 조회 ──► Management API ──► PostgreSQL
+    │
+    │ 허용 요청 + Gateway 생성 Identity Header
+    ▼
 Backend Service
 
-Gateway 내부
-  └─ SQLite Durable Outbox ── 재시도 ──► Management API
+Security Gateway ── 실패 시 SQLite Outbox ── 재전송 ──► Management API
+Management API ── CRITICAL Event / SSE ──► Admin Console
+~~~
 
-Management API ── Critical Event / SSE ──► React Console
+## Gateway 처리 순서
 
-Administrator ──► React Console ── REST API ──► Management API
-```
+1. TLS 1.3 Client Certificate 검증
+2. Certificate Serial과 SAN URI Device Key 추출
+3. Access Context 조회 또는 30초 Cache 사용
+4. Device 상태, Certificate 상태, Identity 일치 확인
+5. Method·정규화 Path 정책 평가
+6. 외부 Identity Header 제거
+7. 허용 요청에 신뢰 Header를 생성해 Backend로 전달
+8. 처리 결과 Event 생성
+9. Event 전송 실패 시 SQLite Outbox 저장
 
-## 3. 서비스 간 통신
+## 통신 경계
 
-- Device → Gateway: mTLS가 적용된 HTTPS REST
-- Gateway → Backend: Docker 내부망의 HTTP Proxy
-- Gateway → Management API: Service Token으로 보호된 내부 REST API
-- Console → Management API: REST API와 Critical Event 수신용 SSE. 관리자 인증은 제출 이후에 추가
-- SSE 연결이 끊긴 동안의 Critical Event는 재접속 후 Security Event API로 조회한다.
-- Gateway는 외부 요청의 `X-CertGate-Device-ID`, `X-CertGate-Role`을 삭제하고 검증 결과로 다시 생성한다.
-- 인증서 상태 Cache 기본 TTL은 30초이며 인증서 폐기 시 해당 항목을 즉시 무효화한다.
+- 외부 공개: Gateway 8443
+- 개발 PC 공개: Console과 Management API
+- Docker 내부 전용: PostgreSQL, Backend Service, Gateway 내부 Cache API
+- Gateway → Management API와 Management API → Gateway는 서로 다른 Token 사용
+- Root CA Key는 Runtime Service에 주입하지 않음
 
-## 4. 신뢰 경계
+## Cache 일관성
 
-- Device가 존재하는 외부 네트워크는 신뢰하지 않는다.
-- Gateway만 Backend Service의 진입점으로 둔다.
-- Management API와 PostgreSQL은 신뢰된 관리 영역에 둔다.
-- CA 개인키는 일반 애플리케이션 데이터보다 높은 보호가 필요한 자산으로 취급한다.
-- Device가 HTTP Header나 Payload로 주장하는 Identity는 신뢰하지 않는다.
-- Device Identity는 검증된 Client Certificate에서만 추출한다.
+- Access Context TTL: 30초
+- Certificate 폐기 Commit 후 해당 Serial 즉시 무효화
+- 무효화 호출 실패 시 TTL로 수렴
+- Cache 장애는 인증 우회가 아니라 Management API 직접 조회 또는 Fail Closed로 처리
 
-## 5. Gateway 처리 순서
+## 장애 원칙
 
-1. 설정된 Private CA가 발급한 Client Certificate로 TLS Handshake를 수행한다.
-2. 인증서 Serial Number와 Device Identity를 추출한다.
-3. 인증서 체인과 유효기간을 확인한다.
-4. Management API에서 Device·인증서 상태와 Role을 조회한다.
-5. 미등록·비활성·폐기 상태라면 차단한다.
-6. Role, HTTP Method, Path를 기준으로 접근 정책을 평가한다.
-7. 허용된 요청에만 Gateway가 신뢰된 내부 Identity Header를 붙여 Backend로 전달한다.
-8. 결과와 처리 시간을 Security Event로 기록한다.
+- Access Context를 확인할 수 없고 유효 Cache가 없으면 요청 차단
+- Backend 장애는 502와 INTERNAL_ERROR Event
+- Event 저장 장애는 사용자 요청 판단과 분리하고 Outbox에 보존
+- CA 서명 실패는 CertificateRequest를 APPROVED로 바꾸지 않고 CRITICAL Event 기록
 
-## 6. 저장소 구조
+## 저장소 구조
 
-```text
-certgate/
-├─ device-agent/
-├─ gateway/
-├─ management-api/
-├─ admin-console/
-├─ backend-service/
-├─ pki/
-├─ infra/
-├─ tests/e2e/
-└─ docs/
-```
+상세 구조와 Package 책임은 [repository-structure.md](repository-structure.md)를 따른다.
 
-## 7. 이벤트 전달 신뢰성
+## MVP 한계
 
-- Gateway는 Security Event에 UUID를 부여한다.
-- 전송 실패 시 Docker Volume에 저장된 SQLite Durable Outbox에 보관한다.
-- Background Worker가 지수 Backoff로 재전송한다.
-- Management API는 Event UUID에 Unique Constraint를 적용해 중복 저장을 막는다.
-- 전송 성공이 확인된 항목만 Outbox에서 삭제한다.
-- 가장 오래된 미전송 Event와 대기 건수를 운영 지표로 노출한다.
-
-## 8. MVP의 기술적 한계
-
-MVP에서는 인증서 폐기를 **TLS Handshake 이후, Backend 전달 이전**에 확인한다. CRL·OCSP를 이용한 Handshake 단계의 폐기 검증을 구현했다고 표현하지 않는다.
+폐기 검증은 TLS Handshake 이후 Backend 전달 이전에 수행한다. CRL·OCSP 기반 Handshake 폐기를 구현했다고 표현하지 않는다.

@@ -1,0 +1,49 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+secrets/
+runtime/
+**/runtime/
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.csr
+*.crt
+
+# Go
+bin/
+*.test
+coverage.out
+
+# Java
+management-api/.gradle/
+management-api/build/
+management-api/target/
+*.class
+
+# Node
+admin-console/node_modules/
+admin-console/dist/
+admin-console/coverage/
+
+# Data
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+postgres-data/
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
