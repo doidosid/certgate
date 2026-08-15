@@ -42,7 +42,7 @@ Go(Device Agent, Security Gateway) · Java 21/Spring Boot(Management API) · Rea
 
 ### 신뢰 모델 / 인증·인가
 - Device Identity가 검증된 Client Certificate SAN URI 이외의 출처(Header, Payload, Common Name)에서 추출되지 않는지.
-- 외부에서 들어온 `X-CertGate-Device-ID`, `X-CertGate-Role` Header가 제거되고 Gateway가 검증 후 새로 생성하는지.
+- 외부에서 들어온 `X-CertGate-Device-Key`, `X-CertGate-Role` Header가 제거되고 Gateway가 검증 후 새로 생성하는지.
 - Access Context를 확인할 수 없을 때 실제로 Fail Closed(차단)로 동작하는지, 예외 처리 과정에서 의도치 않게 Fail Open이 되는 경로가 없는지.
 - Role + Method + Path 정책에서 일치하는 ALLOW가 없을 때 기본 DENY가 모든 경로에서 적용되는지.
 

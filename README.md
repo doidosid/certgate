@@ -45,9 +45,29 @@ Device 등록 → 단기 Enrollment Token 발급 → Device에서 Key·CSR 생�
 
 ## 현재 상태
 
-**설계 기준선과 개발 준비 문서를 확정한 상태이며 기능 구현 전입니다.**
+| 단계 | 상태 |
+|---|---|
+| Foundation (Issue #5) | 완료 — 각 서비스 기본 구조, PostgreSQL 연결 Health, Docker Compose, CI Build·Test |
+| Enrollment·PKI 발급 흐름 | 예정 |
+| Gateway mTLS·정책·차단 | 예정 |
+| Event Outbox·SSE | 예정 |
+| Admin Console 실제 연결 | 예정 |
+| E2E·제출 패키지 | 예정 |
 
-구현은 [Foundation 이슈 #5](https://github.com/doidosid/certgate/issues/5)부터 시작합니다. README는 구현이 완료될 때마다 <code>완료 / 진행 중 / 예정</code>을 구분해 갱신합니다.
+Foundation 단계에서는 인증·정책·PKI 로직을 아직 구현하지 않았습니다. 각 서비스는 최소 구조와 Health Endpoint만 제공하며, 세부 순서는 [`docs/implementation-plan.md`](docs/implementation-plan.md)를 따릅니다.
+
+## 로컬 실행 (Foundation)
+
+~~~bash
+cp .env.example .env
+docker compose -f infra/compose.yaml --env-file .env up -d --build
+~~~
+
+- Management API: <http://localhost:8080/actuator/health>
+- Admin Console: <http://localhost:5173>
+- Gateway 내부 Health: Docker 내부망에서만 확인 가능 (`gateway:8081/healthz`)
+
+서비스별 개별 실행·테스트 명령은 각 서비스 README를 참고합니다.
 
 ## 제출 목표
 

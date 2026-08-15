@@ -96,7 +96,7 @@ Management API는 Device Agent나 Gateway의 내부 Package를 공유하지 않�
 이 프로젝트는 인증서·Key·Token을 다루므로 아래는 일반 코드 품질보다 우선순위가 높다.
 
 - Device Identity는 검증된 Client Certificate의 **SAN URI**(`urn:certgate:device:{device-key}`)에서만 추출한다. Header나 Payload로 주장된 Identity는 신뢰하지 않는다. Common Name은 인증 판단에 쓰지 않는다.
-- 외부에서 들어온 `X-CertGate-Device-ID`, `X-CertGate-Role` Header는 제거하고, 검증에 성공한 뒤 Gateway가 새로 생성한다.
+- 외부에서 들어온 `X-CertGate-Device-Key`, `X-CertGate-Role` Header는 제거하고, 검증에 성공한 뒤 Gateway가 새로 생성한다.
 - Access Context를 확인할 수 없고 유효한 Cache도 없으면 **요청을 차단**한다(Fail Closed). 장애를 인증 우회 방향으로 처리하지 않는다.
 - 로그에 남기지 않는다: Private Key, Token·비밀번호, Certificate 전체 원문, 전체 CSR 원문, 전체 Telemetry Payload.
 - DB에 저장하지 않는다: Device/CA Private Key, Enrollment Token 평문, 비밀번호·Service Token, 전체 Telemetry Payload.
