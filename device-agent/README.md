@@ -11,3 +11,15 @@ Go 기반 가상 Device Client다.
 5. mTLS Heartbeat·Telemetry 요청
 
 Private Key와 Runtime Certificate는 이 Directory 아래가 아닌 Git 제외 Runtime 경로에 저장한다.
+
+## 현재 상태
+
+Foundation 단계: `cmd/device-agent`와 `internal/{config,identity,enrollment,client}` 골격, 환경변수 검증만 구현했다. Key·CSR 생성, Enrollment, mTLS 요청은 아직 구현하지 않았다.
+
+## 개발 명령
+
+~~~bash
+go build ./...
+go test ./...
+gofmt -l .
+~~~

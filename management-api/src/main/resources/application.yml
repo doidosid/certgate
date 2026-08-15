@@ -1,0 +1,19 @@
+server:
+  port: ${MANAGEMENT_API_PORT:8080}
+
+spring:
+  application:
+    name: management-api
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never

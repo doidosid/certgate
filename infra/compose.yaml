@@ -1,0 +1,107 @@
+name: ${COMPOSE_PROJECT_NAME:-certgate}
+
+networks:
+  certgate-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  gateway-outbox:
+
+services:
+  postgres:
+    image: postgres:16.15-alpine
+    networks:
+      - certgate-net
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  management-api:
+    build:
+      context: ../management-api
+      dockerfile: ../infra/docker/management-api/Dockerfile
+    networks:
+      - certgate-net
+    ports:
+      - "${MANAGEMENT_API_PORT}:8080"
+    environment:
+      MANAGEMENT_API_PORT: 8080
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      GATEWAY_INTERNAL_URL: ${GATEWAY_INTERNAL_URL}
+      GATEWAY_INTERNAL_TOKEN: ${GATEWAY_INTERNAL_TOKEN}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  gateway:
+    build:
+      context: ../gateway
+      dockerfile: ../infra/docker/gateway/Dockerfile
+    networks:
+      - certgate-net
+    ports:
+      - "${GATEWAY_MTLS_PORT}:8443"
+    environment:
+      GATEWAY_MTLS_PORT: 8443
+      GATEWAY_INTERNAL_PORT: 8081
+      MANAGEMENT_API_URL: ${MANAGEMENT_API_URL}
+      GATEWAY_SERVICE_TOKEN: ${GATEWAY_SERVICE_TOKEN}
+      GATEWAY_INTERNAL_TOKEN: ${GATEWAY_INTERNAL_TOKEN}
+      GATEWAY_ACCESS_CACHE_TTL_SECONDS: ${GATEWAY_ACCESS_CACHE_TTL_SECONDS}
+      GATEWAY_OUTBOX_PATH: /data/outbox.db
+      GATEWAY_EVENT_BATCH_SIZE: ${GATEWAY_EVENT_BATCH_SIZE}
+      GATEWAY_EVENT_RETRY_MAX_SECONDS: ${GATEWAY_EVENT_RETRY_MAX_SECONDS}
+    volumes:
+      - gateway-outbox:/data
+    depends_on:
+      management-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend-service:
+    build:
+      context: ../backend-service
+      dockerfile: ../infra/docker/backend-service/Dockerfile
+    networks:
+      - certgate-net
+    environment:
+      BACKEND_SERVICE_PORT: 8090
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8090/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  admin-console:
+    build:
+      context: ..
+      dockerfile: infra/docker/admin-console/Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+        VITE_SSE_URL: ${VITE_SSE_URL}
+    networks:
+      - certgate-net
+    ports:
+      - "${ADMIN_CONSOLE_PORT}:80"
+    depends_on:
+      - management-api

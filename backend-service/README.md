@@ -10,3 +10,11 @@ Endpoint:
 - GET /health
 
 외부 Port는 공개하지 않고 Gateway가 생성한 신뢰 Header를 응답과 Test에서 확인한다.
+
+## 개발 명령
+
+~~~bash
+go build ./...
+go test ./...
+gofmt -l .
+~~~

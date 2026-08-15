@@ -1,12 +1,28 @@
 # AGENTS.md
 
-CertGate 저장소에서 작업하는 Codex를 위한 가이드다. 이 프로젝트에서 Codex는 **Claude가 구현한 코드를 검증하는 독립 리뷰어**다. 구현보다 검증과 설명에 중점을 둔다.
+CertGate 저장소에서 작업하는 Codex를 위한 가이드다. 이 프로젝트에서 Codex는 **시니어 리뷰어**다. Claude가 연 PR의 코드 리뷰, 버그 탐색, 보안 검토, 설계 위반 확인, 테스트 누락 확인, 개선점 제안을 맡는다. 구현보다 검증과 설명에 중점을 둔다.
 
 구현 담당은 Claude(`CLAUDE.md`)다. 두 문서는 같은 문서를 Source of Truth로 공유하지만, `AGENTS.md`는 리뷰 관점과 결과 형식에 집중한다.
 
+## 협업 흐름
+
+```text
+PR
+ ↓
+Codex — PR 코드 리뷰
+ ↓
+Review Comment
+ ↓
+Claude — 수정
+ ↓
+Merge
+```
+
+Codex는 Claude가 Issue 단위로 연 PR을 대상으로 리뷰한다(전체 저장소를 처음부터 다시 훑지 않는다). 리뷰 결과는 Review Comment 형태로 남기고, 실제 코드 수정은 Claude가 한다(사용자가 명시적으로 요청한 경우 예외). Merge 여부 판단에 필요한 근거(Critical/High 문제 유무)를 결과 요약에 명확히 남긴다.
+
 ## 기본 행동
 
-- 현재 `git diff`(작업 브랜치 기준)를 가장 먼저 확인한다. 이번 작업에서 Claude가 변경한 코드 중심으로 리뷰한다.
+- 현재 PR의 `git diff`(대상 브랜치 기준)를 가장 먼저 확인한다. 이번 PR에서 Claude가 변경한 코드 중심으로 리뷰한다.
 - 기존 코드 전체를 불필요하게 재설계하지 않는다.
 - 요청받지 않은 대규모 리팩터링을 하지 않는다.
 - 사용자가 명시적으로 수정해달라고 하기 전에는 코드를 바로 수정하지 않는다. 문제를 먼저 설명하고 사용자가 판단하게 한다.
@@ -42,7 +58,7 @@ Go(Device Agent, Security Gateway) · Java 21/Spring Boot(Management API) · Rea
 
 ### 신뢰 모델 / 인증·인가
 - Device Identity가 검증된 Client Certificate SAN URI 이외의 출처(Header, Payload, Common Name)에서 추출되지 않는지.
-- 외부에서 들어온 `X-CertGate-Device-ID`, `X-CertGate-Role` Header가 제거되고 Gateway가 검증 후 새로 생성하는지.
+- 외부에서 들어온 `X-CertGate-Device-Key`, `X-CertGate-Role` Header가 제거되고 Gateway가 검증 후 새로 생성하는지.
 - Access Context를 확인할 수 없을 때 실제로 Fail Closed(차단)로 동작하는지, 예외 처리 과정에서 의도치 않게 Fail Open이 되는 경로가 없는지.
 - Role + Method + Path 정책에서 일치하는 ALLOW가 없을 때 기본 DENY가 모든 경로에서 적용되는지.
 
