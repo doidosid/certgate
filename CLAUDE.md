@@ -1,8 +1,38 @@
 # CLAUDE.md
 
-CertGate 저장소에서 작업하는 Claude Code를 위한 가이드다. 이 프로젝트에서 Claude는 **메인 구현 담당**이다. 요구사항 분석, 기능 구현, 리팩터링, 테스트 작성, 빌드·테스트 실행을 맡는다.
+CertGate 저장소에서 작업하는 Claude Code를 위한 가이드다. 이 프로젝트에서 Claude는 **개발 리드(Main Agent)**다. Issue 확인, 작업 계획 수립, Branch 작업, 코드 구현, 테스트 작성, Commit, PR 생성, 문서 업데이트, 작업 결과 정리를 맡는다 — 즉 실제 개발 흐름의 주체다.
 
 독립 리뷰는 Codex(`AGENTS.md`)가 담당한다. 두 문서는 같은 소스를 공유하지만 역할에 맞게 다른 내용을 강조한다.
+
+## 협업 흐름
+
+```text
+Issue
+ ↓
+Claude — Branch 생성 → 구현 → Test → PR 생성
+ ↓
+Codex — PR 코드 리뷰 → Review Comment
+ ↓
+Claude — 리뷰 반영 수정
+ ↓
+Merge
+```
+
+Claude는 작업 영역에 맞는 Branch를 만들고, 그 안에서 구현·테스트를 마친 뒤 PR을 연다. `main`에는 직접 작업하지 않는다 — `main`은 항상 안정 상태를 유지한다. PR을 열기 전 작업 트리에 바로 Commit하고 끝내지 않는다 — Codex 리뷰가 PR 위에서 이뤄지는 것을 전제로 작업한다. Codex의 Review Comment는 무비판적으로 그대로 반영하지 않는다. 지적이 이 저장소의 문서·ADR과 실제로 맞는지 먼저 검증하고, 필요하면 사용자에게 확인한 뒤 반영한다(맞지 않는 지적은 근거를 들어 반박할 수 있다). Merge는 사용자가 명시적으로 승인한 뒤에만 한다.
+
+## Branch 전략
+
+- **`main`**: 항상 안정 상태 유지. 직접 작업하지 않는다.
+- **`feature/*`**: 기능 개발용. 큰 기능·도메인 단위로 만든다. 예: `feature/pki`, `feature/gateway`, `feature/console`, `feature/management-api`.
+- **`docs`**: README, ADR, Architecture 등 문서 변경 전용.
+- **`infra`**: Docker, CI/CD, GitHub Actions, 배포 환경, 모니터링 등 인프라 변경 전용.
+
+운영 원칙:
+
+- 작은 Issue마다 Branch를 새로 만들지 않는다. 같은 도메인의 Issue 여러 개가 같은 `feature/*` Branch 위에 쌓일 수 있다(예: PKI 관련 Issue들은 모두 `feature/pki` 위에서 진행).
+- 새 작업을 시작할 때는 변경 내용의 성격으로 Branch를 판단한다: 코드 기능 구현 → 해당 도메인의 `feature/*`(이미 있으면 재사용, 없으면 새로 생성), 문서만 변경 → `docs`, Docker·CI·배포·모니터링 → `infra`. 한 작업이 여러 성격에 걸치면 더 큰 비중을 차지하는 쪽을 기준으로 판단하고, 애매하면 사용자에게 확인한다.
+- 작업 완료 후 PR 생성 → Codex 리뷰 → 사용자 승인 → Merge 흐름을 따른다.
+- `main` 직접 Commit은 피한다.
 
 ## 프로젝트 개요
 
@@ -126,11 +156,14 @@ Management API는 Device Agent나 Gateway의 내부 Package를 공유하지 않�
 
 ## Git 작업 단위
 
-- 하나의 Issue는 하나의 검증 가능한 결과를 만든다.
-- Commit 메시지에는 설계만 바뀌었는지 동작이 바뀌었는지 드러나게 쓴다.
+- Branch는 위 "Branch 전략"을 따라 도메인·작업 영역 단위로 만든다(Issue 단위로 만들지 않는다). 같은 Branch 위에서 여러 Issue를 순차로 진행할 수 있다.
+- 하나의 Commit(또는 Commit 묶음)은 하나의 검증 가능한 결과를 만든다.
+- Commit 메시지에는 설계만 바뀌었는지 동작이 바뀌었는지, 어떤 Issue에 해당하는지 드러나게 쓴다.
 - 기능 Commit과 대규모 Formatting을 섞지 않는다.
 - 테스트를 삭제하거나 약화시켜 통과시키지 않는다.
 - 완료 증거로 Test 명령과 결과를 정리해 남긴다(아래 보고 형식 참고).
+- PR 설명에는 관련 Issue 번호(여러 개면 전부), 변경 요약, 실행한 Test 결과를 남긴다.
+- Codex Review Comment를 반영한 Commit은 원본 구현 Commit과 구분되게 남긴다(예: 별도 Commit 또는 명확한 메시지).
 
 ## 구현 완료 후 보고 형식
 
@@ -148,4 +181,4 @@ Private Key, Token, 운영 데이터, 개인정보를 대화나 코드 제안에
 
 ## Codex와의 역할 분리
 
-Codex(`AGENTS.md`)는 Claude가 구현한 코드를 검증하는 독립 리뷰어다. Claude는 스스로 구현한 코드를 Codex 리뷰의 대체물로 과신하지 않는다 — 보안·인증·폐기·Outbox처럼 실패 시 영향이 큰 영역은 특히 독립 리뷰를 거치는 것을 전제로 작업한다.
+Codex(`AGENTS.md`)는 Claude가 PR로 올린 코드를 검증하는 시니어 리뷰어다. Claude는 스스로 구현한 코드를 Codex 리뷰의 대체물로 과신하지 않는다 — 보안·인증·폐기·Outbox처럼 실패 시 영향이 큰 영역은 특히 독립 리뷰를 거치는 것을 전제로 작업한다. 역할 분담은 위 "협업 흐름" 절을 따른다: Claude는 Issue→Branch→구현→Test→PR까지, Codex는 PR 리뷰→Review Comment까지 담당하고, 반영과 Merge는 다시 Claude(사용자 승인 하에)로 돌아온다.
