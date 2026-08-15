@@ -45,7 +45,7 @@ JSON 구조화 로그 공통 필드:
   "level": "WARN",
   "service": "gateway",
   "traceId": "8a6ba949-f3ec-4916-aae2-d55bd787893d",
-  "deviceId": "sensor-floor-03",
+  "deviceKey": "sensor-floor-03",
   "reasonCode": "CERTIFICATE_REVOKED",
   "latencyMs": 8
 }
@@ -57,9 +57,11 @@ Secret, Token, Private Key, 전체 CSR·Certificate·Telemetry는 로그에서 �
 
 - SQLite WAL Mode
 - Event 생성과 Outbox 저장을 하나의 로컬 Transaction으로 처리
+- Outbox Transaction Commit 후 Management API 전송 시도
 - 재시도: 지수 Backoff + 최대 간격
 - Batch 크기와 Timeout은 환경변수
 - 성공 응답 뒤 삭제
+- 전송 실패 시 삭제하지 않고 보존
 - Process 재시작 후 PENDING 항목 재개
 
 ## CI 준비

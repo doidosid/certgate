@@ -18,7 +18,7 @@
 Administrator → Management API: Device 등록
 Management API → Administrator: Enrollment Token 한 번 반환
 Device Agent → Device Agent: Private Key + CSR 생성
-Device Agent → Management API: Token으로 CSR 제출
+Device Agent → Management API: Token으로 단일 SAN URI urn:certgate:device:{device-key} CSR 제출
 Administrator → Management API: CSR 승인
 Management API → Intermediate CA: CSR 서명
 Device Agent → Management API: Certificate + Chain 수령
@@ -36,21 +36,23 @@ Security Gateway ── Access Context 조회 ──► Management API ──►
     ▼
 Backend Service
 
-Security Gateway ── 실패 시 SQLite Outbox ── 재전송 ──► Management API
-Management API ── CRITICAL Event / SSE ──► Admin Console
+Security Gateway ── SQLite Durable Outbox(WAL) 저장 ── Batch 전송 ──► Management API
+Management API ── Security Event 저장·CRITICAL 판단 ── SSE ──► Admin Console
 ~~~
 
 ## Gateway 처리 순서
 
 1. TLS 1.3 Client Certificate 검증
-2. Certificate Serial과 SAN URI Device Key 추출
+2. Certificate Serial과 단일 SAN URI `urn:certgate:device:{device-key}`의 Device Key 추출
 3. Access Context 조회 또는 30초 Cache 사용
 4. Device 상태, Certificate 상태, Identity 일치 확인
 5. Method·정규화 Path 정책 평가
 6. 외부 Identity Header 제거
 7. 허용 요청에 신뢰 Header를 생성해 Backend로 전달
-8. 처리 결과 Event 생성
-9. Event 전송 실패 시 SQLite Outbox 저장
+8. 처리 결과 Security Event 생성
+9. Security Event 생성과 SQLite Durable Outbox 저장을 하나의 로컬 Transaction으로 Commit
+10. Commit된 Event의 Batch 전송 시도
+11. 성공 시 Outbox에서 삭제하고 실패 시 보존 후 지수 Backoff로 재시도
 
 ## 통신 경계
 
@@ -71,7 +73,9 @@ Management API ── CRITICAL Event / SSE ──► Admin Console
 
 - Access Context를 확인할 수 없고 유효 Cache가 없으면 요청 차단
 - Backend 장애는 502와 INTERNAL_ERROR Event
-- Event 저장 장애는 사용자 요청 판단과 분리하고 Outbox에 보존
+- Management API 장애는 사용자 요청 판단과 분리하고, 먼저 저장된 Event를 SQLite Durable Outbox에 보존
+- Gateway 재시작 후에도 Outbox의 PENDING Event 전송 재개
+- SQLite Outbox 로컬 Transaction 자체가 실패하면 구조화 로그로 기록하고 Event가 보존되었다고 간주하지 않음
 - CA 서명 실패는 CertificateRequest를 APPROVED로 바꾸지 않고 CRITICAL Event 기록
 
 ## 저장소 구조
@@ -81,3 +85,5 @@ Management API ── CRITICAL Event / SSE ──► Admin Console
 ## MVP 한계
 
 폐기 검증은 TLS Handshake 이후 Backend 전달 이전에 수행한다. CRL·OCSP 기반 Handshake 폐기를 구현했다고 표현하지 않는다.
+
+외부 Webhook, Notification Outbox와 별도 Alert Domain은 MVP 범위가 아니다. Security Event를 원본으로 유지하고 저장된 CRITICAL Event만 SSE로 Admin Console에 전달한다.

@@ -14,6 +14,8 @@
 - 요청 추적 ID는 <code>X-Trace-Id</code>로 전달하고 없으면 서버가 생성한다.
 - Enum은 API에서 영문 대문자로 전달하고 Console에서 한국어로 변환한다.
 - 단건 응답은 불필요한 공통 Envelope 없이 Resource JSON을 반환한다.
+- <code>deviceId</code>는 Management API Resource UUID이고, <code>deviceKey</code>는 인증서 Identity에 사용하는 변경 불가 식별자다.
+- X.509 SAN URI는 단 하나의 <code>urn:certgate:device:{device-key}</code> 형식만 허용한다. 예: <code>urn:certgate:device:sensor-floor-01</code>.
 
 ### 페이지 응답
 
@@ -134,7 +136,7 @@ Header: <code>Authorization: Bearer cg_enroll_xxx</code>
 1. Token Hash, 만료, 폐기 여부 확인
 2. CSR 서명 유효성 확인
 3. 공개키 알고리즘과 최소 강도 확인
-4. SAN URI가 <code>urn:certgate:device:{deviceKey}</code>와 정확히 일치하는지 확인
+4. 단일 SAN URI가 <code>urn:certgate:device:{device-key}</code> 형식이고 그 Device Key가 Token 대상 Device의 <code>deviceKey</code>와 정확히 일치하는지 확인
 5. 같은 Device의 PENDING 요청 중복 방지
 
 <code>202 Accepted</code>
@@ -252,6 +254,8 @@ MVP의 정책 수정 API는 제공하지 않고 Seed Data로 관리한다.
 
 <code>POST /internal/security-events/batch</code>
 
+Gateway는 Security Event 생성과 SQLite Durable Outbox 저장을 하나의 로컬 Transaction으로 Commit한 뒤 이 API로 전송한다. <code>200 OK</code>를 받은 Event만 Outbox에서 삭제하며, 전송 실패 Event는 보존 후 재시도한다.
+
 ~~~json
 {
   "events": [
@@ -336,7 +340,7 @@ id: c8c78370-174f-4f88-b230-784e2d9115be
 data: {"eventId":"c8c78370-174f-4f88-b230-784e2d9115be","occurredAt":"2026-08-13T05:50:00Z","deviceKey":"sensor-floor-03","reasonCode":"CERTIFICATE_REVOKED","message":"폐기된 인증서의 접근이 차단되었습니다."}
 ~~~
 
-SSE는 알림 전달 수단일 뿐 원본 저장소가 아니다. 연결이 끊긴 동안의 Event는 Console이 마지막 확인 시각 이후의 <code>severity=CRITICAL</code> 목록을 다시 조회해 보완한다.
+Security Event가 원본 데이터이며 SSE는 저장된 CRITICAL Event의 전달 수단일 뿐 원본 저장소가 아니다. 연결이 끊긴 동안의 Event는 Console이 마지막 확인 시각 이후의 <code>severity=CRITICAL</code> 목록을 다시 조회해 보완한다. MVP에서는 별도 Alert Domain, 외부 Webhook과 Notification Outbox를 제공하지 않는다.
 
 ## 10. Reason Code
 

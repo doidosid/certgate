@@ -4,7 +4,8 @@
 
 - 외부 Device 네트워크는 신뢰하지 않는다.
 - Device가 Header나 Payload로 주장한 Identity는 신뢰하지 않는다.
-- Device Identity는 검증된 Client Certificate의 SAN URI에서만 추출한다.
+- Device Identity는 검증된 Client Certificate의 단일 SAN URI `urn:certgate:device:{device-key}`에서만 추출한다.
+- Device Key는 변경 불가 인증 식별자이며 Management API 내부 Resource UUID인 `deviceId`와 구분한다.
 - Gateway만 Backend Service의 외부 진입점이다.
 - Management API와 PostgreSQL은 Docker 내부 관리 영역에 둔다.
 - 관리자 인증이 없는 MVP Management API는 인터넷에 공개하지 않는다.
@@ -16,9 +17,9 @@
 1. 관리자가 Device를 등록한다.
 2. Management API가 24시간 유효한 Token을 생성하고 평문을 한 번만 반환한다.
 3. DB에는 Token의 SHA-256 Hash만 저장한다.
-4. Device Agent는 로컬에서 개인키와 CSR을 만든다.
+4. Device Agent는 로컬에서 개인키와 단일 SAN URI `urn:certgate:device:{device-key}`를 포함한 CSR을 만든다.
 5. Agent가 Bearer Token으로 CSR을 제출한다.
-6. 서버는 Token 대상 Device Key와 CSR SAN URI의 정확한 일치를 검증한다.
+6. 서버는 CSR SAN URI의 Device Key와 Token 대상 Device의 변경 불가 `deviceKey`가 정확히 일치하는지 검증한다.
 7. 관리자가 승인하면 Intermediate CA가 서명한다.
 8. Device는 같은 Enrollment 범위에서 Certificate와 CA Chain을 내려받는다.
 
@@ -45,6 +46,7 @@ Root CA (10년)
 - CSR 자체 서명
 - 허용 공개키: ECDSA P-256 또는 RSA 2048 이상
 - SAN URI 단 하나가 <code>urn:certgate:device:{device-key}</code>와 일치
+- SAN URI의 Device Key가 Token 대상 Device의 변경 불가 <code>deviceKey</code>와 정확히 일치
 - Common Name은 인증 판단에 사용하지 않음
 - 등록되고 ACTIVE인 Device
 - 동일 Device의 PENDING 요청 중복 없음
@@ -54,12 +56,12 @@ Root CA (10년)
 - TLS 1.3 사용
 - Client Certificate 필수
 - Root CA 기준 Chain·서명·유효기간 검증
-- SAN URI에서 Device Key 추출
+- 단일 SAN URI <code>urn:certgate:device:{device-key}</code>에서 Device Key 추출
 - Certificate Serial로 Management API Access Context 조회
 - Device ACTIVE, Certificate 유효, Identity 일치 여부 확인
 - 검증 실패 시 Backend로 전달하지 않음
 
-TLS Handshake 단계에서 끝난 실패는 Gateway 구조화 로그에 우선 기록한다. 안정적으로 Event 정보를 추출할 수 있는 실패부터 Outbox에 저장하며, 구현하지 않은 Handshake Event 수집을 완료 기능으로 표현하지 않는다.
+TLS Handshake 단계에서 끝난 실패는 Gateway 구조화 로그에 우선 기록한다. 안정적으로 Security Event 정보를 구성할 수 있는 실패는 Event 생성과 SQLite Durable Outbox 저장을 하나의 로컬 Transaction으로 처리한 뒤 전송한다. 구현하지 않은 Handshake Event 수집을 완료 기능으로 표현하지 않는다.
 
 ## 6. 인증서 폐기
 
@@ -80,8 +82,8 @@ CRL·OCSP는 제출 이후 확장 기능이다.
 
 - 일치하는 ALLOW 규칙이 없으면 DENY
 - Path 정규화 후 평가
-- 외부의 <code>X-CertGate-Device-ID</code>, <code>X-CertGate-Role</code> 삭제
-- 검증 성공 후 Gateway가 신뢰 Header를 새로 생성
+- 외부의 <code>X-CertGate-Device-Key</code>, <code>X-CertGate-Role</code> 삭제
+- 검증 성공 후 Gateway가 SAN URI에서 추출한 Device Key로 <code>X-CertGate-Device-Key</code>와 <code>X-CertGate-Role</code>을 새로 생성
 - Backend는 Gateway 내부망 요청만 수신
 
 ## 8. Service 인증
@@ -94,7 +96,13 @@ CRL·OCSP는 제출 이후 확장 기능이다.
 
 ## 9. Security Event와 Critical 판정
 
-별도 Alert Domain은 만들지 않는다. Security Event가 원본이며 CRITICAL Event만 SSE로 실시간 전달한다.
+Security Event가 원본 데이터다. Gateway에서 생성한 Security Event는 먼저 WAL Mode의 SQLite Durable Outbox에 Transaction으로 저장하고 Management API 전송을 시도한다. 전송 성공 시 Outbox에서 삭제하고 실패 시 보존한 뒤 재시도한다.
+
+별도 Alert Domain은 만들지 않는다. Management API가 저장된 Security Event의 CRITICAL 여부를 판단하고 CRITICAL Event만 SSE로 Admin Console에 실시간 전달한다. MVP에서는 외부 Webhook과 Notification Outbox를 구현하지 않는다.
+
+~~~text
+Security Event → CRITICAL 판단 → SSE → Admin Console
+~~~
 
 CRITICAL 조건:
 
@@ -110,7 +118,7 @@ CRITICAL 조건:
 
 기록:
 
-- 시간, Trace ID, Device ID, Certificate Serial
+- 시간, Trace ID, Device Key, Certificate Serial
 - Method, Path, Decision, Reason Code
 - Client IP, Latency
 
@@ -124,4 +132,4 @@ CRITICAL 조건:
 
 ## 11. 명시적 한계
 
-상용 CA 보안, 관리자 인증, CRL·OCSP, 자동 갱신, 감사 로그 변조 방지, Rate Limit, Replay Protection, HA는 MVP 범위가 아니다.
+상용 CA 보안, 관리자 인증, CRL·OCSP, 자동 갱신, 감사 로그 변조 방지, Rate Limit, Replay Protection, HA, 외부 Webhook·메신저 알림과 Notification Outbox는 MVP 범위가 아니다. 외부 알림이 필요해지면 Security Event를 원본으로 사용하는 전달 Adapter를 향후 확장으로 검토한다.

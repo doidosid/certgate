@@ -19,8 +19,8 @@
 ### 1. Enrollment·PKI — Issue #1, #3 일부
 
 - Device 등록과 단기 Enrollment Token
-- Device Agent Key·CSR 생성
-- CSR 서명·SAN 검증
+- Device Agent Key와 단일 SAN URI `urn:certgate:device:{device-key}` CSR 생성
+- CSR 서명·SAN Device Key 검증
 - 관리자 승인
 - Certificate와 CA Chain 수령
 
@@ -46,12 +46,13 @@
 
 ### 4. Event 신뢰성·SSE — Issue #6
 
-- SQLite Durable Outbox
+- WAL Mode SQLite Durable Outbox에서 Security Event 생성·저장의 로컬 Transaction
+- Commit된 Event 전송, 성공 시 삭제, 실패 시 보존·재시도
 - Batch 재전송과 PostgreSQL 중복 방지
 - Critical 판정
 - React SSE 연결과 토스트
 
-완료 증거: Management API 중단·복구 후 Event가 한 번만 저장되고 Critical Event가 Console에 표시된다.
+완료 증거: Management API 중단 전에 Event가 SQLite Durable Outbox에 보존되고, 복구 후 PostgreSQL에 한 번만 저장되며 CRITICAL Security Event가 SSE로 Console에 표시된다.
 
 ### 5. Console 연결 — Issue #7
 
@@ -104,7 +105,11 @@
 - Packet Capture 설명
 - Cloud 배포
 - 정책 수정 UI
+
+MVP 제외:
+
 - 외부 Webhook·메신저 알림
+- Notification Outbox와 별도 Alert Domain
 
 ## 다음 작업
 
