@@ -147,15 +147,29 @@ class SecurityEventBatchIntegrationTests {
 	}
 
 	@Test
-	void batch_withNullEventInList_isRejectedNotServerError() {
-		HttpHeaders headers = new HttpHeaders();
-		headers.setBearerAuth(SERVICE_TOKEN);
-		headers.setContentType(MediaType.APPLICATION_JSON);
-		var response = restTemplate.postForEntity(
-				"/internal/security-events/batch",
-				new HttpEntity<>(Map.of("events", List.of(sampleEvent(UUID.randomUUID()), Map.of())), headers), Map.class);
+	void batch_withActualNullEventInList_isRejectedNotServerError() {
+		// A real JSON null element ({"events":[{...},null]}), not just an empty
+		// object -- List.of() rejects null elements, so build the list by hand.
+		List<Map<String, Object>> events = new java.util.ArrayList<>();
+		events.add(sampleEvent(UUID.randomUUID()));
+		events.add(null);
 
-		// The second element serializes as {} -> a payload with every field null.
+		var response = restTemplate.postForEntity(
+				"/internal/security-events/batch", requestWithEvents(events), Map.class);
+
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+		assertThat(response.getBody().get("code")).isEqualTo("SECURITY_EVENT_INVALID");
+	}
+
+	@Test
+	void batch_withExplicitNullRequiredField_isRejected() {
+		// Distinct from the missing-key case: the key is present with a JSON null value.
+		Map<String, Object> event = sampleEvent(UUID.randomUUID());
+		event.put("reasonCode", null);
+
+		var response = restTemplate.postForEntity(
+				"/internal/security-events/batch", requestWithEvents(List.of(event)), Map.class);
+
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
 		assertThat(response.getBody().get("code")).isEqualTo("SECURITY_EVENT_INVALID");
 	}
