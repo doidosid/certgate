@@ -121,4 +121,58 @@ class SecurityEventBatchIntegrationTests {
 		assertThat(response.getBody().get("acceptedCount")).isEqualTo(0);
 		assertThat(response.getBody().get("duplicateCount")).isEqualTo(0);
 	}
+
+	@Test
+	void batch_withSameNewEventIdTwiceInOneRequest_insertsOnceAndCountsOneDuplicate() {
+		Map<String, Object> event = sampleEvent(UUID.randomUUID());
+
+		var response = restTemplate.postForEntity(
+				"/internal/security-events/batch", requestWithEvents(List.of(event, event)), Map.class);
+
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(response.getBody().get("acceptedCount")).isEqualTo(1);
+		assertThat(response.getBody().get("duplicateCount")).isEqualTo(1);
+	}
+
+	@Test
+	void batch_withMissingRequiredField_isRejectedAndStoresNothing() {
+		Map<String, Object> incomplete = sampleEvent(UUID.randomUUID());
+		incomplete.remove("reasonCode");
+
+		var response = restTemplate.postForEntity(
+				"/internal/security-events/batch", requestWithEvents(List.of(incomplete)), Map.class);
+
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+		assertThat(response.getBody().get("code")).isEqualTo("SECURITY_EVENT_INVALID");
+	}
+
+	@Test
+	void batch_withNullEventInList_isRejectedNotServerError() {
+		HttpHeaders headers = new HttpHeaders();
+		headers.setBearerAuth(SERVICE_TOKEN);
+		headers.setContentType(MediaType.APPLICATION_JSON);
+		var response = restTemplate.postForEntity(
+				"/internal/security-events/batch",
+				new HttpEntity<>(Map.of("events", List.of(sampleEvent(UUID.randomUUID()), Map.of())), headers), Map.class);
+
+		// The second element serializes as {} -> a payload with every field null.
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+		assertThat(response.getBody().get("code")).isEqualTo("SECURITY_EVENT_INVALID");
+	}
+
+	@Test
+	void batch_rejectedBatch_doesNotPartiallyStoreValidEventsFromSameRequest() {
+		UUID validEventId = UUID.randomUUID();
+		Map<String, Object> valid = sampleEvent(validEventId);
+		Map<String, Object> invalid = sampleEvent(UUID.randomUUID());
+		invalid.remove("type");
+
+		restTemplate.postForEntity("/internal/security-events/batch", requestWithEvents(List.of(valid, invalid)), Map.class);
+
+		var resubmit = restTemplate.postForEntity(
+				"/internal/security-events/batch", requestWithEvents(List.of(sampleEvent(validEventId))), Map.class);
+
+		assertThat(resubmit.getBody().get("acceptedCount")).isEqualTo(1);
+		assertThat(resubmit.getBody().get("duplicateCount")).isEqualTo(0);
+	}
 }

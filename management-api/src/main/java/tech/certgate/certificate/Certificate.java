@@ -116,7 +116,7 @@ public class Certificate {
 		if (now.isAfter(notAfter)) {
 			return CertificateStatus.EXPIRED;
 		}
-		if (Duration.between(now, notAfter).toDays() <= 7) {
+		if (!notAfter.isAfter(now.plus(Duration.ofDays(7)))) {
 			return CertificateStatus.EXPIRING_SOON;
 		}
 		return CertificateStatus.VALID;

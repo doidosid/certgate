@@ -254,7 +254,7 @@ MVP의 정책 수정 API는 제공하지 않고 Seed Data로 관리한다.
 
 <code>POST /internal/security-events/batch</code>
 
-Gateway는 Security Event 생성과 SQLite Durable Outbox 저장을 하나의 로컬 Transaction으로 Commit한 뒤 이 API로 전송한다. <code>200 OK</code>를 받은 Event만 Outbox에서 삭제하며, 전송 실패 Event는 보존 후 재시도한다.
+Gateway는 Security Event 생성과 SQLite Durable Outbox 저장을 하나의 로컬 Transaction으로 Commit한 뒤 이 API로 전송한다. <code>200 OK</code>를 받은 Event만 Outbox에서 삭제하며, 전송 실패 Event는 보존 후 재시도한다. `id`·`occurredAt`·`type`·`severity`·`decision`·`reasonCode`·`traceId` 중 하나라도 없으면 Batch 전체를 <code>400 SECURITY_EVENT_INVALID</code>로 거절한다(부분 저장하지 않음).
 
 ~~~json
 {
@@ -356,6 +356,7 @@ Security Event가 원본 데이터이며 SSE는 저장된 CRITICAL Event의 전�
 - <code>EVENT_OUTBOX_BACKLOG</code>
 - <code>EVENT_DELIVERY_DELAYED</code>
 - <code>SERVICE_TOKEN_INVALID</code>: Gateway 내부 API(§7) Bearer Service Token 없음·불일치 (401)
+- <code>SECURITY_EVENT_INVALID</code>: Security Event Batch 필수 필드 없음 (400)
 - <code>INTERNAL_ERROR</code>
 
 ### Enrollment API 오류 Code
