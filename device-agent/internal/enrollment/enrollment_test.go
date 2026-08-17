@@ -3,6 +3,7 @@ package enrollment
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -173,6 +174,9 @@ func TestEnroll_ContextCancelledWhilePending(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected context deadline error")
 	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("error = %v, want it to wrap context.DeadlineExceeded", err)
+	}
 	if elapsed > time.Second {
 		t.Errorf("Enroll() took %v, want it to return promptly after context deadline", elapsed)
 	}
@@ -197,6 +201,9 @@ func TestEnroll_ContextCancelledDuringHTTPRequest(t *testing.T) {
 
 	if err == nil {
 		t.Fatal("expected error when context is cancelled mid-request")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("error = %v, want it to wrap context.Canceled", err)
 	}
 	if elapsed > time.Second {
 		t.Errorf("Enroll() took %v, want it to return promptly after cancellation during the HTTP request", elapsed)

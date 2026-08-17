@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"os"
 	"os/signal"
@@ -39,8 +40,8 @@ func main() {
 	log.Print("device-agent: submitting CSR and waiting for administrator approval")
 	result, err := client.Enroll(ctx, csrPEM)
 	if err != nil {
-		if ctx.Err() != nil {
-			log.Printf("device-agent: shutting down before enrollment completed: %v", ctx.Err())
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			log.Print("device-agent: shutting down before enrollment completed")
 			return
 		}
 		log.Fatalf("device-agent: enrollment failed: %v", err)
