@@ -17,3 +17,16 @@ management:
   endpoint:
     health:
       show-details: never
+
+certgate:
+  ca:
+    # Left unset in environments (e.g. Foundation health tests) that never
+    # sign a certificate; IntermediateCertificateAuthority loads these lazily
+    # and only fails, with CA_SIGNING_FAILED, when a signing request arrives.
+    root-cert-path: ${ROOT_CA_CERT_PATH:}
+    intermediate-cert-path: ${INTERMEDIATE_CA_CERT_PATH:}
+    intermediate-key-path: ${INTERMEDIATE_CA_KEY_PATH:}
+  enrollment:
+    token-ttl-hours: ${ENROLLMENT_TOKEN_TTL_HOURS:24}
+  certificate:
+    validity-days: ${DEVICE_CERTIFICATE_VALIDITY_DAYS:30}

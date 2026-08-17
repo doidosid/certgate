@@ -18,7 +18,7 @@ Root CA
 - Root CA는 Intermediate CA 인증서 서명에만 사용한다.
 - Intermediate CA가 승인된 Device CSR에 서명한다.
 - Gateway는 Root CA를 Trust Anchor로 사용하고 전체 Certificate Chain을 검증한다.
-- 실행 중인 Management API에는 Intermediate CA Certificate와 Key만 주입한다.
+- 실행 중인 Management API에는 Intermediate CA **Private Key**는 Intermediate CA의 것만 주입한다. Root CA의 **Certificate(공개)**는 Device Enrollment 응답의 Chain(`caChainPem`, api-spec.md §4)을 구성하기 위해 Management API가 함께 읽는다 — 이는 Chain 조립을 위한 공개 데이터 접근이며, Root CA Private Key는 어떤 Runtime Service에도 주입하지 않는다는 원칙과는 별개다.
 - CA 개인키는 모두 Git에 올리지 않는다.
 
 ## 선택 이유
