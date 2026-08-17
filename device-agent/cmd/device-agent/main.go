@@ -39,6 +39,10 @@ func main() {
 	log.Print("device-agent: submitting CSR and waiting for administrator approval")
 	result, err := client.Enroll(ctx, csrPEM)
 	if err != nil {
+		if ctx.Err() != nil {
+			log.Printf("device-agent: shutting down before enrollment completed: %v", ctx.Err())
+			return
+		}
 		log.Fatalf("device-agent: enrollment failed: %v", err)
 	}
 

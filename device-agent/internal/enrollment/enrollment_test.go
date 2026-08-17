@@ -3,6 +3,7 @@ package enrollment
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -38,6 +39,23 @@ func TestEnroll_Success(t *testing.T) {
 
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/enrollments/certificate-requests":
+			if got := r.Header.Get("Content-Type"); got != "application/json" {
+				t.Errorf("Content-Type = %q, want application/json", got)
+			}
+			bodyBytes, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Fatalf("read request body: %v", err)
+			}
+			var submitted struct {
+				CSRPEM string `json:"csrPem"`
+			}
+			if err := json.Unmarshal(bodyBytes, &submitted); err != nil {
+				t.Fatalf("decode request body: %v", err)
+			}
+			if submitted.CSRPEM != "csr" {
+				t.Errorf("submitted csrPem = %q, want %q", submitted.CSRPEM, "csr")
+			}
+
 			writeJSON(t, w, http.StatusAccepted, map[string]any{
 				"id": "req-1", "deviceId": "dev-1", "status": "PENDING", "requestedAt": "2026-08-13T05:40:00Z",
 			})
@@ -98,7 +116,7 @@ func TestEnroll_InvalidToken(t *testing.T) {
 func TestEnroll_DuplicatePending(t *testing.T) {
 	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(t, w, http.StatusConflict, map[string]any{
-			"code": "CERTIFICATE_REQUEST_ALREADY_PENDING", "message": "already pending", "traceId": "trace-2",
+			"code": "CERTIFICATE_REQUEST_DUPLICATE", "message": "이미 대기 중인 CSR 요청이 있습니다.", "traceId": "trace-2",
 		})
 	})
 
@@ -106,8 +124,8 @@ func TestEnroll_DuplicatePending(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for duplicate pending request")
 	}
-	if !strings.Contains(err.Error(), "CERTIFICATE_REQUEST_ALREADY_PENDING") {
-		t.Errorf("error = %q, want it to mention CERTIFICATE_REQUEST_ALREADY_PENDING", err.Error())
+	if !strings.Contains(err.Error(), "CERTIFICATE_REQUEST_DUPLICATE") {
+		t.Errorf("error = %q, want it to mention CERTIFICATE_REQUEST_DUPLICATE", err.Error())
 	}
 }
 
@@ -157,5 +175,30 @@ func TestEnroll_ContextCancelledWhilePending(t *testing.T) {
 	}
 	if elapsed > time.Second {
 		t.Errorf("Enroll() took %v, want it to return promptly after context deadline", elapsed)
+	}
+}
+
+func TestEnroll_ContextCancelledDuringHTTPRequest(t *testing.T) {
+	unblock := make(chan struct{})
+	defer close(unblock)
+
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		<-unblock
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"id":"req-1","status":"PENDING"}`))
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(10*time.Millisecond, cancel)
+
+	start := time.Now()
+	_, err := client.Enroll(ctx, []byte("csr"))
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected error when context is cancelled mid-request")
+	}
+	if elapsed > time.Second {
+		t.Errorf("Enroll() took %v, want it to return promptly after cancellation during the HTTP request", elapsed)
 	}
 }

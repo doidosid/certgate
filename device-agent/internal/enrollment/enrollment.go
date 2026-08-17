@@ -97,6 +97,11 @@ func (c *Client) submit(ctx context.Context, csrPEM []byte) (string, error) {
 }
 
 func (c *Client) waitForApproval(ctx context.Context, id string) error {
+	interval := c.PollInterval
+	if interval <= 0 {
+		interval = defaultPollInterval
+	}
+
 	path := "/enrollments/certificate-requests/" + id
 	for {
 		var resp statusResponse
@@ -118,7 +123,7 @@ func (c *Client) waitForApproval(ctx context.Context, id string) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(c.PollInterval):
+		case <-time.After(interval):
 		}
 	}
 }
