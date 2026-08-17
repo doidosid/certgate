@@ -4,6 +4,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 import tech.certgate.enrollment.IssuedCertificate;
@@ -93,5 +94,31 @@ public class Certificate {
 
 	public Instant getNotAfter() {
 		return notAfter;
+	}
+
+	public Instant getRevokedAt() {
+		return revokedAt;
+	}
+
+	public String getSubjectDn() {
+		return subjectDn;
+	}
+
+	public String getSanUri() {
+		return sanUri;
+	}
+
+	/** docs/api-spec.md §5: REVOKED > EXPIRED > EXPIRING_SOON (7 days) > VALID. */
+	public CertificateStatus status(Instant now) {
+		if (revokedAt != null) {
+			return CertificateStatus.REVOKED;
+		}
+		if (now.isAfter(notAfter)) {
+			return CertificateStatus.EXPIRED;
+		}
+		if (!notAfter.isAfter(now.plus(Duration.ofDays(7)))) {
+			return CertificateStatus.EXPIRING_SOON;
+		}
+		return CertificateStatus.VALID;
 	}
 }

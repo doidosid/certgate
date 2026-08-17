@@ -56,7 +56,7 @@ public class DeviceService {
 	}
 
 	/** Minimal cross-domain lookup so other domains don't reach into DeviceRepository directly. */
-	public record DeviceIdentity(UUID id, String deviceKey, DeviceStatus status) {
+	public record DeviceIdentity(UUID id, String deviceKey, DeviceStatus status, String roleName) {
 	}
 
 	/** Looks up a Device by id without enforcing ACTIVE status. */
@@ -64,7 +64,7 @@ public class DeviceService {
 	public DeviceIdentity requireDevice(UUID deviceId) {
 		Device device = devices.findById(deviceId)
 				.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "DEVICE_NOT_REGISTERED", "등록되지 않은 Device입니다."));
-		return new DeviceIdentity(device.getId(), device.getDeviceKey(), device.getStatus());
+		return new DeviceIdentity(device.getId(), device.getDeviceKey(), device.getStatus(), device.getRoleName());
 	}
 
 	@Transactional(readOnly = true)
