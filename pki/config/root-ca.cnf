@@ -1,0 +1,17 @@
+# OpenSSL config for the CertGate Root CA (self-signed, 10-year validity per
+# docs/adr/003-certificate-validity.md). Used only to sign the Intermediate CA.
+[req]
+default_bits      = 256
+prompt            = no
+distinguished_name = dn
+utf8               = yes
+
+[dn]
+C  = KR
+O  = CertGate
+CN = CertGate Root CA
+
+[v3_ca]
+basicConstraints       = critical, CA:true
+keyUsage               = critical, keyCertSign, cRLSign
+subjectKeyIdentifier   = hash

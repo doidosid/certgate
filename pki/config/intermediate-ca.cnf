@@ -1,0 +1,19 @@
+# OpenSSL config for the CertGate Intermediate CA (signed by the Root CA,
+# 3-year validity per docs/adr/003-certificate-validity.md). This CA signs
+# Device Certificates; pathlen:0 blocks it from signing further sub-CAs.
+[req]
+default_bits      = 256
+prompt            = no
+distinguished_name = dn
+utf8               = yes
+
+[dn]
+C  = KR
+O  = CertGate
+CN = CertGate Intermediate CA
+
+[v3_intermediate_ca]
+basicConstraints       = critical, CA:true, pathlen:0
+keyUsage               = critical, keyCertSign, cRLSign
+subjectKeyIdentifier   = hash
+authorityKeyIdentifier = keyid:always,issuer
