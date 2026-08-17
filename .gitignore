@@ -47,3 +47,7 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# Local Codex review artifacts (do not commit)
+codexReview/
+codexReview.md
