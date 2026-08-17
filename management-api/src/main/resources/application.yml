@@ -30,3 +30,8 @@ certgate:
     token-ttl-hours: ${ENROLLMENT_TOKEN_TTL_HOURS:24}
   certificate:
     validity-days: ${DEVICE_CERTIFICATE_VALIDITY_DAYS:30}
+  gateway:
+    # Left unset in environments (e.g. Foundation health tests) that never
+    # call a /internal/** endpoint; GatewayServiceTokenFilter then rejects
+    # every such request instead of accepting an empty token.
+    service-token: ${GATEWAY_SERVICE_TOKEN:}

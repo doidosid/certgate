@@ -229,7 +229,7 @@ MVP의 정책 수정 API는 제공하지 않고 Seed Data로 관리한다.
 
 ## 7. Gateway용 Management API
 
-모든 요청에 Gateway Service Token이 필요하다.
+모든 요청에 <code>Authorization: Bearer GATEWAY_SERVICE_TOKEN</code>이 필요하다. Token이 없거나 일치하지 않으면 <code>401 SERVICE_TOKEN_INVALID</code>를 반환한다. Access Context에서 <code>serialNumber</code>에 해당하는 Certificate가 없으면 <code>404 CERTIFICATE_NOT_FOUND</code>다(§4의 같은 Code를 재사용— 미승인 요청이든 미등록 Serial이든 "그런 Certificate Record가 없다"는 동일한 의미).
 
 ### Access Context
 
@@ -355,6 +355,7 @@ Security Event가 원본 데이터이며 SSE는 저장된 CRITICAL Event의 전�
 - <code>CA_SIGNING_FAILED</code>
 - <code>EVENT_OUTBOX_BACKLOG</code>
 - <code>EVENT_DELIVERY_DELAYED</code>
+- <code>SERVICE_TOKEN_INVALID</code>: Gateway 내부 API(§7) Bearer Service Token 없음·불일치 (401)
 - <code>INTERNAL_ERROR</code>
 
 ### Enrollment API 오류 Code

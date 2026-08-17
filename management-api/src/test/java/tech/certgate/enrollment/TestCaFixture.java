@@ -40,7 +40,7 @@ import org.bouncycastle.pkcs.jcajce.JcaPKCS10CertificationRequestBuilder;
  * pki/README.md's "Test는 매 실행마다 임시 PKI를 생성" convention, without
  * depending on the openssl CLI being present in the JVM test process.
  */
-final class TestCaFixture {
+public final class TestCaFixture {
 
 	private static final BouncyCastleProvider BC = new BouncyCastleProvider();
 	private static final String SIGNATURE_ALGORITHM = "SHA256withECDSA";
@@ -48,15 +48,15 @@ final class TestCaFixture {
 	private TestCaFixture() {
 	}
 
-	record CaPaths(Path rootCertPath, Path intermediateCertPath, Path intermediateKeyPath, X509Certificate rootCert) {
+	public record CaPaths(Path rootCertPath, Path intermediateCertPath, Path intermediateKeyPath, X509Certificate rootCert) {
 	}
 
-	static CaPaths generate(Path dir) throws Exception {
+	public static CaPaths generate(Path dir) throws Exception {
 		return generate(dir, Duration.ofDays(1095));
 	}
 
 	/** For M-03: an Intermediate CA whose remaining validity is shorter than the requested Certificate lifetime. */
-	static CaPaths generate(Path dir, Duration intermediateValidity) throws Exception {
+	public static CaPaths generate(Path dir, Duration intermediateValidity) throws Exception {
 		KeyPair rootKeyPair = generateEcKeyPair();
 		KeyPair intermediateKeyPair = generateEcKeyPair();
 
@@ -75,20 +75,20 @@ final class TestCaFixture {
 		return new CaPaths(rootCertPath, intermediateCertPath, intermediateKeyPath, rootCert);
 	}
 
-	static String createDeviceCsrPem(String deviceKey, KeyPair deviceKeyPair) throws Exception {
+	public static String createDeviceCsrPem(String deviceKey, KeyPair deviceKeyPair) throws Exception {
 		return buildCsrPem(deviceKey, deviceKeyPair.getPublic(), deviceKeyPair.getPrivate(),
 				new GeneralName(GeneralName.uniformResourceIdentifier, "urn:certgate:device:" + deviceKey));
 	}
 
 	/** For M-02: a CSR whose SAN carries the valid URI plus an extra, unrelated DNS name. */
-	static String createDeviceCsrPemWithExtraDnsSan(String deviceKey, KeyPair deviceKeyPair, String dnsName) throws Exception {
+	public static String createDeviceCsrPemWithExtraDnsSan(String deviceKey, KeyPair deviceKeyPair, String dnsName) throws Exception {
 		return buildCsrPem(deviceKey, deviceKeyPair.getPublic(), deviceKeyPair.getPrivate(),
 				new GeneralName(GeneralName.uniformResourceIdentifier, "urn:certgate:device:" + deviceKey),
 				new GeneralName(GeneralName.dNSName, dnsName));
 	}
 
 	/** For M-02: a CSR whose declared public key does not match the key that actually produced the signature. */
-	static String createCsrPemWithMismatchedSignature(String deviceKey, KeyPair declaredKeyPair, KeyPair signingKeyPair) throws Exception {
+	public static String createCsrPemWithMismatchedSignature(String deviceKey, KeyPair declaredKeyPair, KeyPair signingKeyPair) throws Exception {
 		return buildCsrPem(deviceKey, declaredKeyPair.getPublic(), signingKeyPair.getPrivate(),
 				new GeneralName(GeneralName.uniformResourceIdentifier, "urn:certgate:device:" + deviceKey));
 	}
@@ -112,19 +112,19 @@ final class TestCaFixture {
 		return "RSA".equals(key.getAlgorithm()) ? "SHA256withRSA" : SIGNATURE_ALGORITHM;
 	}
 
-	static KeyPair generateEcKeyPair() throws Exception {
+	public static KeyPair generateEcKeyPair() throws Exception {
 		return generateEcKeyPair("secp256r1");
 	}
 
 	/** For M-02: a non-P-256 curve, which CsrValidator's public key policy must reject. */
-	static KeyPair generateEcKeyPair(String curveName) throws Exception {
+	public static KeyPair generateEcKeyPair(String curveName) throws Exception {
 		KeyPairGenerator generator = KeyPairGenerator.getInstance("EC", BC);
 		generator.initialize(new ECGenParameterSpec(curveName), new SecureRandom());
 		return generator.generateKeyPair();
 	}
 
 	/** For M-02: RSA keys, to exercise the minimum-key-size branch of the public key policy. */
-	static KeyPair generateRsaKeyPair(int bits) throws Exception {
+	public static KeyPair generateRsaKeyPair(int bits) throws Exception {
 		KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA", BC);
 		generator.initialize(bits, new SecureRandom());
 		return generator.generateKeyPair();

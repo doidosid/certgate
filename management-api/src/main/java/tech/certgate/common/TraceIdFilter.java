@@ -8,14 +8,18 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.UUID;
 import org.slf4j.MDC;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 /**
  * Reads X-Trace-Id from the request or generates one, and makes it available
  * for the duration of the request (docs/api-spec.md: "요청 추적 ID는
- * X-Trace-Id로 전달하고 없으면 서버가 생성한다").
+ * X-Trace-Id로 전달하고 없으면 서버가 생성한다"). Ordered first so later
+ * filters (e.g. GatewayServiceTokenFilter) can include a Trace ID in their
+ * own error responses.
  */
 @Component
+@Order(1)
 public class TraceIdFilter extends HttpFilter {
 
 	public static final String HEADER = "X-Trace-Id";
