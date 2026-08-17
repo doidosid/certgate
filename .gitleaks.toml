@@ -1,0 +1,16 @@
+title = "certgate"
+
+[extend]
+useDefault = true
+
+# Confirmed false positives, narrowly scoped by exact source text so this
+# does not exempt entire files or paths from scanning.
+[allowlist]
+description = "generic-api-key false positives on identifier-heavy code, not real secrets"
+regexTarget = "line"
+regexes = [
+  # management-api/src/test/java/tech/certgate/enrollment/TestCaFixture.java:
+  # a record declaration whose comma-separated parameter names trip the
+  # generic high-entropy heuristic. No secret value is present.
+  '''record CaPaths\(Path rootCertPath, Path intermediateCertPath, Path intermediateKeyPath, X509Certificate rootCert\)''',
+]

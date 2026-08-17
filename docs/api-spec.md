@@ -356,3 +356,21 @@ Security Event가 원본 데이터이며 SSE는 저장된 CRITICAL Event의 전�
 - <code>EVENT_OUTBOX_BACKLOG</code>
 - <code>EVENT_DELIVERY_DELAYED</code>
 - <code>INTERNAL_ERROR</code>
+
+### Enrollment API 오류 Code
+
+위 목록은 Gateway 접근 판정·Security Event 분류 중심이라 Enrollment CSR 제출(§4) 오류에 대응하는 항목이 없었다. Issue #1 구현 중 아래를 추가해 오류 응답의 <code>code</code> 필드로 사용한다.
+
+- <code>ENROLLMENT_TOKEN_INVALID</code>: Token 없음·형식 오류·만료·폐기 (401)
+- <code>CSR_SIGNATURE_INVALID</code>: CSR 형식 오류 또는 자체 서명 검증 실패 (422)
+- <code>PUBLIC_KEY_POLICY_VIOLATION</code>: ECDSA P-256·RSA 2048 이상이 아닌 공개키 (422)
+- <code>SAN_URI_INVALID</code>: SAN URI 없음·2개 이상·형식 오류·Token 대상 Device Key 불일치 (422)
+- <code>CERTIFICATE_REQUEST_DUPLICATE</code>: 동일 Device의 PENDING 요청 중복 (409)
+- <code>CERTIFICATE_REQUEST_NOT_FOUND</code>: 요청 ID 없음 또는 Token 소유 Device 불일치 (404)
+- <code>CERTIFICATE_REQUEST_NOT_PENDING</code>: PENDING이 아닌 요청에 승인 시도 (409)
+- <code>CERTIFICATE_NOT_FOUND</code>: 아직 승인되지 않아 Certificate가 없음 (404)
+- <code>DEVICE_KEY_DUPLICATE</code>: 이미 등록된 <code>deviceKey</code> (409)
+- <code>DEVICE_KEY_REQUIRED</code>, <code>DEVICE_NAME_REQUIRED</code>, <code>ROLE_NAME_REQUIRED</code>, <code>ROLE_NOT_FOUND</code>: Device 등록 입력값 오류 (400)
+- <code>MALFORMED_REQUEST_BODY</code>: 요청 본문이 없거나 JSON 형식이 아님 (400)
+- <code>ENROLLMENT_TOKEN_CONFLICT</code>: Token 재발급 요청이 동시에 처리되어 경합 발생 (409)
+- <code>CONFLICT</code>: 위 목록에 없는 DB 제약 위반(동시 요청 경합) 일반 응답 (409)
