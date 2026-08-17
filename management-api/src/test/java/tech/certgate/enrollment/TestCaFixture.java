@@ -52,13 +52,18 @@ final class TestCaFixture {
 	}
 
 	static CaPaths generate(Path dir) throws Exception {
+		return generate(dir, Duration.ofDays(1095));
+	}
+
+	/** For M-03: an Intermediate CA whose remaining validity is shorter than the requested Certificate lifetime. */
+	static CaPaths generate(Path dir, Duration intermediateValidity) throws Exception {
 		KeyPair rootKeyPair = generateEcKeyPair();
 		KeyPair intermediateKeyPair = generateEcKeyPair();
 
 		Instant now = Instant.now();
 		X509Certificate rootCert = selfSignedRoot(rootKeyPair, now, now.plus(Duration.ofDays(3650)));
 		X509Certificate intermediateCert = signIntermediate(
-				rootCert, rootKeyPair.getPrivate(), intermediateKeyPair.getPublic(), now, now.plus(Duration.ofDays(1095)));
+				rootCert, rootKeyPair.getPrivate(), intermediateKeyPair.getPublic(), now, now.plus(intermediateValidity));
 
 		Path rootCertPath = dir.resolve("root-ca.crt");
 		Path intermediateCertPath = dir.resolve("intermediate-ca.crt");
@@ -71,33 +76,57 @@ final class TestCaFixture {
 	}
 
 	static String createDeviceCsrPem(String deviceKey, KeyPair deviceKeyPair) throws Exception {
-		return buildCsrPem(deviceKey, deviceKeyPair, new GeneralName(GeneralName.uniformResourceIdentifier, "urn:certgate:device:" + deviceKey));
+		return buildCsrPem(deviceKey, deviceKeyPair.getPublic(), deviceKeyPair.getPrivate(),
+				new GeneralName(GeneralName.uniformResourceIdentifier, "urn:certgate:device:" + deviceKey));
 	}
 
 	/** For M-02: a CSR whose SAN carries the valid URI plus an extra, unrelated DNS name. */
 	static String createDeviceCsrPemWithExtraDnsSan(String deviceKey, KeyPair deviceKeyPair, String dnsName) throws Exception {
-		return buildCsrPem(deviceKey, deviceKeyPair,
+		return buildCsrPem(deviceKey, deviceKeyPair.getPublic(), deviceKeyPair.getPrivate(),
 				new GeneralName(GeneralName.uniformResourceIdentifier, "urn:certgate:device:" + deviceKey),
 				new GeneralName(GeneralName.dNSName, dnsName));
 	}
 
-	private static String buildCsrPem(String deviceKey, KeyPair deviceKeyPair, GeneralName... sanEntries) throws Exception {
+	/** For M-02: a CSR whose declared public key does not match the key that actually produced the signature. */
+	static String createCsrPemWithMismatchedSignature(String deviceKey, KeyPair declaredKeyPair, KeyPair signingKeyPair) throws Exception {
+		return buildCsrPem(deviceKey, declaredKeyPair.getPublic(), signingKeyPair.getPrivate(),
+				new GeneralName(GeneralName.uniformResourceIdentifier, "urn:certgate:device:" + deviceKey));
+	}
+
+	private static String buildCsrPem(String deviceKey, PublicKey subjectPublicKey, PrivateKey signingKey, GeneralName... sanEntries)
+			throws Exception {
 		X500Name subject = new X500Name("CN=" + deviceKey);
-		PKCS10CertificationRequestBuilder builder = new JcaPKCS10CertificationRequestBuilder(subject, deviceKeyPair.getPublic());
+		PKCS10CertificationRequestBuilder builder = new JcaPKCS10CertificationRequestBuilder(subject, subjectPublicKey);
 
 		GeneralNames sanNames = new GeneralNames(sanEntries);
 		ExtensionsGenerator extensionsGenerator = new ExtensionsGenerator();
 		extensionsGenerator.addExtension(Extension.subjectAlternativeName, true, sanNames);
 		builder.addAttribute(PKCSObjectIdentifiers.pkcs_9_at_extensionRequest, extensionsGenerator.generate());
 
-		ContentSigner signer = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider(BC).build(deviceKeyPair.getPrivate());
+		ContentSigner signer = new JcaContentSignerBuilder(signatureAlgorithmFor(signingKey)).setProvider(BC).build(signingKey);
 		PKCS10CertificationRequest csr = builder.build(signer);
 		return toPem(csr);
 	}
 
+	private static String signatureAlgorithmFor(PrivateKey key) {
+		return "RSA".equals(key.getAlgorithm()) ? "SHA256withRSA" : SIGNATURE_ALGORITHM;
+	}
+
 	static KeyPair generateEcKeyPair() throws Exception {
+		return generateEcKeyPair("secp256r1");
+	}
+
+	/** For M-02: a non-P-256 curve, which CsrValidator's public key policy must reject. */
+	static KeyPair generateEcKeyPair(String curveName) throws Exception {
 		KeyPairGenerator generator = KeyPairGenerator.getInstance("EC", BC);
-		generator.initialize(new ECGenParameterSpec("secp256r1"), new SecureRandom());
+		generator.initialize(new ECGenParameterSpec(curveName), new SecureRandom());
+		return generator.generateKeyPair();
+	}
+
+	/** For M-02: RSA keys, to exercise the minimum-key-size branch of the public key policy. */
+	static KeyPair generateRsaKeyPair(int bits) throws Exception {
+		KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA", BC);
+		generator.initialize(bits, new SecureRandom());
 		return generator.generateKeyPair();
 	}
 

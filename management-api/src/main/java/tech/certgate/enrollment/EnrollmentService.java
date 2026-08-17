@@ -13,8 +13,9 @@ import tech.certgate.device.DeviceService;
 
 /**
  * CSR submission, admin approval, and Certificate/Chain retrieval
- * (docs/api-spec.md §4). Validation order on submit matches that section:
- * Token, CSR signature, public key policy, SAN URI, then PENDING dedup.
+ * (docs/api-spec.md §4). Validation order on submit matches
+ * docs/security-design.md §4: Token, CSR signature, public key policy, SAN
+ * URI, ACTIVE Device, then PENDING dedup.
  */
 @Service
 public class EnrollmentService {
@@ -47,9 +48,10 @@ public class EnrollmentService {
 	@Transactional
 	public CertificateRequestResponse submit(String bearerToken, String csrPem) {
 		EnrollmentCredential credential = tokenService.resolve(bearerToken);
-		DeviceService.DeviceIdentity device = deviceService.requireActiveDevice(credential.getDeviceId());
+		DeviceService.DeviceIdentity device = deviceService.requireDevice(credential.getDeviceId());
 
 		ParsedCsr parsed = csrValidator.validate(csrPem, device.deviceKey());
+		deviceService.assertActive(device);
 
 		if (certificateRequests.existsByDeviceIdAndStatus(device.id(), CertificateRequestStatus.PENDING)) {
 			throw new ApiException(HttpStatus.CONFLICT, "CERTIFICATE_REQUEST_DUPLICATE", "이미 대기 중인 CSR 요청이 있습니다.");

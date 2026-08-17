@@ -56,16 +56,28 @@ public class DeviceService {
 	}
 
 	/** Minimal cross-domain lookup so other domains don't reach into DeviceRepository directly. */
-	public record DeviceIdentity(UUID id, String deviceKey) {
+	public record DeviceIdentity(UUID id, String deviceKey, DeviceStatus status) {
+	}
+
+	/** Looks up a Device by id without enforcing ACTIVE status. */
+	@Transactional(readOnly = true)
+	public DeviceIdentity requireDevice(UUID deviceId) {
+		Device device = devices.findById(deviceId)
+				.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "DEVICE_NOT_REGISTERED", "등록되지 않은 Device입니다."));
+		return new DeviceIdentity(device.getId(), device.getDeviceKey(), device.getStatus());
 	}
 
 	@Transactional(readOnly = true)
 	public DeviceIdentity requireActiveDevice(UUID deviceId) {
-		Device device = devices.findById(deviceId)
-				.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "DEVICE_NOT_REGISTERED", "등록되지 않은 Device입니다."));
-		if (device.getStatus() != DeviceStatus.ACTIVE) {
+		DeviceIdentity device = requireDevice(deviceId);
+		assertActive(device);
+		return device;
+	}
+
+	/** Throws DEVICE_DISABLED if device is not ACTIVE; a no-op otherwise. */
+	public void assertActive(DeviceIdentity device) {
+		if (device.status() != DeviceStatus.ACTIVE) {
 			throw new ApiException(HttpStatus.FORBIDDEN, "DEVICE_DISABLED", "비활성화된 Device입니다.");
 		}
-		return new DeviceIdentity(device.getId(), device.getDeviceKey());
 	}
 }

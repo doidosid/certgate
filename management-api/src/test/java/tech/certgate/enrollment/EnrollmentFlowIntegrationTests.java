@@ -254,6 +254,68 @@ class EnrollmentFlowIntegrationTests {
 	}
 
 	@Test
+	void submitWithForgedCsrSignature_isRejected() throws Exception {
+		Map<String, Object> device = registerDevice("sensor-e2e-forged-sig");
+		String token = (String) device.get("enrollmentToken");
+		// Declares one key pair's public key but signs with a different one, so
+		// the CSR's self-signature does not verify against its own subject key.
+		KeyPair declaredKeyPair = TestCaFixture.generateEcKeyPair();
+		KeyPair actualSigningKeyPair = TestCaFixture.generateEcKeyPair();
+		String csrPem = TestCaFixture.createCsrPemWithMismatchedSignature(
+				"sensor-e2e-forged-sig", declaredKeyPair, actualSigningKeyPair);
+
+		var response = restTemplate.postForEntity(
+				"/api/v1/enrollments/certificate-requests",
+				new HttpEntity<>(Map.of("csrPem", csrPem), bearerHeaders(token)), Map.class);
+
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+		assertThat(response.getBody().get("code")).isEqualTo("CSR_SIGNATURE_INVALID");
+	}
+
+	@Test
+	void submitWithNonP256EcCurve_isRejected() throws Exception {
+		Map<String, Object> device = registerDevice("sensor-e2e-wrong-curve");
+		String token = (String) device.get("enrollmentToken");
+		String csrPem = TestCaFixture.createDeviceCsrPem("sensor-e2e-wrong-curve", TestCaFixture.generateEcKeyPair("secp384r1"));
+
+		var response = restTemplate.postForEntity(
+				"/api/v1/enrollments/certificate-requests",
+				new HttpEntity<>(Map.of("csrPem", csrPem), bearerHeaders(token)), Map.class);
+
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+		assertThat(response.getBody().get("code")).isEqualTo("PUBLIC_KEY_POLICY_VIOLATION");
+	}
+
+	@Test
+	void submitWithRsaKeyBelowMinimumSize_isRejected() throws Exception {
+		Map<String, Object> device = registerDevice("sensor-e2e-weak-rsa");
+		String token = (String) device.get("enrollmentToken");
+		String csrPem = TestCaFixture.createDeviceCsrPem("sensor-e2e-weak-rsa", TestCaFixture.generateRsaKeyPair(1024));
+
+		var response = restTemplate.postForEntity(
+				"/api/v1/enrollments/certificate-requests",
+				new HttpEntity<>(Map.of("csrPem", csrPem), bearerHeaders(token)), Map.class);
+
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+		assertThat(response.getBody().get("code")).isEqualTo("PUBLIC_KEY_POLICY_VIOLATION");
+	}
+
+	@Test
+	void submitWithRsa2048Key_isAccepted() throws Exception {
+		// RSA 2048+ is the documented alternative to ECDSA P-256; confirm the
+		// policy accepts it end-to-end, not just rejects what's below it.
+		Map<String, Object> device = registerDevice("sensor-e2e-rsa-ok");
+		String token = (String) device.get("enrollmentToken");
+		String csrPem = TestCaFixture.createDeviceCsrPem("sensor-e2e-rsa-ok", TestCaFixture.generateRsaKeyPair(2048));
+
+		var response = restTemplate.postForEntity(
+				"/api/v1/enrollments/certificate-requests",
+				new HttpEntity<>(Map.of("csrPem", csrPem), bearerHeaders(token)), Map.class);
+
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+	}
+
+	@Test
 	void csrValidationRunsBeforeDuplicatePendingCheck() throws Exception {
 		Map<String, Object> device = registerDevice("sensor-e2e-order");
 		String token = (String) device.get("enrollmentToken");
