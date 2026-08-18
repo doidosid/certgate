@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -83,6 +84,13 @@ public class DeviceService {
 		Device device = devices.findById(deviceId)
 				.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "DEVICE_NOT_REGISTERED", "등록되지 않은 Device입니다."));
 		return new DeviceIdentity(device.getId(), device.getDeviceKey(), device.getStatus(), device.getRoleName());
+	}
+
+	/** Non-throwing variant for best-effort lookups (e.g. CRITICAL Event broadcast) that must not fail their caller. */
+	@Transactional(readOnly = true)
+	public Optional<DeviceIdentity> findDevice(UUID deviceId) {
+		return devices.findById(deviceId)
+				.map(device -> new DeviceIdentity(device.getId(), device.getDeviceKey(), device.getStatus(), device.getRoleName()));
 	}
 
 	@Transactional(readOnly = true)

@@ -3,17 +3,26 @@ package tech.certgate.securityevent;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tech.certgate.common.ApiException;
+import tech.certgate.common.PageResponse;
 
 /**
  * Cross-domain read view of a Device's recent Security Events (docs/
  * repository-structure.md Service 경계, Codex 리뷰 PR #26 Medium) — used by
  * the Device detail view without exposing the {@link SecurityEvent} Entity
- * or {@link SecurityEventRepository} outside this package.
+ * or {@link SecurityEventRepository} outside this package. Also serves the
+ * Console-facing search/detail queries (docs/api-spec.md §9).
  */
 @Service
 public class SecurityEventService {
+
+	private static final UUID NO_DEVICE_ID = new UUID(0L, 0L);
+	private static final String NO_STRING_FILTER = "";
 
 	private final SecurityEventRepository securityEvents;
 
@@ -33,5 +42,26 @@ public class SecurityEventService {
 						event.getId(), event.getOccurredAt(), event.getType(), event.getSeverity(), event.getDecision(),
 						event.getReasonCode(), event.getHttpMethod(), event.getRequestPath()))
 				.toList();
+	}
+
+	@Transactional(readOnly = true)
+	public PageResponse<SecurityEventResponse> search(
+			Instant from, Instant to, UUID deviceId, String decision, String reasonCode, String severity, Pageable pageable) {
+		Page<SecurityEvent> page = securityEvents.search(
+				from != null, from != null ? from : Instant.EPOCH,
+				to != null, to != null ? to : Instant.EPOCH,
+				deviceId != null, deviceId != null ? deviceId : NO_DEVICE_ID,
+				decision != null && !decision.isBlank(), decision != null ? decision : NO_STRING_FILTER,
+				reasonCode != null && !reasonCode.isBlank(), reasonCode != null ? reasonCode : NO_STRING_FILTER,
+				severity != null && !severity.isBlank(), severity != null ? severity : NO_STRING_FILTER,
+				pageable);
+		return PageResponse.of(page.map(SecurityEventResponse::from));
+	}
+
+	@Transactional(readOnly = true)
+	public SecurityEventResponse get(UUID eventId) {
+		return securityEvents.findById(eventId)
+				.map(SecurityEventResponse::from)
+				.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SECURITY_EVENT_NOT_FOUND", "Security Event를 찾을 수 없습니다."));
 	}
 }

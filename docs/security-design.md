@@ -98,10 +98,10 @@ CRL·OCSP는 제출 이후 확장 기능이다.
 
 Security Event가 원본 데이터다. Gateway에서 생성한 Security Event는 먼저 WAL Mode의 SQLite Durable Outbox에 Transaction으로 저장하고 Management API 전송을 시도한다. 전송 성공 시 Outbox에서 삭제하고 실패 시 보존한 뒤 재시도한다.
 
-별도 Alert Domain은 만들지 않는다. Management API가 저장된 Security Event의 CRITICAL 여부를 판단하고 CRITICAL Event만 SSE로 Admin Console에 실시간 전달한다. MVP에서는 외부 Webhook과 Notification Outbox를 구현하지 않는다.
+별도 Alert Domain은 만들지 않는다. CRITICAL 여부는 각 Security Event를 생성하는 Producer가 발생 시점에 정한다 — Gateway가 생성하는 Event(폐기 인증서 접속 등)는 Gateway가, Management API가 자체적으로 생성하는 Event(CA 서명 실패 등)는 Management API가 정한다. Management API는 저장 시 severity 값이 INFO·WARNING·CRITICAL 중 하나인지만 검증하고, 저장된 CRITICAL Event를 재판정 없이 SSE로 Admin Console에 실시간 전달한다. MVP에서는 외부 Webhook과 Notification Outbox를 구현하지 않는다.
 
 ~~~text
-Security Event → CRITICAL 판단 → SSE → Admin Console
+Producer(Gateway·Management API)가 CRITICAL 판단 → Management API 저장 → SSE → Admin Console
 ~~~
 
 CRITICAL 조건:
