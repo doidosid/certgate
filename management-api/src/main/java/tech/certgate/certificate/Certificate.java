@@ -92,12 +92,35 @@ public class Certificate {
 		return certificatePem;
 	}
 
+	public Instant getNotBefore() {
+		return notBefore;
+	}
+
 	public Instant getNotAfter() {
 		return notAfter;
 	}
 
+	public Instant getIssuedAt() {
+		return issuedAt;
+	}
+
 	public Instant getRevokedAt() {
 		return revokedAt;
+	}
+
+	public String getRevocationReason() {
+		return revocationReason;
+	}
+
+	public String getRevocationNote() {
+		return revocationNote;
+	}
+
+	/** Sets revocation fields. Callers must not call this twice on the same Certificate. */
+	public void revoke(String reason, String note, Instant revokedAt) {
+		this.revokedAt = revokedAt;
+		this.revocationReason = reason;
+		this.revocationNote = note;
 	}
 
 	public String getSubjectDn() {
