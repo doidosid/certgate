@@ -1,8 +1,10 @@
 package tech.certgate.certificate;
 
+import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -12,12 +14,16 @@ import org.springframework.web.client.RestClientException;
  * revocation commits (docs/api-spec.md §8). A failure here is logged and
  * swallowed, never rethrown: the revocation itself must not roll back, and
  * the Gateway's 30s Access Context TTL guarantees eventual convergence
- * (docs/security-design.md §6).
+ * (docs/security-design.md §6). Connect/read Timeout is kept well under that
+ * 30s TTL so an unresponsive Gateway cannot block the revoke request thread
+ * for long (Codex 리뷰 PR #24).
  */
 @Component
 public class GatewayCacheClient {
 
 	private static final Logger log = LoggerFactory.getLogger(GatewayCacheClient.class);
+	private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(2);
+	private static final Duration READ_TIMEOUT = Duration.ofSeconds(3);
 
 	private final RestClient restClient;
 	private final String baseUrl;
@@ -27,7 +33,10 @@ public class GatewayCacheClient {
 			RestClient.Builder builder,
 			@Value("${certgate.gateway.internal-url:}") String baseUrl,
 			@Value("${certgate.gateway.internal-token:}") String internalToken) {
-		this.restClient = builder.build();
+		SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+		requestFactory.setConnectTimeout(CONNECT_TIMEOUT);
+		requestFactory.setReadTimeout(READ_TIMEOUT);
+		this.restClient = builder.requestFactory(requestFactory).build();
 		this.baseUrl = baseUrl;
 		this.internalToken = internalToken;
 	}

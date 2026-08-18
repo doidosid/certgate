@@ -57,7 +57,8 @@ public class CertificateService {
 			throw new ApiException(HttpStatus.BAD_REQUEST, "REVOCATION_REASON_REQUIRED", "폐기 사유(reason)는 필수입니다.");
 		}
 
-		Certificate certificate = require(certificateId);
+		Certificate certificate = certificates.findByIdForUpdate(certificateId)
+				.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CERTIFICATE_NOT_FOUND", "등록되지 않은 Certificate입니다."));
 		if (certificate.getRevokedAt() != null) {
 			throw new ApiException(HttpStatus.CONFLICT, "CONFLICT", "이미 폐기된 인증서입니다.");
 		}

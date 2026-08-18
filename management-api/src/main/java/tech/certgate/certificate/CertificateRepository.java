@@ -1,11 +1,13 @@
 package tech.certgate.certificate;
 
+import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -14,6 +16,16 @@ public interface CertificateRepository extends JpaRepository<Certificate, UUID> 
 	Optional<Certificate> findByRequestId(UUID requestId);
 
 	Optional<Certificate> findBySerialNumber(String serialNumber);
+
+	/**
+	 * Locks the row for the duration of the revoking Transaction so two
+	 * concurrent revoke requests cannot both observe {@code revokedAt == null}
+	 * and both succeed (Codex 리뷰 PR #24: 동시 폐기 요청에서 감사 사유가
+	 * 덮어써질 수 있는 문제).
+	 */
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("SELECT c FROM Certificate c WHERE c.id = :id")
+	Optional<Certificate> findByIdForUpdate(@Param("id") UUID id);
 
 	/**
 	 * Filters by deviceId/status/expiresBefore when given (docs/api-spec.md §5).

@@ -11,7 +11,11 @@ import java.security.KeyPair;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +28,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -180,6 +185,47 @@ class CertificateIntegrationTests {
 
 		assertThat(secondResponse.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
 		assertThat(secondResponse.getBody().get("code")).isEqualTo("CONFLICT");
+	}
+
+	/**
+	 * Regression test for the Codex 리뷰 PR #24 concurrency finding: two
+	 * concurrent revoke requests for the same Certificate must not both
+	 * succeed and overwrite each other's revocation reason (row locked via
+	 * {@link CertificateRepository#findByIdForUpdate}).
+	 */
+	@Test
+	void revoke_concurrentRequests_onlyOneSucceeds() throws Exception {
+		IssuedTestCertificate issued = issueCertificateFor("sensor-cert-revoke-concurrent-01");
+		CyclicBarrier barrier = new CyclicBarrier(2);
+		ExecutorService executor = Executors.newFixedThreadPool(2);
+		try {
+			var first = CompletableFuture.supplyAsync(
+					() -> revokeAfterBarrier(issued.certificateId(), "KEY_COMPROMISE", barrier), executor);
+			var second = CompletableFuture.supplyAsync(
+					() -> revokeAfterBarrier(issued.certificateId(), "SUPERSEDED", barrier), executor);
+			var responses = List.of(first.get(), second.get());
+
+			assertThat(responses).extracting(r -> r.getStatusCode())
+					.containsExactlyInAnyOrder(HttpStatus.OK, HttpStatus.CONFLICT);
+
+			var getResponse = restTemplate.getForEntity("/api/v1/certificates/" + issued.certificateId(), Map.class);
+			String persistedReason = (String) getResponse.getBody().get("revocationReason");
+			String winningReason = responses.stream()
+					.filter(r -> r.getStatusCode() == HttpStatus.OK)
+					.findFirst().orElseThrow().getBody().get("revocationReason").toString();
+			assertThat(persistedReason).isEqualTo(winningReason);
+		} finally {
+			executor.shutdownNow();
+		}
+	}
+
+	private ResponseEntity<Map> revokeAfterBarrier(String certificateId, String reason, CyclicBarrier barrier) {
+		try {
+			barrier.await();
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+		return restTemplate.postForEntity("/api/v1/certificates/" + certificateId + "/revoke", Map.of("reason", reason), Map.class);
 	}
 
 	@Test

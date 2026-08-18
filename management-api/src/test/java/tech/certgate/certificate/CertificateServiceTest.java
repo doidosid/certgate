@@ -39,7 +39,7 @@ class CertificateServiceTest {
 		Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
 		UUID certificateId = UUID.randomUUID();
 		Certificate certificate = newCertificate(certificateId);
-		when(certificates.findById(certificateId)).thenReturn(Optional.of(certificate));
+		when(certificates.findByIdForUpdate(certificateId)).thenReturn(Optional.of(certificate));
 
 		CertificateService service = new CertificateService(certificates, events, clock);
 		CertificateResponse response = service.revoke(certificateId, new CertificateRevokeRequest("KEY_COMPROMISE", "분실 신고"));
@@ -59,7 +59,7 @@ class CertificateServiceTest {
 		assertThatThrownBy(() -> service.revoke(UUID.randomUUID(), new CertificateRevokeRequest(" ", null)))
 				.isInstanceOf(ApiException.class)
 				.satisfies(ex -> assertThat(((ApiException) ex).getReasonCode()).isEqualTo("REVOCATION_REASON_REQUIRED"));
-		verify(certificates, never()).findById(any());
+		verify(certificates, never()).findByIdForUpdate(any());
 	}
 
 	@Test
@@ -70,7 +70,7 @@ class CertificateServiceTest {
 		UUID certificateId = UUID.randomUUID();
 		Certificate certificate = newCertificate(certificateId);
 		certificate.revoke("KEY_COMPROMISE", null, NOW.minus(Duration.ofHours(1)));
-		when(certificates.findById(certificateId)).thenReturn(Optional.of(certificate));
+		when(certificates.findByIdForUpdate(certificateId)).thenReturn(Optional.of(certificate));
 
 		CertificateService service = new CertificateService(certificates, events, clock);
 
@@ -85,7 +85,7 @@ class CertificateServiceTest {
 		CertificateRepository certificates = mock(CertificateRepository.class);
 		ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
 		UUID certificateId = UUID.randomUUID();
-		when(certificates.findById(certificateId)).thenReturn(Optional.empty());
+		when(certificates.findByIdForUpdate(certificateId)).thenReturn(Optional.empty());
 
 		CertificateService service = new CertificateService(certificates, events, Clock.fixed(NOW, ZoneOffset.UTC));
 
