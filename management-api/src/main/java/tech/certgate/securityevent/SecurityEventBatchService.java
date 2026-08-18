@@ -28,6 +28,7 @@ public class SecurityEventBatchService {
 
 	private static final String ALLOWED_DECISION = "ALLOWED";
 	private static final String CRITICAL_SEVERITY = "CRITICAL";
+	private static final Set<String> VALID_SEVERITIES = Set.of("INFO", "WARNING", "CRITICAL");
 
 	private final SecurityEventRepository securityEvents;
 	private final DeviceService deviceService;
@@ -114,6 +115,13 @@ public class SecurityEventBatchService {
 					|| isBlank(event.reasonCode())
 					|| isBlank(event.traceId())) {
 				throw new ApiException(HttpStatus.BAD_REQUEST, "SECURITY_EVENT_INVALID", "Security Event 필수 필드가 비어 있습니다.");
+			}
+			// The Producer (Gateway today) judges severity, not this Service — but
+			// an unrecognized value would either silently miss the SSE Critical
+			// path or, if it happened to be treated as CRITICAL, false-alarm the
+			// Console (Codex 리뷰 PR #28 Medium; docs/security-design.md §9).
+			if (!VALID_SEVERITIES.contains(event.severity())) {
+				throw new ApiException(HttpStatus.BAD_REQUEST, "SECURITY_EVENT_INVALID", "severity 값이 올바르지 않습니다.");
 			}
 		}
 	}

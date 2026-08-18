@@ -37,8 +37,10 @@ Security Gateway ── Access Context 조회 ──► Management API ──►
 Backend Service
 
 Security Gateway ── SQLite Durable Outbox(WAL) 저장 ── Batch 전송 ──► Management API
-Management API ── Security Event 저장·CRITICAL 판단 ── SSE ──► Admin Console
+Management API ── Security Event 저장·CRITICAL 값 전달 ── SSE ──► Admin Console
 ~~~
+
+CRITICAL 여부는 각 Event Producer가 발생 시점에 정한다 — Gateway가 생성하는 Event는 Gateway가(예: 폐기 인증서 접속), Management API가 자체적으로 생성하는 Event는 Management API가(예: CA 서명 실패) 정한다. Management API는 전달받은 severity 값을 검증(INFO·WARNING·CRITICAL 중 하나인지)해 저장하고, 재판정하지 않고 그대로 SSE로 전달한다.
 
 ## Gateway 처리 순서
 
