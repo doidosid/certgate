@@ -65,6 +65,7 @@ func main() {
 		store:  store,
 		proxy:  proxy.NewReverseProxy(backendURL),
 	}
+	h.proxy.ErrorHandler = h.backendErrorHandler
 
 	mtlsServer := &http.Server{
 		Addr:      ":" + cfg.MTLSPort,

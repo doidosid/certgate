@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -142,10 +143,21 @@ type testGateway struct {
 	addr       string
 	rootCAPEM  []byte
 	backendHit chan *http.Request
+	store      *outbox.Store
+	backend    *httptest.Server
 }
 
-func startTestGateway(t *testing.T, ca *testCA, accessContexts map[string]management.AccessContext) *testGateway {
+// startTestGateway wires a Gateway with a fake Management API and Backend.
+// mgmtDelay, if given, makes the fake Management API sleep before responding
+// to any Access Context lookup — used to exercise Client-cancellation
+// behavior (docs/testing.md scenario coverage for High #3 in the PR #22
+// Codex review).
+func startTestGateway(t *testing.T, ca *testCA, accessContexts map[string]management.AccessContext, mgmtDelay ...time.Duration) *testGateway {
 	t.Helper()
+	var delay time.Duration
+	if len(mgmtDelay) > 0 {
+		delay = mgmtDelay[0]
+	}
 	serverCertPEM, serverKeyPEM := ca.issueServerCert(t)
 
 	dir := t.TempDir()
@@ -172,6 +184,9 @@ func startTestGateway(t *testing.T, ca *testCA, accessContexts map[string]manage
 	t.Cleanup(backend.Close)
 
 	mgmt := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if delay > 0 {
+			time.Sleep(delay)
+		}
 		serial := r.URL.Query().Get("serialNumber")
 		ctx, ok := accessContexts[serial]
 		if !ok {
@@ -198,6 +213,7 @@ func startTestGateway(t *testing.T, ca *testCA, accessContexts map[string]manage
 	}
 
 	h := &accessHandler{access: accessCache, store: store, proxy: proxy.NewReverseProxy(backendURL)}
+	h.proxy.ErrorHandler = h.backendErrorHandler
 
 	tlsConfig, err := tlsauth.ServerConfig(certPath, keyPath, rootPath)
 	if err != nil {
@@ -212,7 +228,7 @@ func startTestGateway(t *testing.T, ca *testCA, accessContexts map[string]manage
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(func() { _ = server.Close() })
 
-	return &testGateway{addr: listener.Addr().String(), rootCAPEM: ca.pemBytes(), backendHit: backendHit}
+	return &testGateway{addr: listener.Addr().String(), rootCAPEM: ca.pemBytes(), backendHit: backendHit, store: store, backend: backend}
 }
 
 // client builds an HTTP client trusting the Gateway's own Root CA (so it can
@@ -267,7 +283,7 @@ func TestGateway_ProfileA_NormalSensorAllowed(t *testing.T) {
 	ca := newTestCA(t)
 	cert := ca.issueDeviceCert(t, 100, "sensor-floor-01")
 	gw := startTestGateway(t, ca, map[string]management.AccessContext{
-		"64": {DeviceID: "device-1", DeviceKey: "sensor-floor-01", DeviceStatus: "ACTIVE", CertificateStatus: "VALID", RoleName: "SENSOR", Rules: sensorRules()},
+		"64": {SerialNumber: "64", DeviceID: "device-1", DeviceKey: "sensor-floor-01", DeviceStatus: "ACTIVE", CertificateStatus: "VALID", RoleName: "SENSOR", Rules: sensorRules()},
 	})
 	client := gw.client(t, cert)
 
@@ -307,7 +323,7 @@ func TestGateway_ProfileB_RevokedCertificateBlocked(t *testing.T) {
 	ca := newTestCA(t)
 	cert := ca.issueDeviceCert(t, 101, "sensor-floor-02")
 	gw := startTestGateway(t, ca, map[string]management.AccessContext{
-		"65": {DeviceID: "device-2", DeviceKey: "sensor-floor-02", DeviceStatus: "ACTIVE", CertificateStatus: "REVOKED", RoleName: "SENSOR", Rules: sensorRules()},
+		"65": {SerialNumber: "65", DeviceID: "device-2", DeviceKey: "sensor-floor-02", DeviceStatus: "ACTIVE", CertificateStatus: "REVOKED", RoleName: "SENSOR", Rules: sensorRules()},
 	})
 	client := gw.client(t, cert)
 
@@ -343,7 +359,7 @@ func TestGateway_ProfileD_ExpiredCertificateBlocked(t *testing.T) {
 	ca := newTestCA(t)
 	cert := ca.issueDeviceCert(t, 102, "sensor-floor-03")
 	gw := startTestGateway(t, ca, map[string]management.AccessContext{
-		"66": {DeviceID: "device-3", DeviceKey: "sensor-floor-03", DeviceStatus: "ACTIVE", CertificateStatus: "EXPIRED", RoleName: "SENSOR", Rules: sensorRules()},
+		"66": {SerialNumber: "66", DeviceID: "device-3", DeviceKey: "sensor-floor-03", DeviceStatus: "ACTIVE", CertificateStatus: "EXPIRED", RoleName: "SENSOR", Rules: sensorRules()},
 	})
 	client := gw.client(t, cert)
 
@@ -359,7 +375,7 @@ func TestGateway_ProfileE_SensorCommandsDenied(t *testing.T) {
 	ca := newTestCA(t)
 	cert := ca.issueDeviceCert(t, 103, "sensor-floor-04")
 	gw := startTestGateway(t, ca, map[string]management.AccessContext{
-		"67": {DeviceID: "device-4", DeviceKey: "sensor-floor-04", DeviceStatus: "ACTIVE", CertificateStatus: "VALID", RoleName: "SENSOR", Rules: sensorRules()},
+		"67": {SerialNumber: "67", DeviceID: "device-4", DeviceKey: "sensor-floor-04", DeviceStatus: "ACTIVE", CertificateStatus: "VALID", RoleName: "SENSOR", Rules: sensorRules()},
 	})
 	client := gw.client(t, cert)
 
@@ -375,7 +391,7 @@ func TestGateway_ProfileF_OperatorCommandsAllowed(t *testing.T) {
 	ca := newTestCA(t)
 	cert := ca.issueDeviceCert(t, 104, "operator-floor-01")
 	gw := startTestGateway(t, ca, map[string]management.AccessContext{
-		"68": {DeviceID: "device-5", DeviceKey: "operator-floor-01", DeviceStatus: "ACTIVE", CertificateStatus: "VALID", RoleName: "OPERATOR", Rules: operatorRules()},
+		"68": {SerialNumber: "68", DeviceID: "device-5", DeviceKey: "operator-floor-01", DeviceStatus: "ACTIVE", CertificateStatus: "VALID", RoleName: "OPERATOR", Rules: operatorRules()},
 	})
 	client := gw.client(t, cert)
 
@@ -391,7 +407,7 @@ func TestGateway_DisabledDeviceBlocked(t *testing.T) {
 	ca := newTestCA(t)
 	cert := ca.issueDeviceCert(t, 105, "sensor-floor-05")
 	gw := startTestGateway(t, ca, map[string]management.AccessContext{
-		"69": {DeviceID: "device-6", DeviceKey: "sensor-floor-05", DeviceStatus: "DISABLED", CertificateStatus: "VALID", RoleName: "SENSOR", Rules: sensorRules()},
+		"69": {SerialNumber: "69", DeviceID: "device-6", DeviceKey: "sensor-floor-05", DeviceStatus: "DISABLED", CertificateStatus: "VALID", RoleName: "SENSOR", Rules: sensorRules()},
 	})
 	client := gw.client(t, cert)
 
@@ -424,4 +440,71 @@ func assertBackendNotReached(t *testing.T, gw *testGateway) {
 		t.Fatal("expected the Backend to never receive this request")
 	case <-time.After(50 * time.Millisecond):
 	}
+}
+
+func waitForPendingCount(t *testing.T, gw *testGateway, want int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		count, err := gw.store.PendingCount(context.Background())
+		if err != nil {
+			t.Fatalf("PendingCount: %v", err)
+		}
+		if count == want {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("PendingCount did not reach %d in time", want)
+}
+
+// Codex review of PR #22, High #3: a Device disconnecting mid-request must
+// not suppress the Security Event that decision produces. This simulates
+// that by giving the client request a deadline far shorter than how long the
+// fake Management API takes to respond, so the client cancels the
+// connection while the Gateway is still waiting on the Access Context call.
+func TestGateway_ClientCancellationStillRecordsEvent(t *testing.T) {
+	ca := newTestCA(t)
+	cert := ca.issueDeviceCert(t, 200, "sensor-floor-10")
+	gw := startTestGateway(t, ca, map[string]management.AccessContext{
+		"C8": {SerialNumber: "C8", DeviceID: "device-10", DeviceKey: "sensor-floor-10", DeviceStatus: "ACTIVE", CertificateStatus: "VALID", RoleName: "SENSOR", Rules: sensorRules()},
+	}, 300*time.Millisecond)
+	client := gw.client(t, cert)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://"+gw.addr+"/telemetry", nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+
+	// The client is expected to abort before the (deliberately slow) fake
+	// Management API responds; the resulting error is not the point of this
+	// test.
+	if resp, err := client.Do(req); err == nil {
+		resp.Body.Close()
+	}
+
+	waitForPendingCount(t, gw, 1)
+}
+
+// docs/architecture.md "장애 원칙": "Backend 장애는 502와 INTERNAL_ERROR Event".
+func TestGateway_BackendFailureRecordsInternalErrorEvent(t *testing.T) {
+	ca := newTestCA(t)
+	cert := ca.issueDeviceCert(t, 201, "sensor-floor-11")
+	gw := startTestGateway(t, ca, map[string]management.AccessContext{
+		"C9": {SerialNumber: "C9", DeviceID: "device-11", DeviceKey: "sensor-floor-11", DeviceStatus: "ACTIVE", CertificateStatus: "VALID", RoleName: "SENSOR", Rules: sensorRules()},
+	})
+	client := gw.client(t, cert)
+
+	gw.backend.Close()
+
+	resp := doRequest(t, client, gw.addr, http.MethodPost, "/telemetry")
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusBadGateway)
+	}
+
+	// Two events: the Gateway's own REQUEST_ALLOWED access decision, plus the
+	// INTERNAL_ERROR event for the failed Backend delivery.
+	waitForPendingCount(t, gw, 2)
 }
