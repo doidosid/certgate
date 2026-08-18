@@ -18,6 +18,7 @@ import tech.certgate.common.PageResponse;
 public class CertificateService {
 
 	private static final Duration EXPIRING_SOON_WINDOW = Duration.ofDays(7);
+	private static final UUID NO_DEVICE_ID = new UUID(0L, 0L);
 
 	private final CertificateRepository certificates;
 	private final ApplicationEventPublisher events;
@@ -32,7 +33,11 @@ public class CertificateService {
 	@Transactional(readOnly = true)
 	public PageResponse<CertificateResponse> list(UUID deviceId, String status, Instant expiresBefore, Pageable pageable) {
 		Instant now = clock.instant();
-		Page<Certificate> page = certificates.search(deviceId, status, expiresBefore, now, now.plus(EXPIRING_SOON_WINDOW), pageable);
+		Page<Certificate> page = certificates.search(
+				deviceId != null, deviceId != null ? deviceId : NO_DEVICE_ID,
+				status != null, status != null ? status : "",
+				expiresBefore != null, expiresBefore != null ? expiresBefore : Instant.EPOCH,
+				now, now.plus(EXPIRING_SOON_WINDOW), pageable);
 		return PageResponse.of(page.map(certificate -> CertificateResponse.from(certificate, now)));
 	}
 

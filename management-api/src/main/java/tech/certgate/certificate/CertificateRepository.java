@@ -17,6 +17,10 @@ public interface CertificateRepository extends JpaRepository<Certificate, UUID> 
 
 	/**
 	 * Filters by deviceId/status/expiresBefore when given (docs/api-spec.md §5).
+	 * Absent filters are passed as {@code has*=false} with an unused dummy value
+	 * rather than a bare {@code null} bind — Postgres cannot infer a parameter's
+	 * type from a lone {@code :param IS NULL} comparison (SQLState 42P18), so
+	 * every parameter here is always non-null and typed by a real comparison.
 	 * status is computed from revokedAt/notAfter (Certificate#status), not a
 	 * stored column, so its bucket is expressed directly in JPQL:
 	 * REVOKED = revokedAt set; EXPIRED = past notAfter; EXPIRING_SOON = within
@@ -24,10 +28,10 @@ public interface CertificateRepository extends JpaRepository<Certificate, UUID> 
 	 */
 	@Query("""
 			SELECT c FROM Certificate c
-			WHERE (:deviceId IS NULL OR c.deviceId = :deviceId)
-			AND (:expiresBefore IS NULL OR c.notAfter < :expiresBefore)
+			WHERE (:hasDeviceId = false OR c.deviceId = :deviceId)
+			AND (:hasExpiresBefore = false OR c.notAfter < :expiresBefore)
 			AND (
-				:status IS NULL
+				:hasStatus = false
 				OR (:status = 'REVOKED' AND c.revokedAt IS NOT NULL)
 				OR (:status = 'EXPIRED' AND c.revokedAt IS NULL AND c.notAfter < :now)
 				OR (:status = 'EXPIRING_SOON' AND c.revokedAt IS NULL AND c.notAfter >= :now AND c.notAfter <= :expiringSoonThreshold)
@@ -35,8 +39,11 @@ public interface CertificateRepository extends JpaRepository<Certificate, UUID> 
 			)
 			""")
 	Page<Certificate> search(
+			@Param("hasDeviceId") boolean hasDeviceId,
 			@Param("deviceId") UUID deviceId,
+			@Param("hasStatus") boolean hasStatus,
 			@Param("status") String status,
+			@Param("hasExpiresBefore") boolean hasExpiresBefore,
 			@Param("expiresBefore") Instant expiresBefore,
 			@Param("now") Instant now,
 			@Param("expiringSoonThreshold") Instant expiringSoonThreshold,

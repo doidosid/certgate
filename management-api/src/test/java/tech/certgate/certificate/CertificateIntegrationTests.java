@@ -164,7 +164,7 @@ class CertificateIntegrationTests {
 
 		restTemplate.postForEntity(
 				"/api/v1/certificates/" + issued.certificateId() + "/revoke",
-				Map.of("reason", "KEY_COMPROMISE", "note", null), Map.class);
+				Map.of("reason", "KEY_COMPROMISE"), Map.class);
 
 		await().atMost(Duration.ofSeconds(2)).until(() -> invalidationRequests.stream().anyMatch(body -> body.contains(issued.serialNumber())));
 	}
