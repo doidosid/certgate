@@ -35,3 +35,7 @@ certgate:
     # call a /internal/** endpoint; GatewayServiceTokenFilter then rejects
     # every such request instead of accepting an empty token.
     service-token: ${GATEWAY_SERVICE_TOKEN:}
+    # Left unset in environments that never revoke a Certificate;
+    # GatewayCacheClient then logs and skips instead of failing revocation.
+    internal-url: ${GATEWAY_INTERNAL_URL:}
+    internal-token: ${GATEWAY_INTERNAL_TOKEN:}

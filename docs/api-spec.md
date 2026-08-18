@@ -375,4 +375,5 @@ Security Event가 원본 데이터이며 SSE는 저장된 CRITICAL Event의 전�
 - <code>DEVICE_KEY_REQUIRED</code>, <code>DEVICE_NAME_REQUIRED</code>, <code>ROLE_NAME_REQUIRED</code>, <code>ROLE_NOT_FOUND</code>: Device 등록 입력값 오류 (400)
 - <code>MALFORMED_REQUEST_BODY</code>: 요청 본문이 없거나 JSON 형식이 아님 (400)
 - <code>ENROLLMENT_TOKEN_CONFLICT</code>: Token 재발급 요청이 동시에 처리되어 경합 발생 (409)
-- <code>CONFLICT</code>: 위 목록에 없는 DB 제약 위반(동시 요청 경합) 일반 응답 (409)
+- <code>REVOCATION_REASON_REQUIRED</code>: Issue #3 Certificate 폐기 구현 중 추가. 폐기 요청의 <code>reason</code>이 없거나 빈 값 (400)
+- <code>CONFLICT</code>: 위 목록에 없는 DB 제약 위반(동시 요청 경합) 일반 응답 (409). Certificate 재폐기 시도도 이 Code를 사용한다
