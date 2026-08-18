@@ -82,4 +82,18 @@ public class Device {
 	public Instant getLastSeenAt() {
 		return lastSeenAt;
 	}
+
+	public Instant getUpdatedAt() {
+		return updatedAt;
+	}
+
+	public void changeStatus(DeviceStatus status, Instant now) {
+		this.status = status;
+		this.updatedAt = now;
+	}
+
+	public void changeRole(String roleName, Instant now) {
+		this.roleName = roleName;
+		this.updatedAt = now;
+	}
 }

@@ -144,6 +144,16 @@ class AccessContextIntegrationTests {
 		assertThat(response.getBody().get("code")).isEqualTo("SERVICE_TOKEN_INVALID");
 	}
 
+	/** Regression test for Codex 리뷰 PR #26 Medium: MissingServletRequestParameterException fell through to 500. */
+	@Test
+	void accessContext_missingSerialNumber_isBadRequestNotServerError() {
+		var response = restTemplate.exchange(
+				"/internal/access-context", HttpMethod.GET, new HttpEntity<>(serviceTokenHeaders()), Map.class);
+
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+		assertThat(response.getBody().get("code")).isEqualTo("INVALID_REQUEST_PARAMETER");
+	}
+
 	@Test
 	void accessContext_unknownSerialNumber_returnsNotFound() {
 		var response = restTemplate.exchange(

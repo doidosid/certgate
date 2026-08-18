@@ -5,6 +5,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -59,6 +63,12 @@ class SecurityEventBatchIntegrationTests {
 		event.put("requestPath", "/telemetry");
 		event.put("traceId", UUID.randomUUID().toString());
 		return event;
+	}
+
+	private String registerDevice(String deviceKey) {
+		var response = restTemplate.postForEntity(
+				"/api/v1/devices", Map.of("deviceKey", deviceKey, "name", "Test " + deviceKey, "roleName", "SENSOR"), Map.class);
+		return response.getBody().get("id").toString();
 	}
 
 	@Test
@@ -188,5 +198,91 @@ class SecurityEventBatchIntegrationTests {
 
 		assertThat(resubmit.getBody().get("acceptedCount")).isEqualTo(1);
 		assertThat(resubmit.getBody().get("duplicateCount")).isEqualTo(0);
+	}
+
+	/** Regression test for Codex 리뷰 PR #26 Medium: docs/data-model.md "last_seen_at". */
+	@Test
+	void batch_allowedEventUpdatesDeviceLastSeenAt() {
+		String deviceId = registerDevice("sensor-lastseen-01");
+		Map<String, Object> event = sampleEvent(UUID.randomUUID());
+		event.put("deviceId", deviceId);
+		event.put("occurredAt", "2026-08-17T06:00:00Z");
+
+		restTemplate.postForEntity("/internal/security-events/batch", requestWithEvents(List.of(event)), Map.class);
+
+		var device = restTemplate.getForEntity("/api/v1/devices/" + deviceId, Map.class);
+		assertThat(device.getBody().get("lastSeenAt")).isEqualTo("2026-08-17T06:00:00Z");
+	}
+
+	@Test
+	void batch_olderAllowedEventDoesNotRegressDeviceLastSeenAt() {
+		String deviceId = registerDevice("sensor-lastseen-02");
+		Map<String, Object> newer = sampleEvent(UUID.randomUUID());
+		newer.put("deviceId", deviceId);
+		newer.put("occurredAt", "2026-08-17T06:00:00Z");
+		restTemplate.postForEntity("/internal/security-events/batch", requestWithEvents(List.of(newer)), Map.class);
+
+		Map<String, Object> older = sampleEvent(UUID.randomUUID());
+		older.put("deviceId", deviceId);
+		older.put("occurredAt", "2026-08-17T05:00:00Z");
+		restTemplate.postForEntity("/internal/security-events/batch", requestWithEvents(List.of(older)), Map.class);
+
+		var device = restTemplate.getForEntity("/api/v1/devices/" + deviceId, Map.class);
+		assertThat(device.getBody().get("lastSeenAt")).isEqualTo("2026-08-17T06:00:00Z");
+	}
+
+	/**
+	 * Regression test for Codex 리뷰 PR #26 round 2 Medium: a read-then-compare
+	 * (Entity dirty checking) update loses the race when two overlapping
+	 * Batches for the same Device commit out of send order — the later-
+	 * arriving-but-earlier-timestamped one could overwrite the newer value.
+	 * {@link DeviceRepository#updateLastSeenIfNewer} closes this with a single
+	 * conditional UPDATE, so the max timestamp wins regardless of commit order.
+	 */
+	@Test
+	void batch_concurrentOverlappingBatches_convergeToTheNewestTimestamp() throws Exception {
+		String deviceId = registerDevice("sensor-lastseen-concurrent-01");
+		Map<String, Object> newer = sampleEvent(UUID.randomUUID());
+		newer.put("deviceId", deviceId);
+		newer.put("occurredAt", "2026-08-17T07:00:00Z");
+		Map<String, Object> older = sampleEvent(UUID.randomUUID());
+		older.put("deviceId", deviceId);
+		older.put("occurredAt", "2026-08-17T06:00:00Z");
+
+		CyclicBarrier barrier = new CyclicBarrier(2);
+		ExecutorService executor = Executors.newFixedThreadPool(2);
+		try {
+			var newerFuture = CompletableFuture.runAsync(() -> sendAfterBarrier(newer, barrier), executor);
+			var olderFuture = CompletableFuture.runAsync(() -> sendAfterBarrier(older, barrier), executor);
+			CompletableFuture.allOf(newerFuture, olderFuture).get();
+		} finally {
+			executor.shutdownNow();
+		}
+
+		var device = restTemplate.getForEntity("/api/v1/devices/" + deviceId, Map.class);
+		assertThat(device.getBody().get("lastSeenAt")).isEqualTo("2026-08-17T07:00:00Z");
+	}
+
+	private void sendAfterBarrier(Map<String, Object> event, CyclicBarrier barrier) {
+		try {
+			barrier.await();
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+		restTemplate.postForEntity("/internal/security-events/batch", requestWithEvents(List.of(event)), Map.class);
+	}
+
+	@Test
+	void batch_deniedEventDoesNotUpdateDeviceLastSeenAt() {
+		String deviceId = registerDevice("sensor-lastseen-03");
+		Map<String, Object> denied = sampleEvent(UUID.randomUUID());
+		denied.put("deviceId", deviceId);
+		denied.put("decision", "DENIED");
+		denied.put("reasonCode", "ACCESS_DENIED");
+
+		restTemplate.postForEntity("/internal/security-events/batch", requestWithEvents(List.of(denied)), Map.class);
+
+		var device = restTemplate.getForEntity("/api/v1/devices/" + deviceId, Map.class);
+		assertThat(device.getBody().get("lastSeenAt")).isNull();
 	}
 }

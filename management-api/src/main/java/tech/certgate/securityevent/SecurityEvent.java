@@ -85,4 +85,36 @@ public class SecurityEvent {
 	public UUID getId() {
 		return id;
 	}
+
+	public Instant getOccurredAt() {
+		return occurredAt;
+	}
+
+	public String getType() {
+		return type;
+	}
+
+	public String getSeverity() {
+		return severity;
+	}
+
+	public String getHttpMethod() {
+		return httpMethod;
+	}
+
+	public String getRequestPath() {
+		return requestPath;
+	}
+
+	public String getDecision() {
+		return decision;
+	}
+
+	public String getReasonCode() {
+		return reasonCode;
+	}
+
+	public UUID getDeviceId() {
+		return deviceId;
+	}
 }
