@@ -7,6 +7,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -50,6 +51,18 @@ public class GlobalExceptionHandler {
 	public ResponseEntity<ErrorResponse> handleMalformedBody(HttpMessageNotReadableException ex) {
 		return ResponseEntity.status(HttpStatus.BAD_REQUEST)
 				.body(ErrorResponse.of("MALFORMED_REQUEST_BODY", "요청 본문을 읽을 수 없습니다.", TraceIdFilter.current()));
+	}
+
+	/**
+	 * A Path Variable or Query Parameter that Spring couldn't convert to its
+	 * declared type — e.g. an unknown enum value for {@code status} or a
+	 * non-UUID {@code deviceId}. Without this handler it falls through to the
+	 * generic 500 below, which hides a client input error as a server fault.
+	 */
+	@ExceptionHandler(MethodArgumentTypeMismatchException.class)
+	public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ErrorResponse.of(
+				"INVALID_REQUEST_PARAMETER", "'" + ex.getName() + "' 값이 올바르지 않습니다.", TraceIdFilter.current()));
 	}
 
 	@ExceptionHandler(Exception.class)

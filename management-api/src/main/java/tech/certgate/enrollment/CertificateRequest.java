@@ -73,6 +73,12 @@ public class CertificateRequest {
 		this.decisionNote = decisionNote;
 	}
 
+	public void reject(Instant decidedAt, String decisionNote) {
+		this.status = CertificateRequestStatus.REJECTED;
+		this.decidedAt = decidedAt;
+		this.decisionNote = decisionNote;
+	}
+
 	public UUID getId() {
 		return id;
 	}
@@ -85,11 +91,35 @@ public class CertificateRequest {
 		return csrPem;
 	}
 
+	public String getSubjectDn() {
+		return subjectDn;
+	}
+
+	public String getSanUri() {
+		return sanUri;
+	}
+
+	public String getPublicKeyAlgorithm() {
+		return publicKeyAlgorithm;
+	}
+
+	public String getFingerprintSha256() {
+		return fingerprintSha256;
+	}
+
 	public CertificateRequestStatus getStatus() {
 		return status;
 	}
 
 	public Instant getRequestedAt() {
 		return requestedAt;
+	}
+
+	public Instant getDecidedAt() {
+		return decidedAt;
+	}
+
+	public String getDecisionNote() {
+		return decisionNote;
 	}
 }

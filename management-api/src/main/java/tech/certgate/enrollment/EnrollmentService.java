@@ -3,12 +3,15 @@ package tech.certgate.enrollment;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tech.certgate.certificate.Certificate;
 import tech.certgate.certificate.CertificateRepository;
 import tech.certgate.common.ApiException;
+import tech.certgate.common.PageResponse;
 import tech.certgate.device.DeviceService;
 
 /**
@@ -19,6 +22,8 @@ import tech.certgate.device.DeviceService;
  */
 @Service
 public class EnrollmentService {
+
+	private static final UUID NO_DEVICE_ID = new UUID(0L, 0L);
 
 	private final EnrollmentTokenService tokenService;
 	private final CsrValidator csrValidator;
@@ -87,8 +92,7 @@ public class EnrollmentService {
 
 	@Transactional
 	public CertificateRequestResponse approve(UUID requestId, String decisionNote) {
-		CertificateRequest request = certificateRequests.findById(requestId)
-				.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CERTIFICATE_REQUEST_NOT_FOUND", "요청을 찾을 수 없습니다."));
+		CertificateRequest request = requireRequest(requestId);
 		if (request.getStatus() != CertificateRequestStatus.PENDING) {
 			throw new ApiException(HttpStatus.CONFLICT, "CERTIFICATE_REQUEST_NOT_PENDING", "PENDING 상태의 요청만 승인할 수 있습니다.");
 		}
@@ -102,6 +106,36 @@ public class EnrollmentService {
 		request.approve(now, decisionNote);
 
 		return CertificateRequestResponse.from(request);
+	}
+
+	@Transactional(readOnly = true)
+	public PageResponse<CertificateRequestResponse> list(CertificateRequestStatus status, UUID deviceId, Pageable pageable) {
+		Page<CertificateRequest> page = certificateRequests.search(
+				status != null, status != null ? status : CertificateRequestStatus.PENDING,
+				deviceId != null, deviceId != null ? deviceId : NO_DEVICE_ID,
+				pageable);
+		return PageResponse.of(page.map(CertificateRequestResponse::from));
+	}
+
+	@Transactional(readOnly = true)
+	public CertificateRequestDetailResponse getDetail(UUID requestId) {
+		return CertificateRequestDetailResponse.from(requireRequest(requestId));
+	}
+
+	@Transactional
+	public CertificateRequestResponse reject(UUID requestId, String decisionNote) {
+		CertificateRequest request = requireRequest(requestId);
+		if (request.getStatus() != CertificateRequestStatus.PENDING) {
+			throw new ApiException(HttpStatus.CONFLICT, "CERTIFICATE_REQUEST_NOT_PENDING", "PENDING 상태의 요청만 거절할 수 있습니다.");
+		}
+
+		request.reject(clock.instant(), decisionNote);
+		return CertificateRequestResponse.from(request);
+	}
+
+	private CertificateRequest requireRequest(UUID requestId) {
+		return certificateRequests.findById(requestId)
+				.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CERTIFICATE_REQUEST_NOT_FOUND", "요청을 찾을 수 없습니다."));
 	}
 
 	private CertificateRequest findOwnedRequest(UUID requestId, UUID deviceId) {
