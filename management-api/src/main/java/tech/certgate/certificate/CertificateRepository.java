@@ -2,6 +2,7 @@ package tech.certgate.certificate;
 
 import jakarta.persistence.LockModeType;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -16,6 +17,16 @@ public interface CertificateRepository extends JpaRepository<Certificate, UUID> 
 	Optional<Certificate> findByRequestId(UUID requestId);
 
 	Optional<Certificate> findBySerialNumber(String serialNumber);
+
+	/** Most recently issued Certificate for a Device, used by the Device detail view. */
+	Optional<Certificate> findFirstByDeviceIdOrderByIssuedAtDesc(UUID deviceId);
+
+	/**
+	 * Batch lookup for the Device list view; a Device can have more than one
+	 * Certificate row over its lifetime (reissued after revoke), so callers
+	 * must reduce this to one-per-deviceId (most recent first) themselves.
+	 */
+	List<Certificate> findByDeviceIdInOrderByIssuedAtDesc(List<UUID> deviceIds);
 
 	/**
 	 * Locks the row for the duration of the revoking Transaction so two

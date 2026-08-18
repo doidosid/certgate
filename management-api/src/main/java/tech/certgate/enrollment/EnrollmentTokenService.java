@@ -7,6 +7,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -44,7 +45,15 @@ public class EnrollmentTokenService {
 	@Transactional
 	public IssuedToken issueFor(UUID deviceId) {
 		Instant now = clock.instant();
-		credentials.findByDeviceIdAndRevokedAtIsNull(deviceId).ifPresent(existing -> existing.revoke(now));
+		Optional<EnrollmentCredential> existing = credentials.findByDeviceIdAndRevokedAtIsNull(deviceId);
+		if (existing.isPresent()) {
+			existing.get().revoke(now);
+			// Hibernate flushes INSERTs before UPDATEs regardless of call order, so
+			// without this explicit flush the new credential's INSERT below would
+			// race this revoke's UPDATE and trip idx_enrollment_credential_active_per_device
+			// (both rows briefly have revoked_at IS NULL at INSERT time).
+			credentials.flush();
+		}
 
 		byte[] tokenBytes = new byte[24];
 		random.nextBytes(tokenBytes);
