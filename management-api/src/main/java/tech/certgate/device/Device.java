@@ -96,4 +96,11 @@ public class Device {
 		this.roleName = roleName;
 		this.updatedAt = now;
 	}
+
+	/** docs/data-model.md "마지막 허용 요청 시각" — never moves backward (out-of-order/duplicate Event resend). */
+	public void updateLastSeenIfNewer(Instant occurredAt) {
+		if (lastSeenAt == null || occurredAt.isAfter(lastSeenAt)) {
+			this.lastSeenAt = occurredAt;
+		}
+	}
 }

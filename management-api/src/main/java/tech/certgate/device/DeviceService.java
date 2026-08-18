@@ -2,7 +2,6 @@ package tech.certgate.device;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -11,14 +10,14 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import tech.certgate.certificate.Certificate;
-import tech.certgate.certificate.CertificateRepository;
+import tech.certgate.certificate.CertificateService;
+import tech.certgate.certificate.CertificateService.DeviceCertificateSummary;
 import tech.certgate.common.ApiException;
 import tech.certgate.common.PageResponse;
 import tech.certgate.enrollment.EnrollmentTokenService;
-import tech.certgate.policy.PolicyRuleRepository;
+import tech.certgate.policy.PolicyService;
 import tech.certgate.policy.RoleRepository;
-import tech.certgate.securityevent.SecurityEventRepository;
+import tech.certgate.securityevent.SecurityEventService;
 
 @Service
 public class DeviceService {
@@ -28,21 +27,21 @@ public class DeviceService {
 
 	private final DeviceRepository devices;
 	private final RoleRepository roles;
-	private final CertificateRepository certificates;
-	private final PolicyRuleRepository policyRules;
-	private final SecurityEventRepository securityEvents;
+	private final CertificateService certificateService;
+	private final PolicyService policyService;
+	private final SecurityEventService securityEventService;
 	private final EnrollmentTokenService enrollmentTokenService;
 	private final Clock clock;
 
 	public DeviceService(
-			DeviceRepository devices, RoleRepository roles, CertificateRepository certificates,
-			PolicyRuleRepository policyRules, SecurityEventRepository securityEvents,
+			DeviceRepository devices, RoleRepository roles, CertificateService certificateService,
+			PolicyService policyService, SecurityEventService securityEventService,
 			EnrollmentTokenService enrollmentTokenService, Clock clock) {
 		this.devices = devices;
 		this.roles = roles;
-		this.certificates = certificates;
-		this.policyRules = policyRules;
-		this.securityEvents = securityEvents;
+		this.certificateService = certificateService;
+		this.policyService = policyService;
+		this.securityEventService = securityEventService;
 		this.enrollmentTokenService = enrollmentTokenService;
 		this.clock = clock;
 	}
@@ -113,15 +112,14 @@ public class DeviceService {
 				pageable);
 
 		List<UUID> deviceIds = page.getContent().stream().map(Device::getId).toList();
-		Map<UUID, Certificate> latestCertificateByDevice = latestCertificatesFor(deviceIds);
-		Instant now = clock.instant();
+		Map<UUID, DeviceCertificateSummary> latestCertificateByDevice = certificateService.latestForDevices(deviceIds);
 
 		return PageResponse.of(page.map(device -> {
-			Certificate certificate = latestCertificateByDevice.get(device.getId());
+			DeviceCertificateSummary certificate = latestCertificateByDevice.get(device.getId());
 			return new DeviceListItemResponse(
 					device.getId(), device.getDeviceKey(), device.getName(), device.getStatus(), device.getRoleName(),
-					certificate != null ? certificate.status(now) : null,
-					certificate != null ? certificate.getNotAfter() : null,
+					certificate != null ? certificate.status() : null,
+					certificate != null ? certificate.expiresAt() : null,
 					device.getLastSeenAt());
 		}));
 	}
@@ -129,23 +127,20 @@ public class DeviceService {
 	@Transactional(readOnly = true)
 	public DeviceDetailResponse getDetail(UUID deviceId) {
 		Device device = requireDeviceEntity(deviceId);
-		Instant now = clock.instant();
 
-		DeviceDetailResponse.CertificateSummary certificateSummary = certificates.findFirstByDeviceIdOrderByIssuedAtDesc(deviceId)
+		DeviceDetailResponse.CertificateSummary certificateSummary = certificateService.latestForDevice(deviceId)
 				.map(certificate -> new DeviceDetailResponse.CertificateSummary(
-						certificate.getId(), certificate.getSerialNumber(), certificate.status(now), certificate.getNotAfter()))
+						certificate.id(), certificate.serialNumber(), certificate.status(), certificate.expiresAt()))
 				.orElse(null);
 
-		List<DeviceDetailResponse.PolicyRuleView> rules = policyRules.findByRoleNameOrderByPriorityAsc(device.getRoleName()).stream()
-				.map(rule -> new DeviceDetailResponse.PolicyRuleView(
-						rule.getHttpMethod(), rule.getPathPattern(), rule.getEffect(), rule.getPriority()))
+		List<DeviceDetailResponse.PolicyRuleView> rules = policyService.rulesForRole(device.getRoleName()).stream()
+				.map(rule -> new DeviceDetailResponse.PolicyRuleView(rule.httpMethod(), rule.pathPattern(), rule.effect(), rule.priority()))
 				.toList();
 
-		List<DeviceDetailResponse.SecurityEventView> recentEvents = securityEvents
-				.findTop10ByDeviceIdOrderByOccurredAtDesc(deviceId).stream()
+		List<DeviceDetailResponse.SecurityEventView> recentEvents = securityEventService.recentForDevice(deviceId).stream()
 				.map(event -> new DeviceDetailResponse.SecurityEventView(
-						event.getId(), event.getOccurredAt(), event.getType(), event.getSeverity(), event.getDecision(),
-						event.getReasonCode(), event.getHttpMethod(), event.getRequestPath()))
+						event.id(), event.occurredAt(), event.type(), event.severity(), event.decision(),
+						event.reasonCode(), event.httpMethod(), event.requestPath()))
 				.toList();
 
 		return new DeviceDetailResponse(
@@ -183,20 +178,19 @@ public class DeviceService {
 		return new EnrollmentTokenResponse(token.rawToken(), token.expiresAt());
 	}
 
+	/**
+	 * Best-effort bookkeeping, not a security control (docs/data-model.md
+	 * "마지막 허용 요청 시각") — a missing Device or a stale/out-of-order
+	 * timestamp is silently ignored rather than failing the Security Event
+	 * Batch that triggered it.
+	 */
+	@Transactional
+	public void updateLastSeenIfNewer(UUID deviceId, Instant occurredAt) {
+		devices.findById(deviceId).ifPresent(device -> device.updateLastSeenIfNewer(occurredAt));
+	}
+
 	private Device requireDeviceEntity(UUID deviceId) {
 		return devices.findById(deviceId)
 				.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "DEVICE_NOT_REGISTERED", "등록되지 않은 Device입니다."));
-	}
-
-	/** One Certificate per deviceId (most recently issued), for Devices that have any. */
-	private Map<UUID, Certificate> latestCertificatesFor(List<UUID> deviceIds) {
-		if (deviceIds.isEmpty()) {
-			return Map.of();
-		}
-		Map<UUID, Certificate> latestByDevice = new LinkedHashMap<>();
-		for (Certificate certificate : certificates.findByDeviceIdInOrderByIssuedAtDesc(deviceIds)) {
-			latestByDevice.putIfAbsent(certificate.getDeviceId(), certificate);
-		}
-		return latestByDevice;
 	}
 }

@@ -380,6 +380,8 @@ Security Event가 원본 데이터이며 SSE는 저장된 CRITICAL Event의 전�
 - <code>REVOCATION_REASON_REQUIRED</code>: Issue #3 Certificate 폐기 구현 중 추가. 폐기 요청의 <code>reason</code>이 없거나 빈 값 (400)
 - <code>REVOCATION_REASON_TOO_LONG</code>: 폐기 요청의 <code>reason</code>이 64자 초과 (400)
 - <code>REVOCATION_NOTE_TOO_LONG</code>: 폐기 요청의 <code>note</code>가 500자 초과 (400)
-- <code>INVALID_REQUEST_PARAMETER</code>: Issue #3 CSR 관리자 목록 조회 구현 중 추가. Query Parameter 또는 Path Variable을 선언된 타입(Enum, UUID 등)으로 변환할 수 없음 (400)
+- <code>INVALID_REQUEST_PARAMETER</code>: Issue #3 CSR 관리자 목록 조회 구현 중 추가. Query Parameter 또는 Path Variable을 선언된 타입(Enum, UUID 등)으로 변환할 수 없거나, 필수 Query Parameter가 없음 (400)
 - <code>DEVICE_STATUS_REQUIRED</code>: Issue #3 Device 상태 변경 구현 중 추가. <code>PATCH /devices/{deviceId}/status</code> 요청의 <code>status</code>가 없음 (400)
+- <code>METHOD_NOT_ALLOWED</code>: Issue #3 공통 오류 처리 보강 중 추가. 지원하지 않는 HTTP Method (405)
+- <code>UNSUPPORTED_MEDIA_TYPE</code>: Issue #3 공통 오류 처리 보강 중 추가. 지원하지 않는 Content-Type (415)
 - <code>CONFLICT</code>: 위 목록에 없는 DB 제약 위반(동시 요청 경합) 일반 응답 (409). Certificate 재폐기 시도도 이 Code를 사용한다

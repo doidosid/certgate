@@ -3,6 +3,10 @@ package tech.certgate.certificate;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
@@ -82,5 +86,38 @@ public class CertificateService {
 	private Certificate require(UUID certificateId) {
 		return certificates.findById(certificateId)
 				.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CERTIFICATE_NOT_FOUND", "등록되지 않은 Certificate입니다."));
+	}
+
+	/**
+	 * Cross-domain read view for other domains (e.g. Device detail) that need
+	 * a Device's current Certificate status without depending on
+	 * {@link CertificateRepository} or the {@link Certificate} Entity directly
+	 * (docs/repository-structure.md: Service 경계, Codex 리뷰 PR #26 Medium).
+	 */
+	public record DeviceCertificateSummary(UUID id, String serialNumber, CertificateStatus status, Instant expiresAt) {
+	}
+
+	@Transactional(readOnly = true)
+	public Optional<DeviceCertificateSummary> latestForDevice(UUID deviceId) {
+		Instant now = clock.instant();
+		return certificates.findFirstByDeviceIdOrderByIssuedAtDesc(deviceId).map(certificate -> toSummary(certificate, now));
+	}
+
+	/** Batch form of {@link #latestForDevice} to avoid N+1 lookups when rendering a Device list page. */
+	@Transactional(readOnly = true)
+	public Map<UUID, DeviceCertificateSummary> latestForDevices(List<UUID> deviceIds) {
+		if (deviceIds.isEmpty()) {
+			return Map.of();
+		}
+		Instant now = clock.instant();
+		Map<UUID, DeviceCertificateSummary> latestByDevice = new LinkedHashMap<>();
+		for (Certificate certificate : certificates.findByDeviceIdInOrderByIssuedAtDesc(deviceIds)) {
+			latestByDevice.putIfAbsent(certificate.getDeviceId(), toSummary(certificate, now));
+		}
+		return latestByDevice;
+	}
+
+	private static DeviceCertificateSummary toSummary(Certificate certificate, Instant now) {
+		return new DeviceCertificateSummary(certificate.getId(), certificate.getSerialNumber(), certificate.status(now), certificate.getNotAfter());
 	}
 }

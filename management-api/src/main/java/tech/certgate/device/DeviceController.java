@@ -6,6 +6,7 @@ import java.util.UUID;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import tech.certgate.common.ApiException;
 import tech.certgate.common.PageResponse;
 
 /**
@@ -56,7 +58,14 @@ public class DeviceController {
 		return deviceService.list(query, status, roleName, pageable);
 	}
 
-	/** "field,direction" (e.g. "name,asc"); unknown or malformed values fall back to the default sort. */
+	/**
+	 * "field,direction" (e.g. "name,asc"); direction may be omitted (defaults
+	 * to ASC). Omitting {@code sort} entirely falls back to the default sort,
+	 * but a field outside {@link #SORTABLE_FIELDS} or an unrecognized
+	 * direction is rejected rather than silently coerced — a typo like
+	 * "descending" must not silently come back as ASC (Codex 리뷰 PR #26
+	 * Medium). {@code id} is added as a tiebreaker so paging stays stable.
+	 */
 	private static Sort parseSort(String sort) {
 		if (sort == null || sort.isBlank()) {
 			return DEFAULT_SORT;
@@ -64,11 +73,24 @@ public class DeviceController {
 		String[] parts = sort.split(",", 2);
 		String field = parts[0].trim();
 		if (!SORTABLE_FIELDS.contains(field)) {
-			return DEFAULT_SORT;
+			throw invalidSort();
 		}
-		Sort.Direction direction = parts.length > 1 && "desc".equalsIgnoreCase(parts[1].trim())
-				? Sort.Direction.DESC : Sort.Direction.ASC;
-		return Sort.by(direction, field);
+		Sort.Direction direction = Sort.Direction.ASC;
+		if (parts.length > 1 && !parts[1].isBlank()) {
+			String directionValue = parts[1].trim();
+			if ("asc".equalsIgnoreCase(directionValue)) {
+				direction = Sort.Direction.ASC;
+			} else if ("desc".equalsIgnoreCase(directionValue)) {
+				direction = Sort.Direction.DESC;
+			} else {
+				throw invalidSort();
+			}
+		}
+		return Sort.by(direction, field).and(Sort.by("id"));
+	}
+
+	private static ApiException invalidSort() {
+		return new ApiException(HttpStatus.BAD_REQUEST, "INVALID_REQUEST_PARAMETER", "'sort' 값이 올바르지 않습니다.");
 	}
 
 	@GetMapping("/{deviceId}")

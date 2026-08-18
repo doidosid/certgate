@@ -61,6 +61,12 @@ class SecurityEventBatchIntegrationTests {
 		return event;
 	}
 
+	private String registerDevice(String deviceKey) {
+		var response = restTemplate.postForEntity(
+				"/api/v1/devices", Map.of("deviceKey", deviceKey, "name", "Test " + deviceKey, "roleName", "SENSOR"), Map.class);
+		return response.getBody().get("id").toString();
+	}
+
 	@Test
 	void batch_acceptsNewEvents() {
 		Map<String, Object> event = sampleEvent(UUID.randomUUID());
@@ -188,5 +194,50 @@ class SecurityEventBatchIntegrationTests {
 
 		assertThat(resubmit.getBody().get("acceptedCount")).isEqualTo(1);
 		assertThat(resubmit.getBody().get("duplicateCount")).isEqualTo(0);
+	}
+
+	/** Regression test for Codex 리뷰 PR #26 Medium: docs/data-model.md "last_seen_at". */
+	@Test
+	void batch_allowedEventUpdatesDeviceLastSeenAt() {
+		String deviceId = registerDevice("sensor-lastseen-01");
+		Map<String, Object> event = sampleEvent(UUID.randomUUID());
+		event.put("deviceId", deviceId);
+		event.put("occurredAt", "2026-08-17T06:00:00Z");
+
+		restTemplate.postForEntity("/internal/security-events/batch", requestWithEvents(List.of(event)), Map.class);
+
+		var device = restTemplate.getForEntity("/api/v1/devices/" + deviceId, Map.class);
+		assertThat(device.getBody().get("lastSeenAt")).isEqualTo("2026-08-17T06:00:00Z");
+	}
+
+	@Test
+	void batch_olderAllowedEventDoesNotRegressDeviceLastSeenAt() {
+		String deviceId = registerDevice("sensor-lastseen-02");
+		Map<String, Object> newer = sampleEvent(UUID.randomUUID());
+		newer.put("deviceId", deviceId);
+		newer.put("occurredAt", "2026-08-17T06:00:00Z");
+		restTemplate.postForEntity("/internal/security-events/batch", requestWithEvents(List.of(newer)), Map.class);
+
+		Map<String, Object> older = sampleEvent(UUID.randomUUID());
+		older.put("deviceId", deviceId);
+		older.put("occurredAt", "2026-08-17T05:00:00Z");
+		restTemplate.postForEntity("/internal/security-events/batch", requestWithEvents(List.of(older)), Map.class);
+
+		var device = restTemplate.getForEntity("/api/v1/devices/" + deviceId, Map.class);
+		assertThat(device.getBody().get("lastSeenAt")).isEqualTo("2026-08-17T06:00:00Z");
+	}
+
+	@Test
+	void batch_deniedEventDoesNotUpdateDeviceLastSeenAt() {
+		String deviceId = registerDevice("sensor-lastseen-03");
+		Map<String, Object> denied = sampleEvent(UUID.randomUUID());
+		denied.put("deviceId", deviceId);
+		denied.put("decision", "DENIED");
+		denied.put("reasonCode", "ACCESS_DENIED");
+
+		restTemplate.postForEntity("/internal/security-events/batch", requestWithEvents(List.of(denied)), Map.class);
+
+		var device = restTemplate.getForEntity("/api/v1/devices/" + deviceId, Map.class);
+		assertThat(device.getBody().get("lastSeenAt")).isNull();
 	}
 }

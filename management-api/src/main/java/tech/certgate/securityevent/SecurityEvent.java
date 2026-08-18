@@ -113,4 +113,8 @@ public class SecurityEvent {
 	public String getReasonCode() {
 		return reasonCode;
 	}
+
+	public UUID getDeviceId() {
+		return deviceId;
+	}
 }

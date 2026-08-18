@@ -121,6 +121,29 @@ class DeviceIntegrationTests {
 	}
 
 	@Test
+	void list_unknownSortField_isBadRequestNotSilentlyIgnored() {
+		var response = restTemplate.getForEntity("/api/v1/devices?sort=notAField,asc", Map.class);
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+		assertThat(response.getBody().get("code")).isEqualTo("INVALID_REQUEST_PARAMETER");
+	}
+
+	@Test
+	void list_unknownSortDirection_isBadRequestNotSilentlyCoercedToAsc() {
+		var response = restTemplate.getForEntity("/api/v1/devices?sort=name,descending", Map.class);
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+		assertThat(response.getBody().get("code")).isEqualTo("INVALID_REQUEST_PARAMETER");
+	}
+
+	@Test
+	void list_sortFieldOnlyOmittingDirection_defaultsToAscending() {
+		registerDevice("d-sort-a", "SENSOR");
+		registerDevice("d-sort-b", "SENSOR");
+
+		var response = restTemplate.getForEntity("/api/v1/devices?sort=deviceKey", Map.class);
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+	}
+
+	@Test
 	void get_returnsDetailWithPolicyRulesAndNoCertificateYet() {
 		Map<String, Object> device = registerDevice("d-detail", "OPERATOR");
 		var response = restTemplate.getForEntity("/api/v1/devices/" + device.get("id"), Map.class);

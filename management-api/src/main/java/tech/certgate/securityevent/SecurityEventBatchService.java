@@ -1,6 +1,7 @@
 package tech.certgate.securityevent;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -11,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tech.certgate.common.ApiException;
+import tech.certgate.device.DeviceService;
 
 /**
  * Accepts the Gateway's Security Event batch and stores it idempotently by
@@ -23,11 +25,15 @@ import tech.certgate.common.ApiException;
 @Service
 public class SecurityEventBatchService {
 
+	private static final String ALLOWED_DECISION = "ALLOWED";
+
 	private final SecurityEventRepository securityEvents;
+	private final DeviceService deviceService;
 	private final Clock clock;
 
-	public SecurityEventBatchService(SecurityEventRepository securityEvents, Clock clock) {
+	public SecurityEventBatchService(SecurityEventRepository securityEvents, DeviceService deviceService, Clock clock) {
 		this.securityEvents = securityEvents;
+		this.deviceService = deviceService;
 		this.clock = clock;
 	}
 
@@ -52,8 +58,26 @@ public class SecurityEventBatchService {
 				.map(this::toEntity)
 				.toList();
 		securityEvents.saveAll(toInsert);
+		updateDeviceLastSeen(toInsert);
 
 		return new SecurityEventBatchResponse(toInsert.size(), events.size() - toInsert.size());
+	}
+
+	/**
+	 * docs/data-model.md "last_seen_at: 마지막 허용 요청 시각" — updated from
+	 * newly stored ALLOWED Events only (not from ones already in the DB before
+	 * this batch), one write per Device even when several of its Events land
+	 * in the same batch (Codex 리뷰 PR #26 Medium).
+	 */
+	private void updateDeviceLastSeen(List<SecurityEvent> inserted) {
+		Map<UUID, Instant> latestAllowedByDevice = new LinkedHashMap<>();
+		for (SecurityEvent event : inserted) {
+			if (event.getDeviceId() == null || !ALLOWED_DECISION.equals(event.getDecision())) {
+				continue;
+			}
+			latestAllowedByDevice.merge(event.getDeviceId(), event.getOccurredAt(), (a, b) -> a.isAfter(b) ? a : b);
+		}
+		latestAllowedByDevice.forEach(deviceService::updateLastSeenIfNewer);
 	}
 
 	private void validate(List<SecurityEventBatchRequest.EventPayload> events) {
