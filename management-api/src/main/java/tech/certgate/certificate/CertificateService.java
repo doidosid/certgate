@@ -19,6 +19,9 @@ public class CertificateService {
 
 	private static final Duration EXPIRING_SOON_WINDOW = Duration.ofDays(7);
 	private static final UUID NO_DEVICE_ID = new UUID(0L, 0L);
+	/** Must match V5__create_certificate.sql's revocation_reason/revocation_note column limits. */
+	private static final int MAX_REASON_LENGTH = 64;
+	private static final int MAX_NOTE_LENGTH = 500;
 
 	private final CertificateRepository certificates;
 	private final ApplicationEventPublisher events;
@@ -55,6 +58,12 @@ public class CertificateService {
 	public CertificateResponse revoke(UUID certificateId, CertificateRevokeRequest request) {
 		if (request == null || request.reason() == null || request.reason().isBlank()) {
 			throw new ApiException(HttpStatus.BAD_REQUEST, "REVOCATION_REASON_REQUIRED", "폐기 사유(reason)는 필수입니다.");
+		}
+		if (request.reason().length() > MAX_REASON_LENGTH) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, "REVOCATION_REASON_TOO_LONG", "폐기 사유(reason)는 최대 " + MAX_REASON_LENGTH + "자입니다.");
+		}
+		if (request.note() != null && request.note().length() > MAX_NOTE_LENGTH) {
+			throw new ApiException(HttpStatus.BAD_REQUEST, "REVOCATION_NOTE_TOO_LONG", "폐기 비고(note)는 최대 " + MAX_NOTE_LENGTH + "자입니다.");
 		}
 
 		Certificate certificate = certificates.findByIdForUpdate(certificateId)

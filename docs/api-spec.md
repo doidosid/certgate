@@ -197,6 +197,8 @@ Header: <code>Authorization: Bearer cg_enroll_xxx</code>
 }
 ~~~
 
+<code>reason</code>은 필수이며 비어 있으면 <code>400 REVOCATION_REASON_REQUIRED</code>를 반환한다. <code>reason</code>은 최대 64자, <code>note</code>는 최대 500자이며 초과 시 각각 <code>400 REVOCATION_REASON_TOO_LONG</code>, <code>400 REVOCATION_NOTE_TOO_LONG</code>을 반환한다.
+
 상태는 DB의 <code>revokedAt</code>, <code>notBefore</code>, <code>notAfter</code>로 계산한다.
 
 - <code>REVOKED</code>: revokedAt 존재
@@ -359,9 +361,9 @@ Security Event가 원본 데이터이며 SSE는 저장된 CRITICAL Event의 전�
 - <code>SECURITY_EVENT_INVALID</code>: Security Event Batch 필수 필드 없음 (400)
 - <code>INTERNAL_ERROR</code>
 
-### Enrollment API 오류 Code
+### Management API 오류 Code
 
-위 목록은 Gateway 접근 판정·Security Event 분류 중심이라 Enrollment CSR 제출(§4) 오류에 대응하는 항목이 없었다. Issue #1 구현 중 아래를 추가해 오류 응답의 <code>code</code> 필드로 사용한다.
+위 목록은 Gateway 접근 판정·Security Event 분류 중심이라 Management API의 Enrollment CSR 제출(§4)·Device 등록(§3)·Certificate 폐기(§5) 오류에 대응하는 항목이 없었다. Issue #1, #3 구현 중 아래를 추가해 오류 응답의 <code>code</code> 필드로 사용한다.
 
 - <code>ENROLLMENT_TOKEN_INVALID</code>: Token 없음·형식 오류·만료·폐기 (401)
 - <code>CSR_SIGNATURE_INVALID</code>: CSR 형식 오류 또는 자체 서명 검증 실패 (422)
@@ -376,4 +378,6 @@ Security Event가 원본 데이터이며 SSE는 저장된 CRITICAL Event의 전�
 - <code>MALFORMED_REQUEST_BODY</code>: 요청 본문이 없거나 JSON 형식이 아님 (400)
 - <code>ENROLLMENT_TOKEN_CONFLICT</code>: Token 재발급 요청이 동시에 처리되어 경합 발생 (409)
 - <code>REVOCATION_REASON_REQUIRED</code>: Issue #3 Certificate 폐기 구현 중 추가. 폐기 요청의 <code>reason</code>이 없거나 빈 값 (400)
+- <code>REVOCATION_REASON_TOO_LONG</code>: 폐기 요청의 <code>reason</code>이 64자 초과 (400)
+- <code>REVOCATION_NOTE_TOO_LONG</code>: 폐기 요청의 <code>note</code>가 500자 초과 (400)
 - <code>CONFLICT</code>: 위 목록에 없는 DB 제약 위반(동시 요청 경합) 일반 응답 (409). Certificate 재폐기 시도도 이 Code를 사용한다

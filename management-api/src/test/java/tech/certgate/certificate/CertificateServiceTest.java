@@ -63,6 +63,32 @@ class CertificateServiceTest {
 	}
 
 	@Test
+	void revoke_reasonTooLong_isRejectedBeforeTouchingTheRepository() {
+		CertificateRepository certificates = mock(CertificateRepository.class);
+		ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
+		CertificateService service = new CertificateService(certificates, events, Clock.fixed(NOW, ZoneOffset.UTC));
+		String tooLongReason = "R".repeat(65);
+
+		assertThatThrownBy(() -> service.revoke(UUID.randomUUID(), new CertificateRevokeRequest(tooLongReason, null)))
+				.isInstanceOf(ApiException.class)
+				.satisfies(ex -> assertThat(((ApiException) ex).getReasonCode()).isEqualTo("REVOCATION_REASON_TOO_LONG"));
+		verify(certificates, never()).findByIdForUpdate(any());
+	}
+
+	@Test
+	void revoke_noteTooLong_isRejectedBeforeTouchingTheRepository() {
+		CertificateRepository certificates = mock(CertificateRepository.class);
+		ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
+		CertificateService service = new CertificateService(certificates, events, Clock.fixed(NOW, ZoneOffset.UTC));
+		String tooLongNote = "N".repeat(501);
+
+		assertThatThrownBy(() -> service.revoke(UUID.randomUUID(), new CertificateRevokeRequest("KEY_COMPROMISE", tooLongNote)))
+				.isInstanceOf(ApiException.class)
+				.satisfies(ex -> assertThat(((ApiException) ex).getReasonCode()).isEqualTo("REVOCATION_NOTE_TOO_LONG"));
+		verify(certificates, never()).findByIdForUpdate(any());
+	}
+
+	@Test
 	void revoke_alreadyRevoked_isConflict() {
 		CertificateRepository certificates = mock(CertificateRepository.class);
 		ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
