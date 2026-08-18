@@ -13,6 +13,7 @@ import tech.certgate.certificate.CertificateRepository;
 import tech.certgate.common.ApiException;
 import tech.certgate.common.PageResponse;
 import tech.certgate.device.DeviceService;
+import tech.certgate.securityevent.SecurityEventRecorder;
 
 /**
  * CSR submission, admin approval, and Certificate/Chain retrieval
@@ -31,6 +32,7 @@ public class EnrollmentService {
 	private final CertificateRepository certificates;
 	private final DeviceService deviceService;
 	private final IntermediateCertificateAuthority certificateAuthority;
+	private final SecurityEventRecorder securityEventRecorder;
 	private final Clock clock;
 
 	public EnrollmentService(
@@ -40,6 +42,7 @@ public class EnrollmentService {
 			CertificateRepository certificates,
 			DeviceService deviceService,
 			IntermediateCertificateAuthority certificateAuthority,
+			SecurityEventRecorder securityEventRecorder,
 			Clock clock) {
 		this.tokenService = tokenService;
 		this.csrValidator = csrValidator;
@@ -47,6 +50,7 @@ public class EnrollmentService {
 		this.certificates = certificates;
 		this.deviceService = deviceService;
 		this.certificateAuthority = certificateAuthority;
+		this.securityEventRecorder = securityEventRecorder;
 		this.clock = clock;
 	}
 
@@ -106,7 +110,18 @@ public class EnrollmentService {
 
 		DeviceService.DeviceIdentity device = deviceService.requireActiveDevice(request.getDeviceId());
 		ParsedCsr parsed = csrValidator.validate(request.getCsrPem(), device.deviceKey());
-		IssuedCertificate issued = certificateAuthority.sign(parsed);
+		IssuedCertificate issued;
+		try {
+			issued = certificateAuthority.sign(parsed);
+		} catch (ApiException e) {
+			// Recorded in its own Transaction so the CRITICAL audit trail survives
+			// this method's Transaction rolling back on the rethrow below
+			// (docs/architecture.md "CA 서명 실패는 ... CRITICAL Event 기록").
+			if ("CA_SIGNING_FAILED".equals(e.getReasonCode())) {
+				securityEventRecorder.recordCritical("PKI", "CA_SIGNING_FAILED", request.getDeviceId(), null);
+			}
+			throw e;
+		}
 
 		Instant now = clock.instant();
 		certificates.save(new Certificate(UUID.randomUUID(), request.getDeviceId(), request.getId(), issued, now));
