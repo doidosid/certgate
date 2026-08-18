@@ -13,4 +13,9 @@ regexes = [
   # a record declaration whose comma-separated parameter names trip the
   # generic high-entropy heuristic. No secret value is present.
   '''record CaPaths\(Path rootCertPath, Path intermediateCertPath, Path intermediateKeyPath, X509Certificate rootCert\)''',
+  # management-api/src/test/java/tech/certgate/enrollment/CaSigningFailureIntegrationTests.java:
+  # "sensor-ca-fail-01" is a literal test Device Key, not a secret; the
+  # "deviceKey" field name plus its hyphenated alphanumeric value trips the
+  # generic-api-key heuristic.
+  '''Map\.of\("deviceKey", "sensor-ca-fail-01", "name", "Test Device", "roleName", "SENSOR"\)''',
 ]
