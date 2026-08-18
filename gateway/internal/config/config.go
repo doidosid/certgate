@@ -15,12 +15,16 @@ type Config struct {
 	MTLSPort              string
 	InternalPort          string
 	ManagementAPIURL      string
+	BackendServiceURL     string
 	ServiceToken          string
 	InternalToken         string
 	AccessCacheTTLSeconds int
 	OutboxPath            string
 	EventBatchSize        int
 	EventRetryMaxSeconds  int
+	RootCACertPath        string
+	ServerCertPath        string
+	ServerKeyPath         string
 }
 
 // Load reads Config from the process environment and validates it.
@@ -33,12 +37,16 @@ func Load() (Config, error) {
 		MTLSPort:              os.Getenv("GATEWAY_MTLS_PORT"),
 		InternalPort:          os.Getenv("GATEWAY_INTERNAL_PORT"),
 		ManagementAPIURL:      os.Getenv("MANAGEMENT_API_URL"),
+		BackendServiceURL:     os.Getenv("BACKEND_SERVICE_URL"),
 		ServiceToken:          os.Getenv("GATEWAY_SERVICE_TOKEN"),
 		InternalToken:         os.Getenv("GATEWAY_INTERNAL_TOKEN"),
 		AccessCacheTTLSeconds: ttl,
 		OutboxPath:            os.Getenv("GATEWAY_OUTBOX_PATH"),
 		EventBatchSize:        batchSize,
 		EventRetryMaxSeconds:  retryMax,
+		RootCACertPath:        os.Getenv("ROOT_CA_CERT_PATH"),
+		ServerCertPath:        os.Getenv("GATEWAY_SERVER_CERT_PATH"),
+		ServerKeyPath:         os.Getenv("GATEWAY_SERVER_KEY_PATH"),
 	}
 
 	if err := cfg.validate(ttlErr, batchErr, retryErr); err != nil {
@@ -69,6 +77,9 @@ func (c Config) validate(ttlErr, batchErr, retryErr error) error {
 	if c.ManagementAPIURL == "" {
 		missing = append(missing, "MANAGEMENT_API_URL")
 	}
+	if c.BackendServiceURL == "" {
+		missing = append(missing, "BACKEND_SERVICE_URL")
+	}
 	if c.ServiceToken == "" {
 		missing = append(missing, "GATEWAY_SERVICE_TOKEN")
 	}
@@ -77,6 +88,15 @@ func (c Config) validate(ttlErr, batchErr, retryErr error) error {
 	}
 	if c.OutboxPath == "" {
 		missing = append(missing, "GATEWAY_OUTBOX_PATH")
+	}
+	if c.RootCACertPath == "" {
+		missing = append(missing, "ROOT_CA_CERT_PATH")
+	}
+	if c.ServerCertPath == "" {
+		missing = append(missing, "GATEWAY_SERVER_CERT_PATH")
+	}
+	if c.ServerKeyPath == "" {
+		missing = append(missing, "GATEWAY_SERVER_KEY_PATH")
 	}
 	if len(missing) > 0 {
 		return fmt.Errorf("config: missing required environment variables: %s", strings.Join(missing, ", "))

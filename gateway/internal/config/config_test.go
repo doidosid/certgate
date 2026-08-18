@@ -7,12 +7,16 @@ func setValidEnv(t *testing.T) {
 	t.Setenv("GATEWAY_MTLS_PORT", "8443")
 	t.Setenv("GATEWAY_INTERNAL_PORT", "8081")
 	t.Setenv("MANAGEMENT_API_URL", "http://management-api:8080")
+	t.Setenv("BACKEND_SERVICE_URL", "http://backend-service:8090")
 	t.Setenv("GATEWAY_SERVICE_TOKEN", "local-dev-gateway-token-change-me")
 	t.Setenv("GATEWAY_INTERNAL_TOKEN", "local-dev-internal-token-change-me")
 	t.Setenv("GATEWAY_ACCESS_CACHE_TTL_SECONDS", "30")
 	t.Setenv("GATEWAY_OUTBOX_PATH", "/data/outbox.db")
 	t.Setenv("GATEWAY_EVENT_BATCH_SIZE", "50")
 	t.Setenv("GATEWAY_EVENT_RETRY_MAX_SECONDS", "60")
+	t.Setenv("ROOT_CA_CERT_PATH", "/run/certgate/root-ca.crt")
+	t.Setenv("GATEWAY_SERVER_CERT_PATH", "/run/certgate/gateway.crt")
+	t.Setenv("GATEWAY_SERVER_KEY_PATH", "/run/certgate/gateway.key")
 }
 
 func TestLoad_Valid(t *testing.T) {
@@ -38,9 +42,13 @@ func TestLoad_MissingRequiredVars(t *testing.T) {
 		"GATEWAY_MTLS_PORT",
 		"GATEWAY_INTERNAL_PORT",
 		"MANAGEMENT_API_URL",
+		"BACKEND_SERVICE_URL",
 		"GATEWAY_SERVICE_TOKEN",
 		"GATEWAY_INTERNAL_TOKEN",
 		"GATEWAY_OUTBOX_PATH",
+		"ROOT_CA_CERT_PATH",
+		"GATEWAY_SERVER_CERT_PATH",
+		"GATEWAY_SERVER_KEY_PATH",
 	}
 
 	for _, missingVar := range required {
