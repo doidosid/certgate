@@ -117,4 +117,24 @@ public class SecurityEvent {
 	public UUID getDeviceId() {
 		return deviceId;
 	}
+
+	public String getCertificateSerial() {
+		return certificateSerial;
+	}
+
+	public String getClientIp() {
+		return clientIp;
+	}
+
+	public Integer getLatencyMs() {
+		return latencyMs;
+	}
+
+	public String getTraceId() {
+		return traceId;
+	}
+
+	public Instant getCreatedAt() {
+		return createdAt;
+	}
 }

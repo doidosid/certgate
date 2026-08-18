@@ -384,4 +384,5 @@ Security Event가 원본 데이터이며 SSE는 저장된 CRITICAL Event의 전�
 - <code>DEVICE_STATUS_REQUIRED</code>: Issue #3 Device 상태 변경 구현 중 추가. <code>PATCH /devices/{deviceId}/status</code> 요청의 <code>status</code>가 없음 (400)
 - <code>METHOD_NOT_ALLOWED</code>: Issue #3 공통 오류 처리 보강 중 추가. 지원하지 않는 HTTP Method (405)
 - <code>UNSUPPORTED_MEDIA_TYPE</code>: Issue #3 공통 오류 처리 보강 중 추가. 지원하지 않는 Content-Type (415)
+- <code>SECURITY_EVENT_NOT_FOUND</code>: Issue #6 Console 조회 API 구현 중 추가. <code>GET /security-events/{eventId}</code>의 <code>eventId</code>가 존재하지 않음 (404)
 - <code>CONFLICT</code>: 위 목록에 없는 DB 제약 위반(동시 요청 경합) 일반 응답 (409). Certificate 재폐기 시도도 이 Code를 사용한다
