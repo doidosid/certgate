@@ -17,6 +17,7 @@ runtime/
 bin/
 *.test
 coverage.out
+.tmp-go-cache-vet/
 
 # Java
 management-api/.gradle/
@@ -43,6 +44,9 @@ postgres-data/
 *.iml
 .DS_Store
 Thumbs.db
+
+# Serena MCP tool (local project cache/config)
+.serena/
 
 # Logs
 *.log
