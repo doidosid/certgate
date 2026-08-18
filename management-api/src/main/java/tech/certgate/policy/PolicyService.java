@@ -14,9 +14,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class PolicyService {
 
 	private final PolicyRuleRepository policyRules;
+	private final RoleRepository roles;
 
-	public PolicyService(PolicyRuleRepository policyRules) {
+	public PolicyService(PolicyRuleRepository policyRules, RoleRepository roles) {
 		this.policyRules = policyRules;
+		this.roles = roles;
 	}
 
 	public record RuleView(String httpMethod, String pathPattern, String effect, int priority) {
@@ -27,5 +29,11 @@ public class PolicyService {
 		return policyRules.findByRoleNameOrderByPriorityAsc(roleName).stream()
 				.map(rule -> new RuleView(rule.getHttpMethod(), rule.getPathPattern(), rule.getEffect(), rule.getPriority()))
 				.toList();
+	}
+
+	/** Cross-domain check for other domains (e.g. Device register/Role change) that must validate a roleName exists. */
+	@Transactional(readOnly = true)
+	public boolean roleExists(String roleName) {
+		return roles.existsById(roleName);
 	}
 }

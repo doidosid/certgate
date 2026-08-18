@@ -16,7 +16,6 @@ import tech.certgate.common.ApiException;
 import tech.certgate.common.PageResponse;
 import tech.certgate.enrollment.EnrollmentTokenService;
 import tech.certgate.policy.PolicyService;
-import tech.certgate.policy.RoleRepository;
 import tech.certgate.securityevent.SecurityEventService;
 
 @Service
@@ -26,7 +25,6 @@ public class DeviceService {
 	private static final String NO_QUERY_FILTER = "";
 
 	private final DeviceRepository devices;
-	private final RoleRepository roles;
 	private final CertificateService certificateService;
 	private final PolicyService policyService;
 	private final SecurityEventService securityEventService;
@@ -34,11 +32,10 @@ public class DeviceService {
 	private final Clock clock;
 
 	public DeviceService(
-			DeviceRepository devices, RoleRepository roles, CertificateService certificateService,
+			DeviceRepository devices, CertificateService certificateService,
 			PolicyService policyService, SecurityEventService securityEventService,
 			EnrollmentTokenService enrollmentTokenService, Clock clock) {
 		this.devices = devices;
-		this.roles = roles;
 		this.certificateService = certificateService;
 		this.policyService = policyService;
 		this.securityEventService = securityEventService;
@@ -60,7 +57,7 @@ public class DeviceService {
 		if (devices.existsByDeviceKey(request.deviceKey())) {
 			throw new ApiException(HttpStatus.CONFLICT, "DEVICE_KEY_DUPLICATE", "이미 등록된 Device Key입니다.");
 		}
-		if (!roles.existsById(request.roleName())) {
+		if (!policyService.roleExists(request.roleName())) {
 			throw new ApiException(HttpStatus.BAD_REQUEST, "ROLE_NOT_FOUND", "존재하지 않는 Role입니다.");
 		}
 
@@ -163,7 +160,7 @@ public class DeviceService {
 		if (roleName == null || roleName.isBlank()) {
 			throw new ApiException(HttpStatus.BAD_REQUEST, "ROLE_NAME_REQUIRED", "roleName은 필수입니다.");
 		}
-		if (!roles.existsById(roleName)) {
+		if (!policyService.roleExists(roleName)) {
 			throw new ApiException(HttpStatus.BAD_REQUEST, "ROLE_NOT_FOUND", "존재하지 않는 Role입니다.");
 		}
 		Device device = requireDeviceEntity(deviceId);
@@ -186,7 +183,7 @@ public class DeviceService {
 	 */
 	@Transactional
 	public void updateLastSeenIfNewer(UUID deviceId, Instant occurredAt) {
-		devices.findById(deviceId).ifPresent(device -> device.updateLastSeenIfNewer(occurredAt));
+		devices.updateLastSeenIfNewer(deviceId, occurredAt);
 	}
 
 	private Device requireDeviceEntity(UUID deviceId) {

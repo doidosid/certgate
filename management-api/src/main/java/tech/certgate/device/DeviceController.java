@@ -31,7 +31,7 @@ public class DeviceController {
 
 	private static final int DEFAULT_PAGE_SIZE = 20;
 	private static final int MAX_PAGE_SIZE = 100;
-	private static final Sort DEFAULT_SORT = Sort.by("createdAt").descending();
+	private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by("id"));
 	private static final Set<String> SORTABLE_FIELDS = Set.of("createdAt", "name", "deviceKey", "roleName", "status", "lastSeenAt");
 
 	private final DeviceService deviceService;
