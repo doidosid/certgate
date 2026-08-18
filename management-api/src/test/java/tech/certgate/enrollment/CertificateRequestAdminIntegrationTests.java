@@ -6,7 +6,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.ResponseEntity;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
@@ -93,6 +98,56 @@ class CertificateRequestAdminIntegrationTests {
 
 		assertThat(approve.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
 		assertThat(approve.getBody().get("code")).isEqualTo("CERTIFICATE_REQUEST_NOT_PENDING");
+	}
+
+	/**
+	 * Regression test for the Codex 리뷰 PR #26 Critical finding: concurrent
+	 * approve+reject on the same PENDING request must not both succeed. Without
+	 * the row lock in {@code requireRequestForUpdate}, the losing decision could
+	 * commit after the winner already signed and stored a Certificate, leaving
+	 * a REJECTED request with a real, downloadable Certificate.
+	 */
+	@Test
+	void approveAndReject_concurrent_onlyOneSucceeds() throws Exception {
+		String requestId = submitCsrFor("sensor-approve-reject-race-01");
+		CyclicBarrier barrier = new CyclicBarrier(2);
+		ExecutorService executor = Executors.newFixedThreadPool(2);
+		try {
+			var approveFuture = CompletableFuture.supplyAsync(() -> decisionAfterBarrier(requestId, "approve", barrier), executor);
+			var rejectFuture = CompletableFuture.supplyAsync(() -> decisionAfterBarrier(requestId, "reject", barrier), executor);
+			var responses = List.of(approveFuture.get(), rejectFuture.get());
+
+			assertThat(responses).extracting(r -> r.getStatusCode())
+					.containsExactlyInAnyOrder(HttpStatus.OK, HttpStatus.CONFLICT);
+
+			var detail = restTemplate.getForEntity("/api/v1/certificate-requests/" + requestId, Map.class);
+			String finalStatus = (String) detail.getBody().get("status");
+			assertThat(finalStatus).isIn("APPROVED", "REJECTED");
+
+			var certificatesResponse = restTemplate.getForEntity(
+					"/api/v1/certificates?deviceId=" + detail.getBody().get("deviceId"), Map.class);
+			@SuppressWarnings("unchecked")
+			List<Map<String, Object>> certificates = (List<Map<String, Object>>) certificatesResponse.getBody().get("content");
+
+			// The invariant this fix protects: a REJECTED request must never have
+			// a real Certificate row, and an APPROVED one must have exactly one.
+			if ("REJECTED".equals(finalStatus)) {
+				assertThat(certificates).isEmpty();
+			} else {
+				assertThat(certificates).hasSize(1);
+			}
+		} finally {
+			executor.shutdownNow();
+		}
+	}
+
+	private ResponseEntity<Map> decisionAfterBarrier(String requestId, String decision, CyclicBarrier barrier) {
+		try {
+			barrier.await();
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+		return restTemplate.postForEntity("/api/v1/certificate-requests/" + requestId + "/" + decision, null, Map.class);
 	}
 
 	@Test

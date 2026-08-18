@@ -82,6 +82,13 @@ public class EnrollmentService {
 	public CertificateDownloadResponse download(String bearerToken, UUID requestId) {
 		EnrollmentCredential credential = tokenService.resolve(bearerToken);
 		CertificateRequest request = findOwnedRequest(requestId, credential.getDeviceId());
+		// Defense in depth: a Certificate row should only ever exist for an
+		// APPROVED request (approve/reject are mutually exclusive under the
+		// PESSIMISTIC_WRITE lock below), but this guards against that
+		// invariant ever slipping instead of trusting row presence alone.
+		if (request.getStatus() != CertificateRequestStatus.APPROVED) {
+			throw new ApiException(HttpStatus.NOT_FOUND, "CERTIFICATE_NOT_FOUND", "아직 발급되지 않았습니다.");
+		}
 		Certificate certificate = certificates.findByRequestId(request.getId())
 				.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CERTIFICATE_NOT_FOUND", "아직 발급되지 않았습니다."));
 
@@ -92,7 +99,7 @@ public class EnrollmentService {
 
 	@Transactional
 	public CertificateRequestResponse approve(UUID requestId, String decisionNote) {
-		CertificateRequest request = requireRequest(requestId);
+		CertificateRequest request = requireRequestForUpdate(requestId);
 		if (request.getStatus() != CertificateRequestStatus.PENDING) {
 			throw new ApiException(HttpStatus.CONFLICT, "CERTIFICATE_REQUEST_NOT_PENDING", "PENDING 상태의 요청만 승인할 수 있습니다.");
 		}
@@ -124,7 +131,7 @@ public class EnrollmentService {
 
 	@Transactional
 	public CertificateRequestResponse reject(UUID requestId, String decisionNote) {
-		CertificateRequest request = requireRequest(requestId);
+		CertificateRequest request = requireRequestForUpdate(requestId);
 		if (request.getStatus() != CertificateRequestStatus.PENDING) {
 			throw new ApiException(HttpStatus.CONFLICT, "CERTIFICATE_REQUEST_NOT_PENDING", "PENDING 상태의 요청만 거절할 수 있습니다.");
 		}
@@ -135,6 +142,12 @@ public class EnrollmentService {
 
 	private CertificateRequest requireRequest(UUID requestId) {
 		return certificateRequests.findById(requestId)
+				.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CERTIFICATE_REQUEST_NOT_FOUND", "요청을 찾을 수 없습니다."));
+	}
+
+	/** Locked lookup for the approve/reject decision Transactions — see CertificateRequestRepository#findByIdForUpdate. */
+	private CertificateRequest requireRequestForUpdate(UUID requestId) {
+		return certificateRequests.findByIdForUpdate(requestId)
 				.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CERTIFICATE_REQUEST_NOT_FOUND", "요청을 찾을 수 없습니다."));
 	}
 
