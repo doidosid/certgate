@@ -262,7 +262,7 @@ func (h *accessHandler) recordEvent(p event.Params) {
 	ctx, cancel := context.WithTimeout(context.Background(), outboxEnqueueTimeout)
 	defer cancel()
 	if err := h.store.Enqueue(ctx, evt); err != nil {
-		log.Printf("gateway: enqueue security event failed: %v (reasonCode=%s traceId=%s)", err, p.ReasonCode, p.TraceID)
+		logOutboxFailure(h.clock(), p.TraceID, p.ReasonCode, err)
 	}
 }
 
@@ -305,6 +305,34 @@ type systemLogLine struct {
 	Severity   string `json:"severity"`
 	Decision   string `json:"decision"`
 	ReasonCode string `json:"reasonCode"`
+}
+
+// outboxFailureLogLine reports a Security Event that could not be written to
+// the Durable Outbox. docs/architecture.md "장애 원칙" requires this failure to
+// be recorded in structured form and the Event not to be treated as preserved,
+// which outboxPersisted=false states explicitly. The error text is a SQLite
+// message, never Event content, so nothing from docs/security-design.md §10's
+// "기록 금지" list reaches the log.
+type outboxFailureLogLine struct {
+	Timestamp       string `json:"timestamp"`
+	Level           string `json:"level"`
+	Service         string `json:"service"`
+	TraceID         string `json:"traceId,omitempty"`
+	ReasonCode      string `json:"reasonCode"`
+	OutboxPersisted bool   `json:"outboxPersisted"`
+	Error           string `json:"error"`
+}
+
+func logOutboxFailure(now time.Time, traceID, reasonCode string, err error) {
+	logJSON(outboxFailureLogLine{
+		Timestamp:       now.UTC().Format(time.RFC3339),
+		Level:           "ERROR",
+		Service:         "gateway",
+		TraceID:         traceID,
+		ReasonCode:      reasonCode,
+		OutboxPersisted: false,
+		Error:           err.Error(),
+	})
 }
 
 func logLevelFor(decision string) string {

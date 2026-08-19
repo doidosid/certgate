@@ -27,6 +27,24 @@ type Recorder interface {
 	Enqueue(ctx context.Context, evt event.Event) error
 }
 
+// RecordError reports a CRITICAL condition whose Security Event could not be
+// written to the Outbox. It carries the Reason Code and Trace ID so the caller
+// can log the failure in structured form: docs/architecture.md "장애 원칙"
+// requires a failed Outbox write to be logged and the Event not to be treated
+// as preserved, and until the retry succeeds that log line is the only trace
+// of the condition.
+type RecordError struct {
+	ReasonCode string
+	TraceID    string
+	Err        error
+}
+
+func (e *RecordError) Error() string {
+	return fmt.Sprintf("outbox: record %s security event: %v", e.ReasonCode, e.Err)
+}
+
+func (e *RecordError) Unwrap() error { return e.Err }
+
 // condition tracks one Outbox threshold across checks.
 //
 // firing means a breach has been reported and has not recovered yet; it is
@@ -125,10 +143,9 @@ func (m *Monitor) Check(ctx context.Context) ([]event.Event, error) {
 			TraceID:    uuid.NewString(),
 		})
 		if err := m.store.Enqueue(ctx, evt); err != nil {
-			// The Reason Code belongs in the error: the operational log is the
-			// only trace of this CRITICAL condition until the write succeeds,
-			// and Store.Enqueue's own error names only the event id.
-			return produced, fmt.Errorf("outbox: record %s security event: %w", c.reasonCode, err)
+			// Store.Enqueue's own error names only the event id, so the
+			// condition is carried out separately for the structured log.
+			return produced, &RecordError{ReasonCode: c.reasonCode, TraceID: evt.TraceID, Err: err}
 		}
 		c.unsent = false
 		produced = append(produced, evt)

@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/url"
 	"os"
@@ -68,6 +69,14 @@ func main() {
 	})
 
 	go monitor.Run(ctx, monitorCheckInterval, logSystemEvent, func(err error) {
+		// A CRITICAL Event that could not be stored gets the structured
+		// Outbox-failure line docs/architecture.md "장애 원칙" requires; a read
+		// failure is an operational problem with no Event behind it.
+		var recordErr *outbox.RecordError
+		if errors.As(err, &recordErr) {
+			logOutboxFailure(time.Now(), recordErr.TraceID, recordErr.ReasonCode, recordErr.Err)
+			return
+		}
 		log.Printf("gateway: outbox monitor error: %v", err)
 	})
 

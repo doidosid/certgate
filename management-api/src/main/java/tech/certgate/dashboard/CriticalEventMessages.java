@@ -5,14 +5,15 @@ import java.util.Map;
 /**
  * User-facing Korean text for a CRITICAL Security Event's Reason Code,
  * separate from the internal Reason Code itself (development-guide.md
- * "사용자에게 보여줄 Message와 내부 Reason Code를 분리한다"). Only
- * {@code CERTIFICATE_REVOKED} is currently ever produced with
- * {@code severity=CRITICAL} (gateway/internal/event/event.go severityFor) —
- * the other entries here are forward-looking for Reason Codes
- * docs/api-spec.md §10 lists as CRITICAL conditions but that no producer
- * emits yet (CA 서명 실패, Outbox 적체·지연); the fallback keeps this mapper
- * from silently going stale if one of them starts being emitted before this
- * map is updated.
+ * "사용자에게 보여줄 Message와 내부 Reason Code를 분리한다").
+ *
+ * <p>All four entries are emitted today: {@code CERTIFICATE_REVOKED} by the
+ * Gateway's access decisions, {@code CA_SIGNING_FAILED} by this service's
+ * EnrollmentService, and the two Outbox codes by the Gateway's Outbox Monitor
+ * (gateway/internal/outbox/monitor.go). The remaining CRITICAL condition of
+ * docs/security-design.md §9 — repeated Invalid Certificate from one IP — has
+ * no producer yet. The fallback keeps this mapper from silently going stale if
+ * a new Reason Code starts being emitted before this map is updated.
  */
 final class CriticalEventMessages {
 
