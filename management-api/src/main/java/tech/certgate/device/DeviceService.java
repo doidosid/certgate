@@ -183,6 +183,15 @@ public class DeviceService {
 		return new EnrollmentTokenResponse(token.rawToken(), token.expiresAt());
 	}
 
+	/** Dashboard counts (docs/api-spec.md §9). */
+	@Transactional(readOnly = true)
+	public DeviceCounts countByStatus() {
+		return new DeviceCounts(devices.countByStatus(DeviceStatus.ACTIVE), devices.count());
+	}
+
+	public record DeviceCounts(long active, long total) {
+	}
+
 	/**
 	 * Best-effort bookkeeping, not a security control (docs/data-model.md
 	 * "마지막 허용 요청 시각") — a missing Device or a stale/out-of-order

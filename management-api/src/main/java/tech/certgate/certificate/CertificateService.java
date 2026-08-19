@@ -53,6 +53,18 @@ public class CertificateService {
 		return CertificateResponse.from(require(certificateId), clock.instant());
 	}
 
+	/** Dashboard counts (docs/api-spec.md §9), using the same 7-day window as {@link #list}. */
+	@Transactional(readOnly = true)
+	public ValidCounts countValidAndExpiringSoon() {
+		Instant now = clock.instant();
+		// An aggregate without GROUP BY always yields exactly one row.
+		Object[] row = certificates.countValidAndExpiringSoon(now, now.plus(EXPIRING_SOON_WINDOW)).get(0);
+		return new ValidCounts(((Number) row[0]).longValue(), ((Number) row[1]).longValue());
+	}
+
+	public record ValidCounts(long valid, long expiringSoon) {
+	}
+
 	@Transactional(readOnly = true)
 	public String downloadPem(UUID certificateId) {
 		return require(certificateId).getCertificatePem();

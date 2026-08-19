@@ -22,6 +22,23 @@ public interface CertificateRepository extends JpaRepository<Certificate, UUID> 
 	Optional<Certificate> findFirstByDeviceIdOrderByIssuedAtDesc(UUID deviceId);
 
 	/**
+	 * Dashboard counts for the two healthy buckets (docs/api-spec.md §9). Status
+	 * is computed from revokedAt/notAfter rather than stored, exactly as in
+	 * {@link #search}, so the same boundaries apply: EXPIRING_SOON is within
+	 * expiringSoonThreshold of notAfter, VALID is everything beyond it. Counting
+	 * in one query keeps the two numbers consistent with each other — two
+	 * separate queries could straddle a certificate expiring between them.
+	 */
+	@Query("""
+			SELECT
+				COUNT(CASE WHEN c.revokedAt IS NULL AND c.notAfter > :expiringSoonThreshold THEN 1 END),
+				COUNT(CASE WHEN c.revokedAt IS NULL AND c.notAfter >= :now AND c.notAfter <= :expiringSoonThreshold THEN 1 END)
+			FROM Certificate c
+			""")
+	List<Object[]> countValidAndExpiringSoon(
+			@Param("now") Instant now, @Param("expiringSoonThreshold") Instant expiringSoonThreshold);
+
+	/**
 	 * Batch lookup for the Device list view; a Device can have more than one
 	 * Certificate row over its lifetime (reissued after revoke), so callers
 	 * must reduce this to one-per-deviceId (most recent first) themselves.

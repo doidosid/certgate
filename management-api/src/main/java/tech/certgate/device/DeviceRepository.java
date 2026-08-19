@@ -14,6 +14,8 @@ public interface DeviceRepository extends JpaRepository<Device, UUID> {
 
 	boolean existsByDeviceKey(String deviceKey);
 
+	long countByStatus(DeviceStatus status);
+
 	Optional<Device> findByDeviceKey(String deviceKey);
 
 	/**

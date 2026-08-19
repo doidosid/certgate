@@ -16,6 +16,30 @@ public interface SecurityEventRepository extends JpaRepository<SecurityEvent, UU
 	/** Most recent Events for a Device, used by the Device detail view (docs/api-spec.md §3). */
 	List<SecurityEvent> findTop10ByDeviceIdOrderByOccurredAtDesc(UUID deviceId);
 
+	long countBySeverityAndOccurredAtGreaterThanEqual(String severity, Instant from);
+
+	/** Dashboard "최근 CRITICAL Event" 목록 (docs/api-spec.md §9). */
+	List<SecurityEvent> findTop10BySeverityOrderByOccurredAtDesc(String severity);
+
+	/**
+	 * Hourly ALLOWED/DENIED counts for the Dashboard request chart
+	 * (docs/api-spec.md §9). Bucketing happens in the DB so the whole range does
+	 * not have to be pulled into memory; {@code date_trunc} is Postgres-specific,
+	 * which is acceptable because Flyway Migration already ties this service to
+	 * Postgres. Hours with no traffic are simply absent — the caller decides
+	 * whether to fill them.
+	 */
+	@Query(value = """
+			SELECT date_trunc('hour', occurred_at) AS bucket,
+				COUNT(*) FILTER (WHERE decision = 'ALLOWED') AS allowed,
+				COUNT(*) FILTER (WHERE decision = 'DENIED') AS denied
+			FROM security_event
+			WHERE occurred_at >= :from AND occurred_at < :to
+			GROUP BY bucket
+			ORDER BY bucket
+			""", nativeQuery = true)
+	List<Object[]> countDecisionsByHour(@Param("from") Instant from, @Param("to") Instant to);
+
 	/**
 	 * docs/api-spec.md §9 Console 검색. has-flag + dummy-value pattern (never a
 	 * bare {@code :param IS NULL}) so every bind parameter is typed by a real

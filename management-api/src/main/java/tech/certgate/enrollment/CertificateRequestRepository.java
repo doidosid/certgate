@@ -14,6 +14,8 @@ public interface CertificateRequestRepository extends JpaRepository<CertificateR
 
 	boolean existsByDeviceIdAndStatus(UUID deviceId, CertificateRequestStatus status);
 
+	long countByStatus(CertificateRequestStatus status);
+
 	Optional<CertificateRequest> findByIdAndDeviceId(UUID id, UUID deviceId);
 
 	/**
