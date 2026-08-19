@@ -55,11 +55,17 @@ export default function DevicesPage() {
 				roleName={roleName}
 				onChange={(key, value) => setParam(key, value)}
 			/>
+			{/*
+			 * isEmpty를 content.length로 판단하면, 범위를 벗어난 page(공유 URL의
+			 * ?page=1 등)에서 표가 통째로 빈 문구로 바뀌며 페이지 이동 컨트롤까지
+			 * 사라져 첫 페이지로 돌아올 방법이 없어진다. 결과가 정말 0건일 때만
+			 * 빈 상태로 두고, 그 외에는 표와 pagination을 유지한다.
+			 */}
 			<QueryState
 				isLoading={devices.isPending}
 				isError={devices.isError}
 				error={devices.error}
-				isEmpty={devices.data?.content.length === 0}
+				isEmpty={devices.data?.totalElements === 0}
 				emptyMessage="조건에 맞는 디바이스가 없습니다."
 				onRetry={() => devices.refetch()}
 			>

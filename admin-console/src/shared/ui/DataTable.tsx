@@ -66,8 +66,11 @@ export default function DataTable<T>({
 						{rows.map((row) => (
 							<TableRow
 								key={getRowId(row)}
-								hover={hasRowAction}
-								sx={{ cursor: hasRowAction ? "pointer" : "default" }}
+								// 행 전체가 클릭 대상인 것은 onRowClick일 때뿐이다. getRowHref는
+								// 첫 열의 링크만 이동시키므로, 행 전체에 pointer를 주면 실제로
+								// 눌리는 범위와 보이는 범위가 어긋난다.
+								hover={Boolean(onRowClick)}
+								sx={{ cursor: onRowClick ? "pointer" : "default" }}
 								onClick={onRowClick ? () => onRowClick(row) : undefined}
 							>
 								{columns.map((column, columnIndex) => (

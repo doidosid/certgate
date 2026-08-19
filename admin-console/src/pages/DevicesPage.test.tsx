@@ -42,6 +42,23 @@ describe("DevicesPage", () => {
 		expect(await screen.findByText("조건에 맞는 디바이스가 없습니다.")).toBeInTheDocument();
 	});
 
+	/**
+	 * 공유 URL의 ?page=1처럼 범위를 벗어난 페이지에서는 content가 비어도 결과 자체는
+	 * 있다. 이때 표를 빈 문구로 통째로 바꾸면 페이지 이동 컨트롤까지 사라져 첫
+	 * 페이지로 돌아올 방법이 없어진다(Codex 리뷰 PR #44 Medium).
+	 */
+	it("keeps pagination on an out-of-range page so the user can go back", async () => {
+		mockServer.use(
+			http.get("/api/v1/devices", () =>
+				HttpResponse.json({ content: [], page: 1, size: 20, totalElements: 2, totalPages: 1 }),
+			),
+		);
+		renderAt("/devices?page=1");
+
+		expect(await screen.findByRole("button", { name: /이전 페이지|Go to previous page/i })).toBeInTheDocument();
+		expect(screen.queryByText("조건에 맞는 디바이스가 없습니다.")).not.toBeInTheDocument();
+	});
+
 	it("shows the server error message and traceId when the list fails", async () => {
 		mockServer.use(
 			http.get("/api/v1/devices", () =>
@@ -57,6 +74,30 @@ describe("DevicesPage", () => {
 	});
 
 	/** 목록에서 상세로 가는 경로는 실제 링크여야 새 탭 열기·가운데 클릭이 동작한다. */
+	/** Role 목록만 실패해도 Device 목록은 정상이다. 필터가 왜 안 되는지 알려줘야 한다. */
+	it("surfaces a Role lookup failure instead of silently dropping the filter", async () => {
+		mockServer.use(
+			http.get("/api/v1/roles", () =>
+				HttpResponse.json(
+					{ code: "INTERNAL_ERROR", message: "실패", traceId: "t", fieldErrors: [] },
+					{ status: 500 },
+				),
+			),
+		);
+		renderAt("/devices");
+
+		expect(await screen.findByText("Role 목록을 불러오지 못했습니다.")).toBeInTheDocument();
+		// 목록 자체는 계속 보여야 한다.
+		expect(screen.getByText("sensor-floor-01")).toBeInTheDocument();
+	});
+
+	/** URL에 있던 roleName이 목록 로딩 전에도 select에 남아 있어야 화면과 요청이 어긋나지 않는다. */
+	it("keeps the roleName from the URL selectable before roles load", async () => {
+		renderAt("/devices?roleName=SENSOR");
+
+		expect(await screen.findByDisplayValue("SENSOR")).toBeInTheDocument();
+	});
+
 	it("links each row to its detail page", async () => {
 		renderAt("/devices");
 
