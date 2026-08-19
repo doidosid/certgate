@@ -4277,7 +4277,7 @@ Task 3의 Commit에 이 문서 변경을 함께 포함한다 — 코드 결정�
 
 부수적으로 등록된 Issue: **#36** (Gateway `/healthz`가 Management API readiness를 반영하지 않음), **#39** (매핑되지 않은 경로가 404 대신 500), **#42** (Gateway가 handshake에서 Intermediate를 보내지 않음). 모두 이 계획 범위 밖이다.
 
-**다음 작업은 Task 3(API Type·HTTP Client)이다.** 서버 API는 Task 2·12까지 준비됐으므로 이제 Console 쪽이 전부 남았다. Dashboard 화면(Task 13)을 먼저 하고 싶더라도 바로는 못 한다 — Task 13은 Task 3의 `DashboardSummary` Type·`apiGet`, Task 4의 MSW Fixture, Task 5의 `QueryState`·`StatusChip`, Task 8의 `severityLabel`을 소비한다. 현재 `admin-console/src`에는 `shared/api/env.ts`와 `shared/ui/AppLayout.tsx`, Placeholder Page만 있어 그중 어느 것도 없다.
+**다음 작업은 Task 3(API Type·HTTP Client)이다.** 서버 API는 Task 2·12까지 준비됐으므로 이제 Console 쪽이 전부 남았다. Dashboard 화면(Task 13)을 먼저 하고 싶더라도 바로는 못 한다 — Task 13은 Task 3의 `DashboardSummary` Type·`apiGet`, Task 4의 MSW Fixture, Task 5의 `QueryState`·`StatusChip`, Task 8의 `severityLabel`을 소비한다. 현재 `admin-console/src`에 그 선행 산출물이 하나도 없다 — Vite scaffold와 `app/{router,routes,queryClient}`, `shared/api/env.ts`, `shared/ui/AppLayout.tsx`, Placeholder Page는 있지만 `shared/api/{types,client,ApiError}.ts`·`mocks/`·`features/`·`QueryState`·`StatusChip`은 없다.
 
 **PR #37은 선행 조건이 아니다(2026-08-19 정정).** 이전 판에 "PR #37·#38을 먼저 merge하고 시작한다"고 적혀 있었으나, macOS에서 실측한 결과 **PR 적용 전 `main`의 `issue-gateway-cert.sh`가 정상 동작한다** — Darwin 25.5 / OpenSSL 3.6.3에서 `test_issue_gateway_cert.sh`가 clamp 케이스 포함 PASS했고 BSD `date -j -f` fallback이 실제로 동작했다. 게다가 현재 PR #37에는 회귀가 있다: 만료까지 1일 미만 남은 CA에서 `main`은 조기 거부하는데 PR은 `-days 0`으로 인증서를 만든 뒤 검증에서 실패한다(직접 재현, PR #37 코멘트 참고). Console 작업을 우선하고 이 PR은 나중에 수정 후 merge한다.
 
