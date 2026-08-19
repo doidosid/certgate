@@ -4261,21 +4261,23 @@ Task 3의 Commit에 이 문서 변경을 함께 포함한다 — 코드 결정�
 
 이 계획은 Windows PC에서 착수했고 이후 macOS에서 이어간다. 저장소에 없는 것(gitignore 대상)이 있어서 새 기기에서는 아래 준비가 필요하다.
 
+> **이 절이 계획 본문보다 우선한다.** 계획 본문(특히 "서버 API 현황", 각 Task의 PR 묶음, Compose·SSE 관련 서술)은 2026-08-19 착수 시점 기준이라 이후 진행과 어긋난 곳이 있다. 예를 들어 본문은 `GET /roles`·`GET /dashboard/summary`를 미구현으로, Task 2와 12를 하나의 "PR 2"로 적지만 실제로는 각각 PR #38·#40으로 나뉘어 merge됐다. 본문과 이 절이 다르면 **이 절과 실제 코드**를 믿는다.
+
 ### 1. 진행 상황 — 어디까지 됐나
 
 | 항목 | 상태 |
 |---|---|
 | Task 1 same-origin `/api` proxy | **merge 완료** (PR #33) |
 | Issue #34 Compose가 Gateway를 띄우게 함 | **merge 완료** (PR #35) |
-| Task 2 `GET /roles` + Task 16 JSON 구조화 로그 | **merge 완료** (PR #38, 2026-08-19) |
-| Task 12 `GET /dashboard/summary` | **PR #40** — Codex 리뷰 반영 후 merge 대기 |
+| Task 2 `GET /roles` + Task 16 JSON 구조화 로그 | **merge 완료** (PR #38, 2026-08-20) |
+| Task 12 `GET /dashboard/summary` | **merge 완료** (PR #40, 2026-08-20) |
 | PKI clamp 판단 이식성 | **PR #37 보류** — 아래 참고. 선행 조건 아님 |
-| Task 13 Dashboard 화면 | **다음 착수 지점** |
-| Task 3 이후 Console 전체 | 미착수 |
+| Task 3 API Type·HTTP Client | **다음 착수 지점** |
+| Task 4·5·6~11·13~15 Console 전체 | 미착수 |
 
-부수적으로 등록된 Issue: **#36** (Gateway `/healthz`가 Management API readiness를 반영하지 않음), **#39** (매핑되지 않은 경로가 404 대신 500). 둘 다 이 계획 범위 밖이다.
+부수적으로 등록된 Issue: **#36** (Gateway `/healthz`가 Management API readiness를 반영하지 않음), **#39** (매핑되지 않은 경로가 404 대신 500), **#42** (Gateway가 handshake에서 Intermediate를 보내지 않음). 모두 이 계획 범위 밖이다.
 
-**다음 작업은 Task 13(Dashboard 화면)이다.** PR #40이 merge되면 바로 시작할 수 있다.
+**다음 작업은 Task 3(API Type·HTTP Client)이다.** 서버 API는 Task 2·12까지 준비됐으므로 이제 Console 쪽이 전부 남았다. Dashboard 화면(Task 13)을 먼저 하고 싶더라도 바로는 못 한다 — Task 13은 Task 3의 `DashboardSummary` Type·`apiGet`, Task 4의 MSW Fixture, Task 5의 `QueryState`·`StatusChip`, Task 8의 `severityLabel`을 소비한다. 현재 `admin-console/src`에는 `shared/api/env.ts`와 `shared/ui/AppLayout.tsx`, Placeholder Page만 있어 그중 어느 것도 없다.
 
 **PR #37은 선행 조건이 아니다(2026-08-19 정정).** 이전 판에 "PR #37·#38을 먼저 merge하고 시작한다"고 적혀 있었으나, macOS에서 실측한 결과 **PR 적용 전 `main`의 `issue-gateway-cert.sh`가 정상 동작한다** — Darwin 25.5 / OpenSSL 3.6.3에서 `test_issue_gateway_cert.sh`가 clamp 케이스 포함 PASS했고 BSD `date -j -f` fallback이 실제로 동작했다. 게다가 현재 PR #37에는 회귀가 있다: 만료까지 1일 미만 남은 CA에서 `main`은 조기 거부하는데 PR은 `-days 0`으로 인증서를 만든 뒤 검증에서 실패한다(직접 재현, PR #37 코멘트 참고). Console 작업을 우선하고 이 PR은 나중에 수정 후 merge한다.
 
@@ -4290,7 +4292,9 @@ Task 3의 Commit에 이 문서 변경을 함께 포함한다 — 코드 결정�
 
 **`.env`** (gitignore 대상). Compose 실행에는 `--env-file .env.example`을 그대로 쓸 수 있어서 필수는 아니다. 만들 경우 `VITE_API_BASE_URL`·`VITE_SSE_URL`을 상대 경로(`/api/v1`, `/api/v1/security-events/stream`)로 둬야 한다. 절대 URL이면 cross-origin이 되고 Management API에는 CORS 설정이 없어 모든 요청이 차단된다.
 
-> **이미 있는 `.env`가 더 위험하다(2026-08-19 실측).** macOS 기기에는 Task 1(PR #33) 이전에 만들어진 `.env`가 남아 있었고, 그 안의 두 VITE 값이 `http://localhost:8080/...` 절대 URL이었다. `compose.yaml`은 이 값을 **빌드 인자로 Console 이미지에 굽기** 때문에 그대로 뒀으면 화면에서 모든 API 호출이 막혔을 것이다. 새 기기에서는 `.env`가 없는지뿐 아니라, 있다면 `diff .env .env.example`로 stale 여부를 먼저 확인한다.
+> **이미 있는 `.env`가 stale할 수 있다(2026-08-19 실측).** macOS 기기에는 Task 1(PR #33) 이전에 만들어진 `.env`가 남아 있었고, 그 안의 두 VITE 값이 `http://localhost:8080/...` 절대 URL이었다. `compose.yaml`은 이 값을 **빌드 인자로 Console 이미지에 굽는다.**
+>
+> 다만 아래 4번처럼 `--env-file .env.example`을 붙이면 Compose는 기본 `.env` 대신 그 파일을 쓰므로 stale `.env`의 영향을 받지 않는다(`docker compose ... --env-file .env.example config --environment`로 확인 가능). **위험한 것은 `--env-file`을 빼고 `docker compose ... up`을 실행하는 경우다.** shell에 export된 값은 `--env-file`보다 우선하므로, 실제로 어떤 값이 들어가는지 확실히 하려면 위 `config --environment`로 확인한다.
 
 **`admin-console/node_modules`**. `cd admin-console && npm ci`.
 
@@ -4301,9 +4305,9 @@ Task 3의 Commit에 이 문서 변경을 함께 포함한다 — 코드 결정�
 | | 내용 |
 |---|---|
 | **Key 권한 검사** | `pki/scripts/test_*.sh`는 Windows에서 SKIP했지만 **macOS에서는 실제로 검사한다**(Darwin 분기). `chmod 600`이 정상 반영되므로 통과해야 한다. |
-| **`date` 호출** | `issue-gateway-cert.sh`의 정상 경로는 `openssl -checkend`만 쓰므로 `date`를 타지 않는다(PR #37). clamp 경로(만료 임박 CA)의 BSD `date -j -f`는 **macOS 미검증**이다. |
+| **`date` 호출** | **현재 `main`은 정상·clamp 경로 모두 BSD `date -j -f` fallback을 타며, macOS에서 clamp 케이스 포함 검증됐다**(2026-08-19 실측 정정 — 이전 판의 "정상 경로는 `openssl -checkend`만 쓴다"는 미병합 PR #37의 동작이었다). PR #37이 merge되면 정상 경로만 `openssl -checkend`로 바뀐다. |
 | **줄바꿈** | Windows 작업 트리는 CRLF였고 Git이 LF로 정규화해 커밋한다. macOS 체크아웃은 LF라 Shell Script가 그대로 실행된다. Windows에서는 컨테이너에 올릴 때 `set: pipefail: invalid option name`이 났는데 macOS에서는 그 문제가 없다. |
-| **`curl`** | Windows curl은 schannel을 써서 revocation 검사에서 먼저 실패해 mTLS 거부를 확인할 수 없었다. **macOS 시스템 curl(8.7.1)도 SecureTransport 백엔드라 `--cacert`가 기대대로 동작하지 않는다**(2026-08-19 실측 정정 — "macOS는 대개 OpenSSL/LibreSSL"이라는 앞선 서술은 이 기기에서 사실이 아니었다). mTLS 거부 자체는 `curl -k https://127.0.0.1:8443/heartbeat`로 확인된다(LibreSSL error 1116 = certificate required). 서버 인증서 체인까지 검증하려면 `openssl s_client -connect 127.0.0.1:8443 -CAfile pki/runtime/root-ca.crt`를 쓴다. |
+| **`curl`** | Windows curl은 schannel을 써서 revocation 검사에서 먼저 실패해 mTLS 거부를 확인할 수 없었다. macOS 시스템 curl(8.7.1)은 SecureTransport 백엔드다(`curl --version`으로 확인). **`--cacert root-ca.crt`가 실패하는 진짜 원인은 백엔드가 아니라 Gateway가 handshake에서 Intermediate를 보내지 않는 것이다 — Issue #42.** `openssl s_client -showcerts`로 인증서가 1장만 오는 것을 확인했고, root만 신뢰하면 `Verify return code: 21`이 난다. Issue #42가 고쳐지기 전까지 서버 인증서 검증은 `-CAfile pki/runtime/ca-chain.crt`(intermediate 포함)로만 통과한다. mTLS의 Client 인증서 요구 자체를 보려면 `curl -k https://127.0.0.1:8443/heartbeat`를 쓴다(서버 신원 검증이 아니라 거부 동작 확인용이다). |
 | **Docker mount 경로** | `compose.yaml`의 bind mount는 compose 파일 기준 상대 경로(`../pki/runtime/...`)라 OS와 무관하다. |
 
 ### 4. 새 기기 첫 실행 점검
