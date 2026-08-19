@@ -1,16 +1,13 @@
 package tech.certgate.dashboard;
 
-import jakarta.persistence.EntityManager;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.Optional;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import tech.certgate.certificate.CertificateService;
 import tech.certgate.common.ApiException;
 import tech.certgate.device.DeviceService;
@@ -21,11 +18,18 @@ import tech.certgate.securityevent.SecurityEventService;
  * Assembles the Console Dashboard summary (docs/api-spec.md §9) by asking each
  * domain Service for its own aggregate — no cross-domain Repository access
  * (docs/repository-structure.md).
+ *
+ * <p>Deliberately <b>not</b> {@code @Transactional}. Each domain Service already
+ * declares its own short read-only Transaction, and this method also makes an
+ * outbound HTTP call to the Gateway. Wrapping the whole assembly in one
+ * Transaction would hold a pooled DB Connection for the duration of that call —
+ * up to the client's 5s of timeouts — so a slow Gateway would drain the
+ * Connection Pool and take unrelated Management API work down with it
+ * (Codex 리뷰 PR #40 M-02).
  */
 @Service
 public class DashboardService {
 
-	private static final Logger log = LoggerFactory.getLogger(DashboardService.class);
 	private static final Duration DEFAULT_WINDOW = Duration.ofHours(24);
 	private static final String UP = "UP";
 	private static final String DOWN = "DOWN";
@@ -35,7 +39,7 @@ public class DashboardService {
 	private final EnrollmentService enrollmentService;
 	private final SecurityEventService securityEventService;
 	private final GatewayOutboxClient gatewayOutboxClient;
-	private final EntityManager entityManager;
+	private final PostgresHealthProbe postgresHealthProbe;
 	private final Clock clock;
 
 	public DashboardService(
@@ -44,18 +48,17 @@ public class DashboardService {
 			EnrollmentService enrollmentService,
 			SecurityEventService securityEventService,
 			GatewayOutboxClient gatewayOutboxClient,
-			EntityManager entityManager,
+			PostgresHealthProbe postgresHealthProbe,
 			Clock clock) {
 		this.deviceService = deviceService;
 		this.certificateService = certificateService;
 		this.enrollmentService = enrollmentService;
 		this.securityEventService = securityEventService;
 		this.gatewayOutboxClient = gatewayOutboxClient;
-		this.entityManager = entityManager;
+		this.postgresHealthProbe = postgresHealthProbe;
 		this.clock = clock;
 	}
 
-	@Transactional(readOnly = true)
 	public DashboardSummaryResponse summarize(Instant from, Instant to) {
 		Instant now = clock.instant();
 		Instant rangeEnd = to != null ? to : now;
@@ -67,7 +70,7 @@ public class DashboardService {
 		DeviceService.DeviceCounts devices = deviceService.countByStatus();
 		CertificateService.ValidCounts certificates = certificateService.countValidAndExpiringSoon();
 
-		var outbox = gatewayOutboxClient.fetchStats();
+		Optional<DashboardSummaryResponse.OutboxStats> outbox = gatewayOutboxClient.fetchStats();
 
 		List<DashboardSummaryResponse.RequestBucket> buckets =
 				securityEventService.countDecisionBuckets(rangeStart, rangeEnd).stream()
@@ -79,7 +82,10 @@ public class DashboardService {
 				new DashboardSummaryResponse.DeviceCounts(devices.active(), devices.total()),
 				new DashboardSummaryResponse.CertificateCounts(certificates.valid(), certificates.expiringSoon()),
 				enrollmentService.countPendingRequests(),
-				securityEventService.countCriticalSince(now.minus(DEFAULT_WINDOW)),
+				// Half-open [now-24h, now), matching requestBuckets. The upper bound
+				// keeps a clock-skewed Gateway's future-dated Event out of a count
+				// labelled "최근 24시간" (Codex 리뷰 PR #40 M-03).
+				securityEventService.countCriticalBetween(now.minus(DEFAULT_WINDOW), now),
 				buckets,
 				serviceHealth(outbox.isPresent()),
 				outbox.orElse(null),
@@ -87,31 +93,19 @@ public class DashboardService {
 	}
 
 	/**
-	 * docs/api-spec.md §9 lists Health alongside the counts. management-api is
-	 * UP by definition — this code is running. Postgres is probed with the
-	 * cheapest possible round trip so the reported latency is the connection's,
-	 * not a query's. Gateway reuses the Outbox call already made above rather
-	 * than issuing a second request.
+	 * docs/api-spec.md §9 lists Health alongside the counts. management-api is UP
+	 * by definition — this code is running. Gateway reuses the Outbox call already
+	 * made above rather than issuing a second request. Postgres DOWN is
+	 * best-effort: if the database is truly unreachable the aggregate queries
+	 * above have already failed, so this mainly reports latency while it is up.
 	 */
 	private List<DashboardSummaryResponse.ServiceHealth> serviceHealth(boolean gatewayReachable) {
 		List<DashboardSummaryResponse.ServiceHealth> services = new ArrayList<>(3);
 		services.add(new DashboardSummaryResponse.ServiceHealth("management-api", UP, 0));
 
-		long startedAt = System.nanoTime();
-		String postgresStatus;
-		Integer postgresLatencyMs;
-		try {
-			entityManager.createNativeQuery("SELECT 1").getSingleResult();
-			postgresStatus = UP;
-			postgresLatencyMs = (int) Duration.ofNanos(System.nanoTime() - startedAt).toMillis();
-		} catch (RuntimeException e) {
-			// Reaching here means the read Transaction itself is in trouble; report
-			// it rather than failing the whole Dashboard.
-			log.warn("Dashboard의 PostgreSQL Health 확인에 실패했습니다: {}", e.getMessage());
-			postgresStatus = DOWN;
-			postgresLatencyMs = null;
-		}
-		services.add(new DashboardSummaryResponse.ServiceHealth("postgres", postgresStatus, postgresLatencyMs));
+		Optional<Integer> postgresLatencyMs = postgresHealthProbe.latencyMs();
+		services.add(new DashboardSummaryResponse.ServiceHealth(
+				"postgres", postgresLatencyMs.isPresent() ? UP : DOWN, postgresLatencyMs.orElse(null)));
 
 		services.add(new DashboardSummaryResponse.ServiceHealth("gateway", gatewayReachable ? UP : DOWN, null));
 		return services;

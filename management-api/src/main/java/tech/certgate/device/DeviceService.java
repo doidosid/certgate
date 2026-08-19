@@ -186,7 +186,9 @@ public class DeviceService {
 	/** Dashboard counts (docs/api-spec.md §9). */
 	@Transactional(readOnly = true)
 	public DeviceCounts countByStatus() {
-		return new DeviceCounts(devices.countByStatus(DeviceStatus.ACTIVE), devices.count());
+		// An aggregate without GROUP BY always yields exactly one row.
+		Object[] row = devices.countActiveAndTotal(DeviceStatus.ACTIVE).get(0);
+		return new DeviceCounts(((Number) row[0]).longValue(), ((Number) row[1]).longValue());
 	}
 
 	public record DeviceCounts(long active, long total) {

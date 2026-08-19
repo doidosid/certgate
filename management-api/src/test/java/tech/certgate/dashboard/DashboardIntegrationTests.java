@@ -2,6 +2,7 @@ package tech.certgate.dashboard;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -161,6 +162,31 @@ class DashboardIntegrationTests {
 		List<Map<String, Object>> recent = (List<Map<String, Object>>) body.get("recentCriticalEvents");
 		assertThat(recent).isNotEmpty();
 		assertThat(recent).allSatisfy(e -> assertThat(e.get("severity")).isEqualTo("CRITICAL"));
+	}
+
+	/**
+	 * "최근 24시간"이라는 이름이 맞으려면 상한이 있어야 한다. Gateway나 장비의
+	 * 시계가 앞서 있으면 미래 시각 Event가 저장될 수 있다(Batch 입력에 미래 상한
+	 * 검증이 없다).
+	 */
+	@Test
+	void summary_criticalCountExcludesFutureDatedEvents() {
+		Map<String, Object> before = summary();
+		long countBefore = ((Number) before.get("criticalEvents24h")).longValue();
+
+		postEvents(List.of(event(Instant.now().plus(Duration.ofDays(2)), "DENIED", "CERTIFICATE_REVOKED", "CRITICAL")));
+
+		Map<String, Object> after = summary();
+		assertThat(((Number) after.get("criticalEvents24h")).longValue()).isEqualTo(countBefore);
+	}
+
+	@Test
+	void summary_rejectsFromAfterTo() {
+		var response = restTemplate.getForEntity(
+				"/api/v1/dashboard/summary?from=2026-08-19T05:00:00Z&to=2026-08-19T04:00:00Z", Map.class);
+
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+		assertThat(response.getBody()).containsEntry("code", "INVALID_REQUEST_PARAMETER");
 	}
 
 	private Map<String, Object> event(Instant occurredAt, String decision, String reasonCode, String severity) {

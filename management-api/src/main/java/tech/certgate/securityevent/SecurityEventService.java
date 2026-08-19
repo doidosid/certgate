@@ -69,9 +69,10 @@ public class SecurityEventService {
 
 	// --- Dashboard 집계 (docs/api-spec.md §9) ---
 
+	/** Half-open [from, to) — see the Repository method for why the upper bound matters. */
 	@Transactional(readOnly = true)
-	public long countCriticalSince(Instant from) {
-		return securityEvents.countBySeverityAndOccurredAtGreaterThanEqual(CRITICAL, from);
+	public long countCriticalBetween(Instant from, Instant to) {
+		return securityEvents.countBySeverityAndOccurredAtGreaterThanEqualAndOccurredAtLessThan(CRITICAL, from, to);
 	}
 
 	@Transactional(readOnly = true)

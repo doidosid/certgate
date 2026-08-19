@@ -8,7 +8,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
 
 /**
  * Reads the Gateway's Outbox depth for the Dashboard. The Gateway's SQLite
@@ -55,8 +54,15 @@ public class GatewayOutboxClient {
 					.header("Authorization", "Bearer " + internalToken)
 					.retrieve()
 					.body(DashboardSummaryResponse.OutboxStats.class));
-		} catch (RestClientException e) {
-			log.warn("Gateway Outbox 상태를 조회하지 못했습니다: {}", e.getMessage());
+		} catch (RuntimeException e) {
+			// Deliberately wider than RestClientException. A malformed
+			// certgate.gateway.internal-url makes uri(...) throw
+			// IllegalArgumentException, which would otherwise escape and turn the
+			// whole Dashboard into a 500 — the exact failure this class exists to
+			// contain (Codex 리뷰 PR #40 M-01). The stack trace is logged so a
+			// configuration or programming error is still visible rather than
+			// silently degrading forever.
+			log.warn("Gateway Outbox 상태를 조회하지 못했습니다. Dashboard는 outbox 없이 응답합니다", e);
 			return Optional.empty();
 		}
 	}

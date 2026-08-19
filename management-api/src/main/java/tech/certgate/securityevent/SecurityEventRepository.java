@@ -16,7 +16,8 @@ public interface SecurityEventRepository extends JpaRepository<SecurityEvent, UU
 	/** Most recent Events for a Device, used by the Device detail view (docs/api-spec.md §3). */
 	List<SecurityEvent> findTop10ByDeviceIdOrderByOccurredAtDesc(UUID deviceId);
 
-	long countBySeverityAndOccurredAtGreaterThanEqual(String severity, Instant from);
+	/** Half-open [from, to), so a future-dated Event cannot land in a "지난 24시간" count. */
+	long countBySeverityAndOccurredAtGreaterThanEqualAndOccurredAtLessThan(String severity, Instant from, Instant to);
 
 	/** Dashboard "최근 CRITICAL Event" 목록 (docs/api-spec.md §9). */
 	List<SecurityEvent> findTop10BySeverityOrderByOccurredAtDesc(String severity);
@@ -28,9 +29,14 @@ public interface SecurityEventRepository extends JpaRepository<SecurityEvent, UU
 	 * which is acceptable because Flyway Migration already ties this service to
 	 * Postgres. Hours with no traffic are simply absent — the caller decides
 	 * whether to fill them.
+	 *
+	 * <p>The zone argument pins bucket boundaries to UTC. Two-argument
+	 * {@code date_trunc} over a {@code timestamptz} truncates in the session's
+	 * TimeZone, so a non-UTC session would return boundaries that do not line up
+	 * with the UTC instants the API reports (Codex 리뷰 PR #40 L-01).
 	 */
 	@Query(value = """
-			SELECT date_trunc('hour', occurred_at) AS bucket,
+			SELECT date_trunc('hour', occurred_at, 'UTC') AS bucket,
 				COUNT(*) FILTER (WHERE decision = 'ALLOWED') AS allowed,
 				COUNT(*) FILTER (WHERE decision = 'DENIED') AS denied
 			FROM security_event

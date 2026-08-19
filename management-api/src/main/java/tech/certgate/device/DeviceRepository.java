@@ -1,6 +1,7 @@
 package tech.certgate.device;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -14,7 +15,13 @@ public interface DeviceRepository extends JpaRepository<Device, UUID> {
 
 	boolean existsByDeviceKey(String deviceKey);
 
-	long countByStatus(DeviceStatus status);
+	/**
+	 * Dashboard counts in one statement so active and total always describe the
+	 * same snapshot — two separate counts can straddle a status change and
+	 * report active > total (Codex 리뷰 PR #40 L-03).
+	 */
+	@Query("SELECT COUNT(CASE WHEN d.status = :activeStatus THEN 1 END), COUNT(d) FROM Device d")
+	List<Object[]> countActiveAndTotal(@Param("activeStatus") DeviceStatus activeStatus);
 
 	Optional<Device> findByDeviceKey(String deviceKey);
 
