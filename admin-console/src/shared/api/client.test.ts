@@ -106,6 +106,36 @@ describe("apiGet", () => {
 		expect(error.traceId).toBe(sentTraceId);
 	});
 
+	/**
+	 * Codex 리뷰 PR #43 Medium: traceId가 객체로 오면 QueryState가 그것을 JSX로
+	 * 렌더링하다 터져 오류 화면 자체가 사라진다. 계약 위반은 ApiError에 싣지 않는다.
+	 */
+	it.each([
+		["traceId가 객체", { code: "X", message: "m", traceId: {}, fieldErrors: [] }],
+		["fieldErrors가 문자열", { code: "X", message: "m", traceId: "t", fieldErrors: "bad" }],
+		["fieldErrors 원소가 잘못됨", { code: "X", message: "m", traceId: "t", fieldErrors: [{ field: 1 }] }],
+	])("falls back to INTERNAL_ERROR when the error body violates the contract (%s)", async (_label, body) => {
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(500, body)));
+
+		const error = (await apiGet("/devices").catch((e: unknown) => e)) as ApiError;
+
+		expect(error.code).toBe("INTERNAL_ERROR");
+		expect(typeof error.traceId).toBe("string");
+		expect(Array.isArray(error.fieldErrors)).toBe(true);
+	});
+
+	it("accepts an error body that omits traceId and fieldErrors entirely", async () => {
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse(404, { code: "NOT_FOUND", message: "없습니다." }));
+		vi.stubGlobal("fetch", fetchMock);
+
+		const error = (await apiGet("/devices/1").catch((e: unknown) => e)) as ApiError;
+		const sentTraceId = new Headers((fetchMock.mock.calls[0][1] as RequestInit).headers).get("X-Trace-Id");
+
+		expect(error.code).toBe("NOT_FOUND");
+		expect(error.traceId).toBe(sentTraceId);
+		expect(error.fieldErrors).toEqual([]);
+	});
+
 	it("keeps fieldErrors from a validation failure", async () => {
 		vi.stubGlobal(
 			"fetch",
@@ -171,5 +201,15 @@ describe("apiGetText", () => {
 		);
 
 		await expect(apiGetText("/certificates/1/download")).rejects.toBeInstanceOf(ApiError);
+	});
+
+	/** PEM endpoint의 오류가 늘 JSON인 것은 아니다 — Proxy가 HTML을 돌려줄 수 있다. */
+	it("raises ApiError for a non-JSON error body too", async () => {
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("<html>502</html>", { status: 502 })));
+
+		const error = (await apiGetText("/certificates/1/download").catch((e: unknown) => e)) as ApiError;
+
+		expect(error).toBeInstanceOf(ApiError);
+		expect(error.code).toBe("INTERNAL_ERROR");
 	});
 });

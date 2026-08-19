@@ -48,6 +48,23 @@ describe("usePageParams", () => {
 		expect(screen.getByTestId("size")).toHaveTextContent("20");
 	});
 
+	/**
+	 * Codex 리뷰 PR #43 Medium: 서버 Controller는 size를 1~100으로 clamp한다.
+	 * Console이 범위 밖 값을 그대로 쓰면 화면의 페이지 크기와 서버가 실제 적용한
+	 * 크기가 어긋난다. size=0은 MUI Pagination에도 유효하지 않다.
+	 */
+	it.each([
+		["0", "20"],
+		["101", "20"],
+		["1.5", "20"],
+		["", "20"],
+		["1", "1"],
+		["100", "100"],
+	])("clamps size=%s to the api-spec range", (given, expected) => {
+		renderAt(`/devices?size=${given}`);
+		expect(screen.getByTestId("size")).toHaveTextContent(expected);
+	});
+
 	it("keeps the page when only the page changes", async () => {
 		renderAt("/devices?status=ACTIVE");
 		await userEvent.click(screen.getByRole("button", { name: "go page 2" }));

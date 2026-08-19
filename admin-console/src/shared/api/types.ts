@@ -6,6 +6,7 @@ export type CertificateStatus = "VALID" | "EXPIRING_SOON" | "EXPIRED" | "REVOKED
 export type CertificateRequestStatus = "PENDING" | "APPROVED" | "REJECTED";
 export type Decision = "ALLOWED" | "DENIED" | "ERROR";
 export type Severity = "INFO" | "WARNING" | "CRITICAL";
+export type SecurityEventType = "ACCESS" | "TLS" | "SYSTEM" | "PKI";
 
 export interface PageResponse<T> {
 	content: T[];
@@ -57,13 +58,18 @@ export interface DeviceCertificateSummary {
 	expiresAt: string;
 }
 
+/**
+ * decision·reasonCode는 security_event 테이블에서 NOT NULL이고 Batch 입력 검증도
+ * 필수로 강제한다(V7__create_security_event.sql, SecurityEventBatchService).
+ * nullable로 두면 화면이 서버가 만들 수 없는 상태까지 방어하게 된다.
+ */
 export interface DeviceEventView {
 	id: string;
 	occurredAt: string;
-	type: string;
-	severity: string;
-	decision: string | null;
-	reasonCode: string | null;
+	type: SecurityEventType;
+	severity: Severity;
+	decision: Decision;
+	reasonCode: string;
 	httpMethod: string | null;
 	requestPath: string | null;
 }
@@ -148,20 +154,25 @@ export interface CertificateItem {
 	revocationNote: string | null;
 }
 
+/**
+ * nullable은 docs/data-model.md와 V7__create_security_event.sql을 따른다 —
+ * deviceId·certificateSerial·httpMethod·requestPath·clientIp·latencyMs만 null이
+ * 될 수 있고, type·severity·decision·reasonCode·traceId는 NOT NULL이다.
+ */
 export interface SecurityEvent {
 	id: string;
 	occurredAt: string;
-	type: string;
-	severity: string;
+	type: SecurityEventType;
+	severity: Severity;
 	deviceId: string | null;
 	certificateSerial: string | null;
 	httpMethod: string | null;
 	requestPath: string | null;
-	decision: string | null;
-	reasonCode: string | null;
+	decision: Decision;
+	reasonCode: string;
 	clientIp: string | null;
 	latencyMs: number | null;
-	traceId: string | null;
+	traceId: string;
 }
 
 /** SSE `critical-security-event`의 data 필드 (docs/api-spec.md §9). */

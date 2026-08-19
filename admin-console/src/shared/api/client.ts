@@ -21,13 +21,43 @@ function buildUrl(path: string, params?: QueryParams): string {
 	return `${apiBaseUrl}${path}${query ? `?${query}` : ""}`;
 }
 
-function isErrorResponse(body: unknown): body is ErrorResponse {
+function isFieldErrorArray(value: unknown): value is ErrorResponse["fieldErrors"] {
 	return (
-		typeof body === "object" &&
-		body !== null &&
-		typeof (body as { code?: unknown }).code === "string" &&
-		typeof (body as { message?: unknown }).message === "string"
+		Array.isArray(value) &&
+		value.every(
+			(item) =>
+				typeof item === "object" &&
+				item !== null &&
+				typeof (item as { field?: unknown }).field === "string" &&
+				typeof (item as { message?: unknown }).message === "string",
+		)
 	);
+}
+
+/**
+ * 계약(docs/api-spec.md §1 "오류 응답")을 실제 형태까지 확인한다. code·message만
+ * 보고 통과시키면 traceId가 객체인 응답이 그대로 ApiError에 들어가고, 그 값을
+ * JSX로 렌더링하는 순간 오류 화면 자체가 사라진다.
+ *
+ * traceId는 없거나 비어 있을 수 있다 — 그 경우만 호출 쪽 X-Trace-Id로 보완하고,
+ * 타입 자체가 틀린 응답은 계약 위반으로 보고 unexpectedError로 내린다.
+ */
+function isErrorResponse(body: unknown): body is Omit<ErrorResponse, "traceId" | "fieldErrors"> &
+	Partial<Pick<ErrorResponse, "traceId" | "fieldErrors">> {
+	if (typeof body !== "object" || body === null) {
+		return false;
+	}
+	const candidate = body as Record<string, unknown>;
+	if (typeof candidate.code !== "string" || typeof candidate.message !== "string") {
+		return false;
+	}
+	if (candidate.traceId !== undefined && candidate.traceId !== null && typeof candidate.traceId !== "string") {
+		return false;
+	}
+	if (candidate.fieldErrors !== undefined && candidate.fieldErrors !== null && !isFieldErrorArray(candidate.fieldErrors)) {
+		return false;
+	}
+	return true;
 }
 
 async function toApiError(response: Response, traceId: string): Promise<ApiError> {
@@ -35,7 +65,8 @@ async function toApiError(response: Response, traceId: string): Promise<ApiError
 		const body: unknown = await response.json();
 		if (isErrorResponse(body)) {
 			return new ApiError(response.status, {
-				...body,
+				code: body.code,
+				message: body.message,
 				// 서버가 traceId를 비워 보내도 진단 단서를 잃지 않도록 요청 쪽 ID로 되돌린다.
 				traceId: body.traceId || traceId,
 				fieldErrors: body.fieldErrors ?? [],

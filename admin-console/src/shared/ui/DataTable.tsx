@@ -59,6 +59,20 @@ export default function DataTable<T>({
 								hover={Boolean(onRowClick)}
 								sx={{ cursor: onRowClick ? "pointer" : "default" }}
 								onClick={onRowClick ? () => onRowClick(row) : undefined}
+								// 행 클릭이 상세로 가는 유일한 경로이므로 키보드로도 같은 동작을
+								// 할 수 있어야 한다. Enter·Space는 button의 기본 동작과 맞춘다.
+								tabIndex={onRowClick ? 0 : undefined}
+								role={onRowClick ? "button" : undefined}
+								onKeyDown={
+									onRowClick
+										? (event) => {
+												if (event.key === "Enter" || event.key === " ") {
+													event.preventDefault();
+													onRowClick(row);
+												}
+											}
+										: undefined
+								}
 							>
 								{columns.map((column) => (
 									<TableCell key={column.key}>{column.render(row)}</TableCell>
