@@ -217,6 +217,8 @@ Header: <code>Authorization: Bearer cg_enroll_xxx</code>
 
 MVP의 정책 수정 API는 제공하지 않고 Seed Data로 관리한다.
 
+존재하지 않는 <code>roleName</code>을 조회하면 <code>404 ROLE_NOT_FOUND</code>다(§1 공통 규칙의 "404: Resource 없음"). Device 등록·Role 변경 요청 본문에 없는 Role을 넘긴 경우는 Resource 조회가 아니라 입력값 검증이므로 같은 Code를 <code>400</code>으로 반환한다 — §10 참고.
+
 ~~~json
 {
   "name": "SENSOR",
@@ -393,7 +395,8 @@ Security Event가 원본 데이터이며 SSE는 저장된 CRITICAL Event의 전�
 - <code>CERTIFICATE_REQUEST_NOT_PENDING</code>: PENDING이 아닌 요청에 승인 시도 (409)
 - <code>CERTIFICATE_NOT_FOUND</code>: 아직 승인되지 않아 Certificate가 없음 (404)
 - <code>DEVICE_KEY_DUPLICATE</code>: 이미 등록된 <code>deviceKey</code> (409)
-- <code>DEVICE_KEY_REQUIRED</code>, <code>DEVICE_NAME_REQUIRED</code>, <code>ROLE_NAME_REQUIRED</code>, <code>ROLE_NOT_FOUND</code>: Device 등록 입력값 오류 (400)
+- <code>DEVICE_KEY_REQUIRED</code>, <code>DEVICE_NAME_REQUIRED</code>, <code>ROLE_NAME_REQUIRED</code>: Device 등록 입력값 오류 (400)
+- <code>ROLE_NOT_FOUND</code>: 사용 맥락에 따라 상태 코드가 다르다. Device 등록·Role 변경 요청 본문의 <code>roleName</code>이 존재하지 않으면 입력값 검증 실패로 <code>400</code>, §6의 <code>GET /roles/{roleName}</code>에서 해당 Role이 없으면 Resource 없음으로 <code>404</code>다.
 - <code>MALFORMED_REQUEST_BODY</code>: 요청 본문이 없거나 JSON 형식이 아님 (400)
 - <code>ENROLLMENT_TOKEN_CONFLICT</code>: Token 재발급 요청이 동시에 처리되어 경합 발생 (409)
 - <code>REVOCATION_REASON_REQUIRED</code>: Issue #3 Certificate 폐기 구현 중 추가. 폐기 요청의 <code>reason</code>이 없거나 빈 값 (400)
