@@ -23,6 +23,8 @@ public class SecurityEventService {
 
 	private static final UUID NO_DEVICE_ID = new UUID(0L, 0L);
 	private static final String NO_STRING_FILTER = "";
+	/** Severity values are stored as the Gateway sent them (docs/data-model.md SecurityEvent). */
+	private static final String CRITICAL = "CRITICAL";
 
 	private final SecurityEventRepository securityEvents;
 
@@ -63,5 +65,49 @@ public class SecurityEventService {
 		return securityEvents.findById(eventId)
 				.map(SecurityEventResponse::from)
 				.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "SECURITY_EVENT_NOT_FOUND", "Security Event를 찾을 수 없습니다."));
+	}
+
+	// --- Dashboard 집계 (docs/api-spec.md §9) ---
+
+	/** Half-open [from, to) — see the Repository method for why the upper bound matters. */
+	@Transactional(readOnly = true)
+	public long countCriticalBetween(Instant from, Instant to) {
+		return securityEvents.countBySeverityAndOccurredAtGreaterThanEqualAndOccurredAtLessThan(CRITICAL, from, to);
+	}
+
+	@Transactional(readOnly = true)
+	public List<SecurityEventResponse> findRecentCritical() {
+		return securityEvents.findTop10BySeverityOrderByOccurredAtDesc(CRITICAL).stream()
+				.map(SecurityEventResponse::from)
+				.toList();
+	}
+
+	/** One entry per hour that actually had traffic, ascending. Empty hours are omitted. */
+	@Transactional(readOnly = true)
+	public List<DecisionBucket> countDecisionBuckets(Instant from, Instant to) {
+		return securityEvents.countDecisionsByHour(from, to).stream()
+				.map(row -> new DecisionBucket(
+						toInstant(row[0]),
+						((Number) row[1]).longValue(),
+						((Number) row[2]).longValue()))
+				.toList();
+	}
+
+	/**
+	 * A native query's timestamptz reaches us as whatever the JDBC driver
+	 * decided; accept the shapes the Postgres driver actually produces rather
+	 * than betting the Dashboard on one of them.
+	 */
+	private static Instant toInstant(Object value) {
+		return switch (value) {
+			case java.sql.Timestamp timestamp -> timestamp.toInstant();
+			case java.time.OffsetDateTime offsetDateTime -> offsetDateTime.toInstant();
+			case Instant instant -> instant;
+			default -> throw new IllegalStateException(
+					"예상하지 못한 시각 타입입니다: " + value.getClass().getName());
+		};
+	}
+
+	public record DecisionBucket(Instant startedAt, long allowed, long denied) {
 	}
 }

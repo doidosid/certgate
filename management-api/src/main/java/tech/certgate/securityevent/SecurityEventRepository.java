@@ -16,6 +16,36 @@ public interface SecurityEventRepository extends JpaRepository<SecurityEvent, UU
 	/** Most recent Events for a Device, used by the Device detail view (docs/api-spec.md §3). */
 	List<SecurityEvent> findTop10ByDeviceIdOrderByOccurredAtDesc(UUID deviceId);
 
+	/** Half-open [from, to), so a future-dated Event cannot land in a "지난 24시간" count. */
+	long countBySeverityAndOccurredAtGreaterThanEqualAndOccurredAtLessThan(String severity, Instant from, Instant to);
+
+	/** Dashboard "최근 CRITICAL Event" 목록 (docs/api-spec.md §9). */
+	List<SecurityEvent> findTop10BySeverityOrderByOccurredAtDesc(String severity);
+
+	/**
+	 * Hourly ALLOWED/DENIED counts for the Dashboard request chart
+	 * (docs/api-spec.md §9). Bucketing happens in the DB so the whole range does
+	 * not have to be pulled into memory; {@code date_trunc} is Postgres-specific,
+	 * which is acceptable because Flyway Migration already ties this service to
+	 * Postgres. Hours with no traffic are simply absent — the caller decides
+	 * whether to fill them.
+	 *
+	 * <p>The zone argument pins bucket boundaries to UTC. Two-argument
+	 * {@code date_trunc} over a {@code timestamptz} truncates in the session's
+	 * TimeZone, so a non-UTC session would return boundaries that do not line up
+	 * with the UTC instants the API reports (Codex 리뷰 PR #40 L-01).
+	 */
+	@Query(value = """
+			SELECT date_trunc('hour', occurred_at, 'UTC') AS bucket,
+				COUNT(*) FILTER (WHERE decision = 'ALLOWED') AS allowed,
+				COUNT(*) FILTER (WHERE decision = 'DENIED') AS denied
+			FROM security_event
+			WHERE occurred_at >= :from AND occurred_at < :to
+			GROUP BY bucket
+			ORDER BY bucket
+			""", nativeQuery = true)
+	List<Object[]> countDecisionsByHour(@Param("from") Instant from, @Param("to") Instant to);
+
 	/**
 	 * docs/api-spec.md §9 Console 검색. has-flag + dummy-value pattern (never a
 	 * bare {@code :param IS NULL}) so every bind parameter is typed by a real

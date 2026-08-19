@@ -184,6 +184,12 @@ public class EnrollmentService {
 		return CertificateRequestResponse.from(request);
 	}
 
+	/** Dashboard count of CSRs awaiting an administrator decision (docs/api-spec.md §9). */
+	@Transactional(readOnly = true)
+	public long countPendingRequests() {
+		return certificateRequests.countByStatus(CertificateRequestStatus.PENDING);
+	}
+
 	private CertificateRequest requireRequest(UUID requestId) {
 		return certificateRequests.findById(requestId)
 				.orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "CERTIFICATE_REQUEST_NOT_FOUND", "요청을 찾을 수 없습니다."));
