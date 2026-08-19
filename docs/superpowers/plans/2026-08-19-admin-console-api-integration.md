@@ -3848,3 +3848,409 @@ git commit -m "docs(console): 와이어프레임을 실제 구현 화면 캡처�
 
 1. **Subagent-Driven (권장)** — Task마다 새 Subagent를 띄우고 사이사이 검토한다. Context가 짧게 유지돼 긴 계획에 유리하다.
 2. **Inline 실행** — 이 세션에서 Task를 이어서 실행하고 체크포인트마다 확인한다.
+
+---
+
+## 추가 채택 항목 (2026-08-19 결정)
+
+계획 수립 후 저장소를 조사하면서 발견한 격차 3건을 추가로 채택했다. Task 번호는 기존 Task의 상호 참조를 깨지 않도록 뒤에 붙이고, 실제 진행 순서는 위 "작업 순서와 PR 분할" 표를 갱신해 반영한다.
+
+| PR | Branch | Task | 목적 |
+|---|---|---|---|
+| 1 | `infra` | 1 | same-origin proxy — 이후 전부의 선행 |
+| 2 | `feature/management-api` | 2, 16, 12 | `GET /roles`, **JSON 구조화 로그**, `GET /dashboard/summary` |
+| 3 | `feature/console` | 3, 18, 4, 5, 6, 7, 8 | 기반 + **디자인 톤** + 읽기 화면 3개 |
+| 4 | `feature/console` | 9, 10, 11 | 쓰기 동작 |
+| 5 | `feature/console` | 13, 14 | Dashboard + SSE Toast |
+| 6 | `infra` | 17 | **CI 취약점 스캔** (임계 경로를 막지 않도록 뒤로) |
+| 7 | `docs` | 15 | README 실제 화면 교체 |
+
+조사에서 확인해 **추천하지 않기로** 한 것: Testcontainers 도입(이미 PostgreSQL로 통합 테스트가 돈다), Trace ID 전파(`TraceIdFilter`가 이미 구현돼 있다), Redis·Kafka·Alert Domain·Webhook(ai-usage.md 2026-08-13에 기각됨), Kubernetes·Cloud 배포(implementation-plan.md 후순위), OpenTelemetry(4일 일정에 안 맞음), Redux·Zustand(Issue #7 완료 기준이 "별도 상태 관리 없음"), Storybook(화면 5개 대비 효과 낮음).
+
+---
+
+### Task 16: management-api JSON 구조화 로그
+
+`docs/operations.md` "로그"는 **모든 서비스**에 JSON 구조화 로그와 공통 필드를 요구한다. Gateway는 지키지만 management-api의 `application.yml`에는 로깅 설정이 아예 없어 Spring 기본 평문 로그가 나간다. 특히 `TraceIdFilter`가 MDC에 `traceId`를 넣는데 그것을 출력하는 포맷이 없어서 **어떤 로그에도 Trace ID가 찍히지 않는다.** 배관은 이미 있고 출력만 없는 상태다.
+
+**Files:**
+- Create: `management-api/src/main/java/tech/certgate/common/CertGateLogFormatter.java`
+- Modify: `management-api/src/main/resources/application.yml`
+- Test: `management-api/src/test/java/tech/certgate/common/CertGateLogFormatterTest.java`
+
+**Interfaces:**
+- Consumes: 기존 `TraceIdFilter`가 채우는 MDC 키 `traceId`.
+- Produces: `logging.structured.format.console=tech.certgate.common.CertGateLogFormatter` 설정 시 모든 로그가 한 줄 JSON으로 나간다. 필드: `timestamp`, `level`, `service`, `logger`, `message`, 그리고 MDC에 있을 때만 `traceId`·`deviceKey`·`reasonCode`·`latencyMs`, 예외가 있으면 `error`.
+
+- [ ] **Step 1: 실패하는 테스트 작성**
+
+`management-api/src/test/java/tech/certgate/common/CertGateLogFormatterTest.java`:
+
+```java
+package tech.certgate.common;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.LoggerContext;
+import ch.qos.logback.classic.spi.LoggingEvent;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
+
+class CertGateLogFormatterTest {
+
+	private final CertGateLogFormatter formatter = new CertGateLogFormatter();
+	private final ObjectMapper objectMapper = new ObjectMapper();
+
+	private LoggingEvent event(Level level, String message, Map<String, String> mdc) {
+		LoggingEvent event = new LoggingEvent();
+		event.setLoggerContext(new LoggerContext());
+		event.setLoggerName("tech.certgate.device.DeviceService");
+		event.setLevel(level);
+		event.setMessage(message);
+		event.setTimeStamp(1_755_000_000_000L);
+		event.setMDCPropertyMap(mdc);
+		return event;
+	}
+
+	private JsonNode format(LoggingEvent event) throws Exception {
+		String line = formatter.format(event);
+		assertThat(line).endsWith("\n");
+		return objectMapper.readTree(line);
+	}
+
+	/** docs/operations.md "로그": JSON 구조화 로그 공통 필드. */
+	@Test
+	void format_emitsCommonFieldsAsOneJsonLine() throws Exception {
+		JsonNode json = format(event(Level.WARN, "device disabled", Map.of()));
+
+		assertThat(json.get("timestamp").asText()).isEqualTo("2026-08-12T13:20:00Z");
+		assertThat(json.get("level").asText()).isEqualTo("WARN");
+		assertThat(json.get("service").asText()).isEqualTo("management-api");
+		assertThat(json.get("message").asText()).isEqualTo("device disabled");
+		assertThat(json.get("logger").asText()).isEqualTo("tech.certgate.device.DeviceService");
+	}
+
+	/**
+	 * TraceIdFilter가 MDC에 넣은 traceId가 실제 로그 줄에 나타나야 한다. 이것이
+	 * 없으면 오류를 요청과 연결할 방법이 없다(api-spec.md §1).
+	 */
+	@Test
+	void format_includesTraceIdAndOptionalContextFromMdc() throws Exception {
+		JsonNode json = format(event(Level.WARN, "blocked", Map.of(
+				"traceId", "8a6ba949-f3ec-4916-aae2-d55bd787893d",
+				"deviceKey", "sensor-floor-03",
+				"reasonCode", "CERTIFICATE_REVOKED",
+				"latencyMs", "8")));
+
+		assertThat(json.get("traceId").asText()).isEqualTo("8a6ba949-f3ec-4916-aae2-d55bd787893d");
+		assertThat(json.get("deviceKey").asText()).isEqualTo("sensor-floor-03");
+		assertThat(json.get("reasonCode").asText()).isEqualTo("CERTIFICATE_REVOKED");
+		assertThat(json.get("latencyMs").asInt()).isEqualTo(8);
+	}
+
+	/** 값이 없는 선택 필드는 아예 넣지 않는다 — null 잡음을 만들지 않는다. */
+	@Test
+	void format_omitsOptionalFieldsWhenMdcIsEmpty() throws Exception {
+		JsonNode json = format(event(Level.INFO, "started", Map.of()));
+
+		assertThat(json.has("traceId")).isFalse();
+		assertThat(json.has("deviceKey")).isFalse();
+		assertThat(json.has("reasonCode")).isFalse();
+		assertThat(json.has("latencyMs")).isFalse();
+	}
+
+	/** 줄바꿈이 들어간 message가 JSON 한 줄 계약을 깨뜨리지 않아야 한다. */
+	@Test
+	void format_escapesNewlinesSoOneEventStaysOneLine() throws Exception {
+		String line = formatter.format(event(Level.ERROR, "first\nsecond", Map.of()));
+
+		assertThat(line.strip()).doesNotContain("\n");
+		assertThat(objectMapper.readTree(line).get("message").asText()).isEqualTo("first\nsecond");
+	}
+}
+```
+
+- [ ] **Step 2: 실패 확인**
+
+Run: `cd management-api && ./gradlew test --tests "*CertGateLogFormatterTest*"`
+Expected: FAIL — `CertGateLogFormatter` 클래스가 없다.
+
+- [ ] **Step 3: `CertGateLogFormatter` 작성**
+
+```java
+package tech.certgate.common;
+
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.classic.spi.IThrowableProxy;
+import ch.qos.logback.classic.spi.ThrowableProxyUtil;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.util.Map;
+import org.springframework.boot.logging.structured.StructuredLogFormatter;
+
+/**
+ * docs/operations.md "로그"의 JSON 구조화 로그 공통 필드를 그대로 내보낸다. Go
+ * Gateway가 이미 같은 필드명으로 로그를 남기므로 두 서비스의 로그를 한 파이프라인
+ * 에서 같은 스키마로 읽을 수 있다.
+ *
+ * <p>선택 필드는 {@link TraceIdFilter}가 채운 MDC에서 가져오고, 값이 없으면 아예
+ * 넣지 않는다. Secret·Token·Private Key·CSR·Certificate 원문·Telemetry Payload는
+ * 어떤 경로로도 이 포맷터에 들어오지 않는다 — MDC에 그런 값을 넣지 않는 것이
+ * 규칙이다(docs/security-design.md §10).
+ *
+ * <p>{@code logging.structured.format.console}에 이 클래스의 FQCN을 지정해 활성화
+ * 한다. 로깅 시스템이 Environment 바인딩보다 먼저 초기화되므로 service 이름은
+ * 상수로 둔다({@code spring.application.name}과 같은 값을 유지한다).
+ */
+public class CertGateLogFormatter implements StructuredLogFormatter<ILoggingEvent> {
+
+	private static final String SERVICE = "management-api";
+	private static final DateTimeFormatter TIMESTAMP = DateTimeFormatter.ISO_INSTANT;
+
+	private final ObjectMapper objectMapper = new ObjectMapper();
+
+	@Override
+	public String format(ILoggingEvent event) {
+		ObjectNode json = this.objectMapper.createObjectNode();
+		json.put("timestamp", TIMESTAMP.format(event.getInstant().atOffset(ZoneOffset.UTC)));
+		json.put("level", event.getLevel().toString());
+		json.put("service", SERVICE);
+		json.put("logger", event.getLoggerName());
+		json.put("message", event.getFormattedMessage());
+
+		Map<String, String> mdc = event.getMDCPropertyMap();
+		putIfPresent(json, mdc, "traceId");
+		putIfPresent(json, mdc, "deviceKey");
+		putIfPresent(json, mdc, "reasonCode");
+		putIntIfPresent(json, mdc, "latencyMs");
+
+		IThrowableProxy throwable = event.getThrowableProxy();
+		if (throwable != null) {
+			json.put("error", ThrowableProxyUtil.asString(throwable));
+		}
+
+		// Jackson이 message·error의 줄바꿈과 인용부호를 escape하므로 한 Event가
+		// 항상 한 줄이다. 마지막 개행은 StructuredLogFormatter 계약이다.
+		return json.toString() + "\n";
+	}
+
+	private static void putIfPresent(ObjectNode json, Map<String, String> mdc, String key) {
+		String value = mdc.get(key);
+		if (value != null && !value.isBlank()) {
+			json.put(key, value);
+		}
+	}
+
+	private static void putIntIfPresent(ObjectNode json, Map<String, String> mdc, String key) {
+		String value = mdc.get(key);
+		if (value == null || value.isBlank()) {
+			return;
+		}
+		try {
+			json.put(key, Integer.parseInt(value));
+		} catch (NumberFormatException notANumber) {
+			json.put(key, value);
+		}
+	}
+}
+```
+
+- [ ] **Step 4: `application.yml`에 포맷터 등록**
+
+`server:` 블록 앞에 추가한다:
+
+```yaml
+logging:
+  structured:
+    format:
+      console: tech.certgate.common.CertGateLogFormatter
+```
+
+- [ ] **Step 5: 통과 확인**
+
+Run: `cd management-api && ./gradlew test --tests "*CertGateLogFormatterTest*"`
+Expected: PASS 4건.
+
+Run: `cd management-api && ./gradlew test`
+Expected: BUILD SUCCESSFUL. 통합 테스트 출력이 JSON 한 줄 형식으로 바뀐 것을 눈으로 확인한다.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add management-api/src/main/java/tech/certgate/common/CertGateLogFormatter.java management-api/src/main/resources/application.yml management-api/src/test/java/tech/certgate/common/CertGateLogFormatterTest.java
+git commit -m "feat(management-api): operations.md 스키마의 JSON 구조화 로그 적용"
+```
+
+---
+
+### Task 17: CI 의존성·이미지 취약점 스캔
+
+현재 `secret-scan` job은 gitleaks와 Key·`.env` 파일 검사까지다. 인증서·Key·Token을 다루는 프로젝트에 의존성·이미지 취약점 스캔이 없다.
+
+**임계 경로를 막지 않도록 Console 작업 뒤(8/22)에 진행한다.** 기존 의존성에서 취약점이 나오면 수정 작업이 파생될 수 있어서, Console이 끝나기 전에 넣으면 일정이 흔들린다.
+
+**Files:**
+- Modify: `.github/workflows/ci.yml`
+- Modify: `docs/development-guide.md` "필수 검증"
+
+**Interfaces:**
+- Produces: CI job `vuln-scan`. 실패 조건은 **HIGH·CRITICAL만** — MEDIUM 이하로 임계 경로를 막지 않는다.
+
+- [ ] **Step 1: Go 모듈 취약점 스캔 Step 추가**
+
+`ci.yml`의 `go` job 마지막에 추가한다. `govulncheck`는 호출 그래프를 분석해 실제로 도달하는 취약점만 보고하므로 잡음이 적다.
+
+```yaml
+      - name: govulncheck
+        working-directory: ${{ matrix.module }}
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          "$(go env GOPATH)/bin/govulncheck" ./...
+```
+
+- [ ] **Step 2: npm 취약점 스캔 Step 추가**
+
+`admin-console` job의 `npm ci` 다음에 추가한다:
+
+```yaml
+      - name: npm audit
+        run: npm audit --audit-level=high
+```
+
+- [ ] **Step 3: 이미지 스캔 job 추가**
+
+`compose-smoke` 뒤에 새 job으로 넣는다. 이미지를 빌드해 놓고 스캔한다.
+
+```yaml
+  image-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: build images
+        run: docker compose -f infra/compose.yaml --env-file .env.example build
+      # 인증서·Key·Token을 다루는 서비스라 실행 이미지의 알려진 취약점을 CI에서
+      # 막는다. HIGH·CRITICAL만 실패시켜 임계 경로를 흔들지 않는다.
+      - name: trivy (gateway)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: certgate-gateway:latest
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+      - name: trivy (management-api)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: certgate-management-api:latest
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+      - name: trivy (admin-console)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: certgate-admin-console:latest
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+```
+
+`image-ref` 값은 실제 빌드된 이미지 이름과 맞춰야 한다. 먼저 `docker compose -f infra/compose.yaml --env-file .env.example config | grep image` 또는 `docker images`로 Compose가 붙이는 이름(`<project>-<service>`)을 확인하고 그 값을 쓴다. `compose.yaml`에 `image:` 키가 없으면 이름이 디렉터리 기준으로 정해지므로, 필요하면 각 서비스에 `image: certgate-<service>:latest`를 명시해 고정한다.
+
+- [ ] **Step 4: 로컬 사전 확인**
+
+Run: `cd gateway && go install golang.org/x/vuln/cmd/govulncheck@latest && "$(go env GOPATH)/bin/govulncheck" ./...`
+Expected: `No vulnerabilities found.` 또는 발견된 취약점 목록. **취약점이 나오면 CI에 넣기 전에 의존성을 올려 해결한다.** 빨간 CI를 main에 넣지 않는다.
+
+Run: `cd admin-console && npm audit --audit-level=high`
+Expected: 취약점 없음.
+
+- [ ] **Step 5: 문서 갱신**
+
+`docs/development-guide.md` "필수 검증"에 항목을 더한다:
+
+```markdown
+- 의존성 취약점: Go <code>govulncheck</code>, Node <code>npm audit --audit-level=high</code>
+- 실행 Image 취약점: Trivy HIGH·CRITICAL
+```
+
+- [ ] **Step 6: Commit**
+
+```bash
+git checkout infra && git merge --ff-only main
+git add .github/workflows/ci.yml docs/development-guide.md
+git commit -m "ci: 의존성·Image 취약점 스캔 추가 (govulncheck, npm audit, Trivy)"
+```
+
+---
+
+### Task 18: Console 디자인 톤 확정
+
+스크린샷은 이 포트폴리오에서 가장 많이 보이는 산출물인데 현재는 `createTheme()` 기본값이라 "튜토리얼 화면"으로 읽힌다. 새 의존성 없이 `theme.ts` 하나로 인상을 바꾼다.
+
+**Task 3(HTTP Client) 다음, Task 4(Mock)보다 먼저** 한다. 이후 화면 Task들이 처음부터 확정된 톤 위에서 만들어져 나중에 되돌릴 일이 없다.
+
+**Files:**
+- Create: `admin-console/src/app/theme.ts`
+- Modify: `admin-console/src/App.tsx`
+- Modify: `admin-console/src/shared/ui/AppLayout.tsx`
+
+**Interfaces:**
+- Produces: `theme` (MUI `Theme`). `App.tsx`가 `createTheme()` 대신 이것을 쓴다.
+
+- [ ] **Step 1: `frontend-design` skill 로드**
+
+구현 전에 `frontend-design` skill을 호출해 미적 방향(팔레트·타이포·밀도)을 잡는다. 기본값처럼 보이지 않는 선택을 하는 것이 목적이다.
+
+- [ ] **Step 2: `theme.ts` 작성**
+
+지켜야 할 제약:
+- **보안 운영 도구**답게 절제한다. 채도 높은 색은 상태 표시(success·warning·error)에만 쓰고 화면 전체에는 쓰지 않는다.
+- `StatusChip`이 쓰는 `success`·`warning`·`error`·`info` 4색이 **서로 명확히 구분되고 명암 대비를 만족**해야 한다. 인증서 상태(유효/만료 임박/만료/폐기)를 색만으로도 구분할 수 있어야 한다.
+- 표 중심 화면이라 밀도를 높인다(`MuiTable` size small 기본, 셀 padding 축소).
+- 숫자·Serial Number·Trace ID·Reason Code는 등폭 글꼴로 읽히게 한다. Serial과 지문을 눈으로 비교하는 화면이라 실제로 도움이 된다.
+- 다크 모드는 만들지 않는다. 제출까지 4일이고 화면 캡처는 한 가지 테마로 한다.
+- Google Fonts 등 외부 폰트를 새로 끌어오지 않는다. 시스템 폰트 스택으로 처리한다.
+
+- [ ] **Step 3: `App.tsx`·`AppLayout.tsx` 적용**
+
+`App.tsx`의 `const theme = createTheme();`를 `import { theme } from "./app/theme";`로 교체한다. `AppLayout`의 AppBar·Drawer가 새 팔레트와 맞는지 확인하고 필요한 만큼만 조정한다.
+
+- [ ] **Step 4: 검증**
+
+Run: `cd admin-console && npm run typecheck && npm test && npm run build`
+Expected: 전부 통과. `routes.test.tsx`가 `heading` 이름으로 화면을 찾으므로 제목 문자열을 바꾸지 않는다.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add admin-console/src/app/theme.ts admin-console/src/App.tsx admin-console/src/shared/ui/AppLayout.tsx
+git commit -m "feat(console): 관리 콘솔 디자인 톤 확정 (표 밀도·상태 색·등폭 식별자)"
+```
+
+---
+
+### Task 3 추가 Step: `repository-structure.md`의 "생성된 Type" 편차 해소
+
+`docs/repository-structure.md`는 `shared/api`를 "HTTP Client와 **생성된** Type"으로 정의하지만 Task 3은 `types.ts`를 손으로 쓴다. 문서와 다르게 구현할 때는 문서를 함께 갱신한다(CLAUDE.md "Source of Truth").
+
+OpenAPI codegen(`springdoc-openapi` + `openapi-typescript`)을 도입하지 않기로 한 이유: 제출까지 4일이고 생성 단계·CI 배선 비용이 얻는 안전성보다 크다. 계약 불일치는 Task 4의 Mock Fixture에 붙인 `satisfies`가 `npm run typecheck`에서 잡는다 — 서버 응답 모양이 바뀌면 Fixture가 타입 검사를 통과하지 못한다.
+
+- [ ] **Step: 문서 수정과 근거 기록**
+
+`docs/repository-structure.md`의 해당 줄을 아래로 바꾼다:
+
+```markdown
+- <code>shared/api</code>: HTTP Client와 API 계약 Type
+```
+
+같은 절 끝에 근거를 한 문장 남긴다:
+
+```markdown
+API 계약 Type은 OpenAPI Codegen이 아니라 <code>api-spec.md</code>를 보고 직접 정의한다. Mock Fixture에 <code>satisfies</code>를 걸어 계약이 어긋나면 Type 검사가 실패하게 하는 방식으로 동일한 안전성을 얻는다(Issue #7 구현 중 결정).
+```
+
+Task 3의 Commit에 이 문서 변경을 함께 포함한다 — 코드 결정과 그 근거가 같은 Commit에 남는다.
