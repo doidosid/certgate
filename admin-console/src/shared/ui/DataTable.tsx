@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "@mui/material/Link";
 import Paper from "@mui/material/Paper";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -59,23 +60,34 @@ export default function DataTable<T>({
 								hover={Boolean(onRowClick)}
 								sx={{ cursor: onRowClick ? "pointer" : "default" }}
 								onClick={onRowClick ? () => onRowClick(row) : undefined}
-								// 행 클릭이 상세로 가는 유일한 경로이므로 키보드로도 같은 동작을
-								// 할 수 있어야 한다. Enter·Space는 button의 기본 동작과 맞춘다.
-								tabIndex={onRowClick ? 0 : undefined}
-								role={onRowClick ? "button" : undefined}
-								onKeyDown={
-									onRowClick
-										? (event) => {
-												if (event.key === "Enter" || event.key === " ") {
-													event.preventDefault();
-													onRowClick(row);
-												}
-											}
-										: undefined
-								}
 							>
-								{columns.map((column) => (
-									<TableCell key={column.key}>{column.render(row)}</TableCell>
+								{columns.map((column, columnIndex) => (
+									<TableCell key={column.key}>
+										{/*
+										 * 첫 열만 실제 button으로 감싼다. tr에 role="button"을 주면
+										 * 키보드로는 열 수 있게 되지만 암시적 row role이 덮여
+										 * table > row > cell 구조가 보조기술에서 사라진다. 행 전체
+										 * onClick은 마우스 편의로 남기고, 키보드·스크린리더 경로는
+										 * 이 button이 담당한다.
+										 */}
+										{onRowClick && columnIndex === 0 ? (
+											<Link
+												component="button"
+												type="button"
+												underline="hover"
+												sx={{ textAlign: "left" }}
+												onClick={(event) => {
+													// 행 onClick과 겹쳐 두 번 실행되지 않게 한다.
+													event.stopPropagation();
+													onRowClick(row);
+												}}
+											>
+												{column.render(row)}
+											</Link>
+										) : (
+											column.render(row)
+										)}
+									</TableCell>
 								))}
 							</TableRow>
 						))}

@@ -45,24 +45,41 @@ describe("DataTable", () => {
 		const onRowClick = vi.fn();
 		renderTable(onRowClick);
 
-		const firstRow = screen.getByText("sensor-floor-01").closest("tr");
-		expect(firstRow).not.toBeNull();
-		firstRow!.focus();
-		expect(firstRow).toHaveFocus();
+		const trigger = screen.getByRole("button", { name: "sensor-floor-01" });
+		await userEvent.tab();
+		expect(trigger).toHaveFocus();
 
 		await userEvent.keyboard("{Enter}");
 		expect(onRowClick).toHaveBeenCalledWith(rows[0]);
-
-		await userEvent.keyboard(" ");
-		expect(onRowClick).toHaveBeenCalledTimes(2);
 	});
 
-	/** 클릭 동작이 없는 표의 행까지 Tab 순서에 넣으면 키보드 이동만 길어진다. */
-	it("does not make rows focusable when they are not clickable", () => {
+	/**
+	 * tr에 role="button"을 씌우면 키보드로는 열리지만 암시적 row role이 덮여
+	 * table > row > cell 구조가 보조기술에서 사라진다(Codex 리뷰 PR #43 Low).
+	 * 표 구조는 유지한 채 셀 안의 button이 키보드 경로를 담당해야 한다.
+	 */
+	it("keeps table row semantics while still being keyboard reachable", () => {
+		renderTable(vi.fn());
+
+		// 헤더 1 + 데이터 2 = 3. tr이 button으로 덮였다면 row로 세어지지 않는다.
+		expect(screen.getAllByRole("row")).toHaveLength(3);
+		expect(screen.getByText("sensor-floor-01").closest("tr")).not.toHaveAttribute("role", "button");
+		expect(screen.getByRole("button", { name: "sensor-floor-01" })).toBeInTheDocument();
+	});
+
+	it("fires the row callback once, not twice, when the cell control is used", async () => {
+		const onRowClick = vi.fn();
+		renderTable(onRowClick);
+
+		await userEvent.click(screen.getByRole("button", { name: "sensor-floor-01" }));
+
+		expect(onRowClick).toHaveBeenCalledTimes(1);
+	});
+
+	/** 클릭 동작이 없는 표에는 행을 여는 컨트롤도 없어야 한다. */
+	it("adds no row control when rows are not clickable", () => {
 		renderTable();
 
-		const firstRow = screen.getByText("sensor-floor-01").closest("tr");
-		expect(firstRow).not.toHaveAttribute("tabindex");
-		expect(firstRow).not.toHaveAttribute("role", "button");
+		expect(screen.queryByRole("button", { name: "sensor-floor-01" })).not.toBeInTheDocument();
 	});
 });

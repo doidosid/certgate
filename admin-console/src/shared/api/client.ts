@@ -42,8 +42,11 @@ function isFieldErrorArray(value: unknown): value is ErrorResponse["fieldErrors"
  * traceId는 없거나 비어 있을 수 있다 — 그 경우만 호출 쪽 X-Trace-Id로 보완하고,
  * 타입 자체가 틀린 응답은 계약 위반으로 보고 unexpectedError로 내린다.
  */
-function isErrorResponse(body: unknown): body is Omit<ErrorResponse, "traceId" | "fieldErrors"> &
-	Partial<Pick<ErrorResponse, "traceId" | "fieldErrors">> {
+function isErrorResponse(body: unknown): body is Omit<ErrorResponse, "traceId" | "fieldErrors"> & {
+	// null도 통과시키므로(누락과 같게 취급해 아래에서 정규화한다) Type에도 그대로 적는다.
+	traceId?: string | null;
+	fieldErrors?: ErrorResponse["fieldErrors"] | null;
+} {
 	if (typeof body !== "object" || body === null) {
 		return false;
 	}
