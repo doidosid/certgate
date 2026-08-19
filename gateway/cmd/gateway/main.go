@@ -27,6 +27,12 @@ import (
 // (docs/operations.md "Event Outbox").
 const senderFlushInterval = 2 * time.Second
 
+// monitorCheckInterval is how often the Gateway inspects its own Outbox for
+// the CRITICAL backlog and delay conditions (docs/security-design.md §9). It
+// is well under the 60s delay threshold so a breach is noticed promptly, and
+// the check itself is two counting queries against the local SQLite file.
+const monitorCheckInterval = 10 * time.Second
+
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -42,6 +48,7 @@ func main() {
 	mgmtClient := management.NewClient(cfg.ManagementAPIURL, cfg.ServiceToken)
 	accessCache := access.New(mgmtClient, time.Duration(cfg.AccessCacheTTLSeconds)*time.Second, nil)
 	sender := outbox.NewSender(store, mgmtClient, cfg.EventBatchSize, cfg.EventRetryMaxSeconds)
+	monitor := outbox.NewMonitor(store, outbox.DefaultBacklogThreshold, outbox.DefaultDelayThresholdSeconds)
 
 	backendURL, err := url.Parse(cfg.BackendServiceURL)
 	if err != nil {
@@ -58,6 +65,10 @@ func main() {
 
 	go sender.Run(ctx, senderFlushInterval, func(err error) {
 		log.Printf("gateway: outbox send error: %v", err)
+	})
+
+	go monitor.Run(ctx, monitorCheckInterval, logSystemEvent, func(err error) {
+		log.Printf("gateway: outbox monitor error: %v", err)
 	})
 
 	h := &accessHandler{
@@ -77,6 +88,7 @@ func main() {
 	internalMux := http.NewServeMux()
 	internalMux.HandleFunc("/healthz", healthzHandler)
 	internalMux.HandleFunc("/internal/cache/invalidations", cacheInvalidationHandler(cfg.InternalToken, accessCache))
+	internalMux.HandleFunc("/internal/outbox/stats", outboxStatsHandler(cfg.InternalToken, store))
 	internalServer := &http.Server{Addr: ":" + cfg.InternalPort, Handler: internalMux}
 
 	go func() {

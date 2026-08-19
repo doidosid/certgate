@@ -22,6 +22,13 @@ Phase 2("정상 mTLS 접근", Issue #2) 구현 완료:
 - Security Event 생성과 WAL Mode SQLite Durable Outbox, Batch 재전송(지수 Backoff) (`event`, `outbox`)
 - Gateway 내부 Cache 무효화 API(`POST /internal/cache/invalidations`)
 
+Phase 4("Event 신뢰성", Issue #6) Gateway 잔여 구현 완료:
+
+- Outbox 자기 관찰(`outbox.Monitor`): 10초마다 대기 수·최고 지연을 확인해 임계치(100건, 60초)를 새로 넘는 순간 CRITICAL SYSTEM Security Event(`EVENT_OUTBOX_BACKLOG`, `EVENT_DELIVERY_DELAYED`)를 만든다. 같은 장애가 계속되는 동안 매 Tick마다 Event를 쌓지 않도록 Edge Trigger로 동작하고, 값이 임계치 아래로 내려가면 다시 무장한다.
+- Outbox 상태 조회 API(`GET /internal/outbox/stats`): Dashboard의 `outbox` 항목(`pendingCount`, `oldestAgeSeconds`)을 Management API가 채울 수 있게 노출한다. Cache 무효화와 같은 Internal Token을 쓰고 내부 Listener에만 붙는다.
+
+Monitor가 만든 Event도 자신이 관찰하는 그 Outbox를 통해 전송된다. 전송이 막혀 있는 동안에는 다른 Event와 함께 Outbox에 남아 있다가 복구 후 Management API에 도착하며, 그 사이에도 Gateway 구조화 로그에는 즉시 남는다.
+
 아직 없는 것(Issue #3에 Certificate 폐기 API가 추가되어야 실제로 동작):
 
 - Certificate 폐기 자체가 없어 `certificateStatus=REVOKED` 경로는 Access Context가 그 값을 내려줄 때만 검증된다(단위/통합 테스트에서는 확인됨).
