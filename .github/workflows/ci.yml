@@ -208,23 +208,45 @@ jobs:
           fi
           echo "   OK: Verify return code 0, CN=certgate-gateway"
 
-          echo "2) Client 인증서 없는 접속이 차단되는지 (Fail Closed)"
-          # docs/security-design.md §5: Client Certificate는 항상 필수다. 성공하면
-          # mTLS가 강제되지 않는다는 뜻이므로 실패해야 정상이다.
-          if curl -fsS --cacert pki/runtime/ca-chain.crt --max-time 10 "$gateway/telemetry" -o /dev/null 2>/dev/null; then
-            echo "   FAIL: Gateway accepted a request without a client certificate"
+          echo "2) Client 인증서 없는 접속이 TLS 계층에서 차단되는지 (Fail Closed)"
+          # docs/security-design.md §5: Client Certificate는 항상 필수다.
+          #
+          # "curl 이 실패하면 통과"로 판정하면 안 된다. -f 를 쓰면 TLS 가 성공한 뒤
+          # 403·404 를 받아도 실패로 보이고, Gateway 가 아예 죽어 있어도 실패한다.
+          # 즉 mTLS 가 풀려도 통과할 수 있다(Codex 리뷰 PR #35 Medium). HTTP 응답이
+          # 도착했는지를 http_code 로 구분해서, 응답이 왔다면 그 자체를 실패로 본다.
+          set +e
+          code="$(curl -sS --cacert pki/runtime/ca-chain.crt --max-time 10 \
+            -o /dev/null -w '%{http_code}' "$gateway/telemetry" 2>/tmp/curl-nocert.err)"
+          set -e
+          if [ "$code" != "000" ]; then
+            echo "   FAIL: TLS 핸드셰이크가 성공해 HTTP $code 응답이 왔다 — mTLS가 강제되지 않는다"
             exit 1
           fi
-          echo "   OK: 인증서 없는 접속이 거부됐다"
+          # http_code 000 은 "HTTP 응답이 없다"는 뜻이라 Port 가 닫힌 경우도 포함한다.
+          # 오류가 TLS 계층 거부였음을 확인해 그 둘을 구분한다.
+          if ! grep -qiE "ssl|tls|certificate|handshake" /tmp/curl-nocert.err; then
+            echo "   FAIL: HTTP 응답도 없고 TLS 오류도 아니다 (Gateway가 응답하지 않는 상태일 수 있다)"
+            cat /tmp/curl-nocert.err
+            exit 1
+          fi
+          echo "   OK: TLS 계층에서 거부됨 — $(tr -d '\n' < /tmp/curl-nocert.err | head -c 120)"
 
-          echo "3) Root CA Key가 어느 컨테이너에도 없는지 (docs/security-design.md §3)"
+          echo "3) Root CA Key가 어느 컨테이너에도 마운트되지 않았는지 (docs/security-design.md §3)"
+          # 고정 경로 하나만 확인하면 다른 이름·경로로 마운트되는 회귀를 놓친다.
+          # 실제 mount 목록을 조회해 root-ca.key 가 어떤 형태로도 없는지 본다
+          # (Codex 리뷰 PR #35 Low).
           compose="docker compose -f infra/compose.yaml --env-file .env.example"
           for service in gateway management-api; do
-            if $compose exec -T "$service" sh -c 'test -e /run/certgate/root-ca.key'; then
-              echo "   FAIL: $service 컨테이너에 root-ca.key가 들어 있다"
+            container="$($compose ps -q "$service")"
+            mounts="$(docker inspect -f '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{"\n"}}{{end}}' "$container")"
+            if printf '%s' "$mounts" | grep -qi "root-ca\.key"; then
+              echo "   FAIL: $service 에 root-ca.key 가 마운트돼 있다"
+              printf '%s\n' "$mounts"
               exit 1
             fi
-            echo "   OK: $service 에 root-ca.key 없음"
+            echo "   OK: $service 에 root-ca.key 마운트 없음"
+            printf '%s' "$mounts" | sed 's/^/        /'
           done
       - name: dump logs on failure
         if: failure()

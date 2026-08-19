@@ -22,7 +22,11 @@ CN = certgate-gateway
 
 [v3_gateway]
 basicConstraints       = critical, CA:false
-keyUsage               = critical, digitalSignature, keyEncipherment
+# EC P-256 키다. keyEncipherment 는 RSA key transport 용도라 이 키 유형에는 쓰이지
+# 않고, TLS 1.3 은 ECDHE + digitalSignature 로만 동작한다(Codex 리뷰 PR #35 Low).
+keyUsage               = critical, digitalSignature
+# serverAuth 만 준다. clientAuth 가 함께 있으면 이 인증서로 Device 를 사칭해
+# Gateway 자신에게 접속할 수 있다.
 extendedKeyUsage       = serverAuth
 subjectKeyIdentifier   = hash
 subjectAltName         = @alt_names

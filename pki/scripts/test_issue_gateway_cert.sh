@@ -61,9 +61,30 @@ echo "$cert_text" | grep -q "DNS:gateway" || fail "missing SAN DNS:gateway"
 echo "$cert_text" | grep -q "DNS:localhost" || fail "missing SAN DNS:localhost"
 echo "$cert_text" | grep -q "IP Address:127.0.0.1" || fail "missing SAN IP:127.0.0.1"
 
-# A server certificate must not be usable as a CA, and must declare serverAuth.
+# A server certificate must not be usable as a CA.
 echo "$cert_text" | grep -q "CA:FALSE" || fail "gateway certificate is not CA:FALSE"
-echo "$cert_text" | grep -q "TLS Web Server Authentication" || fail "missing serverAuth EKU"
+
+# EKU and Key Usage are compared as exact sets, not just "contains". An extra
+# clientAuth would let this certificate impersonate a Device against the Gateway
+# itself, and keyEncipherment is meaningless for an EC key
+# (Codex 리뷰 PR #35 Low).
+eku="$(openssl x509 -in "$WORK_DIR/ca-a/gateway.crt" -noout -ext extendedKeyUsage \
+  | tail -n +2 | tr -d ' \n')"
+[ "$eku" = "TLSWebServerAuthentication" ] || fail "extendedKeyUsage = '$eku', want exactly TLS Web Server Authentication"
+echo "$cert_text" | grep -q "TLS Web Client Authentication" && fail "gateway certificate must not carry clientAuth"
+
+key_usage="$(openssl x509 -in "$WORK_DIR/ca-a/gateway.crt" -noout -ext keyUsage \
+  | tail -n +2 | tr -d ' \n')"
+[ "$key_usage" = "DigitalSignature" ] || fail "keyUsage = '$key_usage', want exactly Digital Signature"
+openssl x509 -in "$WORK_DIR/ca-a/gateway.crt" -noout -ext keyUsage | grep -q "critical" \
+  || fail "keyUsage is not marked critical"
+
+# SAN must be exactly the three names the Gateway is reached by -- an extra name
+# would widen who this certificate can speak for.
+san="$(openssl x509 -in "$WORK_DIR/ca-a/gateway.crt" -noout -ext subjectAltName \
+  | tail -n +2 | tr -d ' \n')"
+[ "$san" = "DNS:gateway,DNS:localhost,IPAddress:127.0.0.1" ] \
+  || fail "subjectAltName = '$san', want exactly DNS:gateway, DNS:localhost, IP Address:127.0.0.1"
 
 # Validity: 1 year (see issue-gateway-cert.sh for why this value).
 openssl x509 -in "$WORK_DIR/ca-a/gateway.crt" -noout -checkend $(( (365 - 1) * 86400 )) \
@@ -90,6 +111,51 @@ fi
 # unsigned or self-signed certificate.
 if "$SCRIPT_DIR/issue-gateway-cert.sh" "$WORK_DIR/empty" >/dev/null 2>&1; then
   fail "issue-gateway-cert.sh succeeded without an existing CA"
+fi
+
+# docs/security-design.md §3 and ADR-003: "발급 인증서의 유효기간은 상위 CA의 남은
+# 유효기간을 넘지 않는다". A fixed -days would quietly violate this once the
+# Intermediate has less time left than the requested validity
+# (Codex 리뷰 PR #35 Medium).
+SHORT_CA="$WORK_DIR/ca-short"
+mkdir -p "$SHORT_CA"
+cp "$WORK_DIR/ca-a/root-ca.crt" "$WORK_DIR/ca-a/root-ca.key" "$SHORT_CA/"
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 \
+  -out "$SHORT_CA/intermediate-ca.key" 2>/dev/null
+openssl req -new -key "$SHORT_CA/intermediate-ca.key" \
+  -config "$SCRIPT_DIR/../config/intermediate-ca.cnf" \
+  -out "$SHORT_CA/intermediate-ca.csr" 2>/dev/null
+openssl x509 -req -in "$SHORT_CA/intermediate-ca.csr" \
+  -CA "$SHORT_CA/root-ca.crt" -CAkey "$SHORT_CA/root-ca.key" -CAcreateserial \
+  -extfile "$SCRIPT_DIR/../config/intermediate-ca.cnf" -extensions v3_intermediate_ca \
+  -days 30 -out "$SHORT_CA/intermediate-ca.crt" 2>/dev/null
+
+"$SCRIPT_DIR/issue-gateway-cert.sh" "$SHORT_CA" >/dev/null
+
+# 30일 남은 CA 아래에서는 기본 365일이 아니라 30일 이내로 잘려야 한다.
+openssl x509 -in "$SHORT_CA/gateway.crt" -noout -checkend $(( 31 * 86400 )) \
+  && fail "gateway certificate outlives its 30-day Intermediate CA"
+openssl x509 -in "$SHORT_CA/gateway.crt" -noout -checkend $(( 28 * 86400 )) \
+  || fail "gateway certificate was clamped too aggressively under a 30-day CA"
+
+# Failure path: a failed issue must leave the previous gateway.crt/key in place
+# rather than pairing a fresh key with the stale certificate.
+before_cert="$(cat "$WORK_DIR/ca-a/gateway.crt")"
+before_key="$(cat "$WORK_DIR/ca-a/gateway.key")"
+mv "$WORK_DIR/ca-a/intermediate-ca.key" "$WORK_DIR/ca-a/intermediate-ca.key.bak"
+if "$SCRIPT_DIR/issue-gateway-cert.sh" "$WORK_DIR/ca-a" >/dev/null 2>&1; then
+  fail "issue-gateway-cert.sh succeeded with a missing intermediate key"
+fi
+mv "$WORK_DIR/ca-a/intermediate-ca.key.bak" "$WORK_DIR/ca-a/intermediate-ca.key"
+[ "$(cat "$WORK_DIR/ca-a/gateway.crt")" = "$before_cert" ] || fail "failed issue overwrote gateway.crt"
+[ "$(cat "$WORK_DIR/ca-a/gateway.key")" = "$before_key" ] || fail "failed issue overwrote gateway.key"
+
+# Failure path: an Intermediate certificate that does not match its key must be
+# rejected before anything is signed.
+cp -r "$WORK_DIR/ca-a" "$WORK_DIR/ca-mismatch"
+cp "$WORK_DIR/ca-b/intermediate-ca.key" "$WORK_DIR/ca-mismatch/intermediate-ca.key"
+if "$SCRIPT_DIR/issue-gateway-cert.sh" "$WORK_DIR/ca-mismatch" >/dev/null 2>&1; then
+  fail "issue-gateway-cert.sh succeeded with a mismatched intermediate cert/key pair"
 fi
 
 echo "PASS: issue-gateway-cert.sh produces a valid Intermediate-signed Gateway server certificate"
