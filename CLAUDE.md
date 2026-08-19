@@ -42,9 +42,17 @@ CertGate는 X.509 인증서와 mTLS로 네트워크 Device의 신원을 검증�
 
 ## 현재 상태
 
-설계 기준선과 개발 준비 문서는 확정되었고 **기능 구현은 아직 시작 전**이다. `device-agent`, `gateway`, `management-api`, `admin-console`, `backend-service`, `infra`, `pki`, `tests/e2e` 각 디렉터리에는 현재 README만 있고 Build File과 실제 소스는 없다. 첫 구현 작업은 Foundation(Issue #5)이며, 제출 목표는 2026-08-23이다. 세부 순서는 [`docs/implementation-plan.md`](docs/implementation-plan.md)를 따른다.
+**최종 갱신: 2026-08-19.** 제출 목표는 2026-08-23이다.
 
-이 상태에서는 "기존 코드 확인"이 곧 "기존 문서·ADR 확인"과 같다. 코드가 아직 없다는 이유로 문서의 계약을 임의로 바꾸거나 더 쉬운 구조로 대체하지 않는다.
+완료된 Issue: #5 Foundation, #1 Enrollment·PKI, #2 Gateway mTLS, #3 Management API, #6 Event Outbox·SSE. `device-agent`·`gateway`·`backend-service`(Go), `management-api`(Spring), `admin-console`(React), `infra`, `pki`에 실제 소스와 테스트가 있고 CI 10개 Job이 돈다.
+
+**진행 중: Issue #7 (React 관리 콘솔과 실제 API 연결).** 이것이 남은 일정의 병목이다. 실행 계획은 [`docs/superpowers/plans/2026-08-19-admin-console-api-integration.md`](docs/superpowers/plans/2026-08-19-admin-console-api-integration.md)에 있다 — 18 Task·118 Step. **작업을 시작하기 전에 그 문서의 맨 끝 "다른 기기에서 이어서 작업하기" 절을 먼저 읽는다.** 진행 상황 표, 다음 착수 지점, 저장소에 없는 것(PKI 자료·node_modules)을 만드는 절차, OS별 차이가 거기 있다.
+
+미착수: #4 E2E·장애 복구, #8 제출 패키지. 후속 개선 Issue: #25·#27·#30(Codex Low 테스트 검출력), #36(Gateway readiness 미구현).
+
+`admin-console`은 5개 화면이 아직 자리표시자다. 나머지 서비스는 구현돼 있으므로 **"기존 코드 확인"은 실제로 코드를 읽는 것을 뜻한다.** 문서와 코드가 어긋나 보이면 어느 쪽이 최신인지 확인하고, 코드가 이미 있는 영역에서는 Build File과 실제 구현이 문서의 버전 표기보다 우선한다.
+
+`docs/implementation-plan.md`의 날짜별 목표는 설계 시점 계획이라 실제 진행과 차이가 있다. 세부 순서는 위 Issue #7 계획 문서를 따른다.
 
 ## Source of Truth
 
