@@ -4254,3 +4254,80 @@ API 계약 Type은 OpenAPI Codegen이 아니라 <code>api-spec.md</code>를 보�
 ```
 
 Task 3의 Commit에 이 문서 변경을 함께 포함한다 — 코드 결정과 그 근거가 같은 Commit에 남는다.
+
+---
+
+## 다른 기기에서 이어서 작업하기 (2026-08-19 기준)
+
+이 계획은 Windows PC에서 착수했고 이후 macOS에서 이어간다. 저장소에 없는 것(gitignore 대상)이 있어서 새 기기에서는 아래 준비가 필요하다.
+
+### 1. 진행 상황 — 어디까지 됐나
+
+| 항목 | 상태 |
+|---|---|
+| Task 1 same-origin `/api` proxy | **merge 완료** (PR #33) |
+| Issue #34 Compose가 Gateway를 띄우게 함 | **merge 완료** (PR #35) |
+| PKI clamp 판단 이식성 | **PR #37 열림** — 리뷰·merge 대기 |
+| Task 2 `GET /roles` + Task 16 JSON 구조화 로그 | **PR #38 열림** — 리뷰·merge 대기 |
+| Task 12 `GET /dashboard/summary` | **다음 착수 지점** |
+| Task 3 이후 Console 전체 | 미착수 |
+
+부수적으로 등록된 Issue: **#36** (Gateway `/healthz`가 Management API readiness를 반영하지 않음). Issue #4·#7 Task 13과 얽혀 있고 이 계획 범위 밖이다.
+
+**다음 작업은 Task 12다.** PR #37·#38을 먼저 merge하고 시작한다.
+
+### 2. 저장소에 없는 것 — 새 기기에서 만들어야 한다
+
+**PKI 자료** (`pki/runtime/`, gitignore 대상). Compose를 띄우기 전에 반드시 필요하다. 없으면 Docker가 bind mount 원본 자리에 **디렉터리를 만들어** 컨테이너가 깨진다.
+
+~~~bash
+./pki/scripts/init-ca.sh
+./pki/scripts/issue-gateway-cert.sh
+~~~
+
+**`.env`** (gitignore 대상). Compose 실행에는 `--env-file .env.example`을 그대로 쓸 수 있어서 필수는 아니다. 만들 경우 `VITE_API_BASE_URL`·`VITE_SSE_URL`을 상대 경로(`/api/v1`, `/api/v1/security-events/stream`)로 둬야 한다. 절대 URL이면 cross-origin이 되고 Management API에는 CORS 설정이 없어 모든 요청이 차단된다.
+
+**`admin-console/node_modules`**. `cd admin-console && npm ci`.
+
+**`.claude/settings.local.json`** (gitignore 대상). Windows 전용 절대 경로(`JAVA_HOME`, MinGW `CC`)가 들어 있던 파일이라 **macOS로 가져오면 안 된다.** macOS에서는 Homebrew JDK 21과 Xcode CLT가 PATH에 있으면 별도 설정이 필요 없다.
+
+### 3. macOS에서 다르게 동작하는 것들
+
+| | 내용 |
+|---|---|
+| **Key 권한 검사** | `pki/scripts/test_*.sh`는 Windows에서 SKIP했지만 **macOS에서는 실제로 검사한다**(Darwin 분기). `chmod 600`이 정상 반영되므로 통과해야 한다. |
+| **`date` 호출** | `issue-gateway-cert.sh`의 정상 경로는 `openssl -checkend`만 쓰므로 `date`를 타지 않는다(PR #37). clamp 경로(만료 임박 CA)의 BSD `date -j -f`는 **macOS 미검증**이다. |
+| **줄바꿈** | Windows 작업 트리는 CRLF였고 Git이 LF로 정규화해 커밋한다. macOS 체크아웃은 LF라 Shell Script가 그대로 실행된다. Windows에서는 컨테이너에 올릴 때 `set: pipefail: invalid option name`이 났는데 macOS에서는 그 문제가 없다. |
+| **`curl`** | Windows curl은 schannel을 써서 revocation 검사에서 먼저 실패해 mTLS 거부를 확인할 수 없었다. macOS curl은 대개 OpenSSL/LibreSSL이라 `tlsv13 alert certificate required`를 직접 볼 수 있다. |
+| **Docker mount 경로** | `compose.yaml`의 bind mount는 compose 파일 기준 상대 경로(`../pki/runtime/...`)라 OS와 무관하다. |
+
+### 4. 새 기기 첫 실행 점검
+
+~~~bash
+# 1) 도구 확인
+docker --version && java -version && node --version && go version
+
+# 2) 최신 main 동기화
+git checkout main && git pull
+
+# 3) PKI 생성
+./pki/scripts/init-ca.sh && ./pki/scripts/issue-gateway-cert.sh
+./pki/scripts/test_init_ca.sh && ./pki/scripts/test_issue_gateway_cert.sh   # 둘 다 PASS 여야 한다
+
+# 4) 스택 기동 — 5개 서비스가 모두 healthy 여야 한다 (gateway 포함)
+docker compose -f infra/compose.yaml --env-file .env.example up -d --build
+docker compose -f infra/compose.yaml --env-file .env.example ps
+
+# 5) proxy 경로 확인
+curl -s http://127.0.0.1:5173/api/v1/devices        # PageResponse JSON
+curl -s http://127.0.0.1:5173/api/v1/roles          # SENSOR·OPERATOR (PR #38 merge 후)
+
+# 6) Console·Java 테스트
+cd admin-console && npm ci && npm run typecheck && npm test && cd ..
+cd management-api && ./gradlew test && cd ..
+
+# 7) 정리
+docker compose -f infra/compose.yaml --env-file .env.example down -v
+~~~
+
+4번에서 `gateway`가 목록에 없으면 3번의 PKI 생성이 빠졌거나 실패한 것이다. `docker compose logs gateway`로 확인한다.
