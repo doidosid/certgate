@@ -55,3 +55,6 @@ logs/
 # Local Codex review artifacts (do not commit)
 codexReview/
 codexReview.md
+
+# Claude Code 개인 설정 (도구 경로 등 로컬 환경 값)
+.claude/settings.local.json

@@ -31,8 +31,13 @@ services:
       dockerfile: ../infra/docker/management-api/Dockerfile
     networks:
       - certgate-net
+    # Loopback에만 묶는다. Compose 안에서는 gateway·admin-console이 서비스명으로
+    # 접근하므로 Host 공개는 개발 편의(Vite dev server proxy가 이 Port를 본다)를
+    # 위한 것뿐이다. 기본 "8080:8080"은 0.0.0.0에 바인딩되어 같은 네트워크의 다른
+    # 기기에서도 관리 API에 닿는데, docs/api-spec.md §2는 관리자 API를 "개발
+    # 환경의 localhost·Docker 내부망으로 제한"한다.
     ports:
-      - "${MANAGEMENT_API_PORT}:8080"
+      - "127.0.0.1:${MANAGEMENT_API_PORT}:8080"
     environment:
       MANAGEMENT_API_PORT: 8080
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
@@ -40,6 +45,17 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       GATEWAY_INTERNAL_URL: ${GATEWAY_INTERNAL_URL}
       GATEWAY_INTERNAL_TOKEN: ${GATEWAY_INTERNAL_TOKEN}
+      ROOT_CA_CERT_PATH: ${ROOT_CA_CERT_PATH}
+      INTERMEDIATE_CA_CERT_PATH: ${INTERMEDIATE_CA_CERT_PATH}
+      INTERMEDIATE_CA_KEY_PATH: ${INTERMEDIATE_CA_KEY_PATH}
+    volumes:
+      # Intermediate CA 자료만 주입한다. docs/security-design.md §3: "실행 중인
+      # Management API에는 Intermediate CA Certificate와 Key만 주입한다."
+      # root-ca.crt는 Chain 구성에 필요한 공개 인증서일 뿐이고 root-ca.key는
+      # 넣지 않는다.
+      - ../pki/runtime/root-ca.crt:/run/certgate/root-ca.crt:ro
+      - ../pki/runtime/intermediate-ca.crt:/run/certgate/intermediate-ca.crt:ro
+      - ../pki/runtime/intermediate-ca.key:/run/certgate/intermediate-ca.key:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -67,8 +83,19 @@ services:
       GATEWAY_OUTBOX_PATH: /data/outbox.db
       GATEWAY_EVENT_BATCH_SIZE: ${GATEWAY_EVENT_BATCH_SIZE}
       GATEWAY_EVENT_RETRY_MAX_SECONDS: ${GATEWAY_EVENT_RETRY_MAX_SECONDS}
+      BACKEND_SERVICE_URL: ${BACKEND_SERVICE_URL}
+      ROOT_CA_CERT_PATH: ${ROOT_CA_CERT_PATH}
+      GATEWAY_SERVER_CERT_PATH: ${GATEWAY_SERVER_CERT_PATH}
+      GATEWAY_SERVER_KEY_PATH: ${GATEWAY_SERVER_KEY_PATH}
     volumes:
       - gateway-outbox:/data
+      # 인증서 자료는 디렉터리가 아니라 파일 단위로, 읽기 전용으로만 넣는다.
+      # pki/runtime에는 root-ca.key도 함께 있는데 docs/security-design.md §3은
+      # "Root CA Key는 Intermediate CA 서명에만 사용한다"고 규정하므로 실행 중인
+      # 서비스에 들어가면 안 된다. 디렉터리를 통째로 mount하면 그것까지 들어간다.
+      - ../pki/runtime/root-ca.crt:/run/certgate/root-ca.crt:ro
+      - ../pki/runtime/gateway.crt:/run/certgate/gateway.crt:ro
+      - ../pki/runtime/gateway.key:/run/certgate/gateway.key:ro
     depends_on:
       management-api:
         condition: service_healthy
@@ -101,7 +128,10 @@ services:
         VITE_SSE_URL: ${VITE_SSE_URL}
     networks:
       - certgate-net
+    # 관리 콘솔도 Loopback에만 묶는다. 콘솔은 /api proxy를 통해 관리 API 전체를
+    # 대신 호출할 수 있으므로, 콘솔이 네트워크에 열려 있으면 관리 API를 막은 의미가
+    # 없어진다(docs/api-spec.md §2 "인터넷 공개 금지").
     ports:
-      - "${ADMIN_CONSOLE_PORT}:80"
+      - "127.0.0.1:${ADMIN_CONSOLE_PORT}:80"
     depends_on:
       - management-api
