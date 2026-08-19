@@ -1,6 +1,14 @@
 server:
   port: ${MANAGEMENT_API_PORT:8080}
 
+# docs/operations.md "로그": 모든 서비스가 같은 공통 필드를 가진 JSON 구조화 로그를
+# 남긴다. 이 설정이 없으면 Spring 기본 평문 패턴이 나가고, TraceIdFilter가 MDC에
+# 넣은 traceId가 어떤 로그 줄에도 찍히지 않는다.
+logging:
+  structured:
+    format:
+      console: tech.certgate.common.CertGateLogFormatter
+
 spring:
   application:
     name: management-api
