@@ -1,0 +1,33 @@
+# OpenSSL config for the CertGate Gateway's own TLS server certificate, signed
+# by the Intermediate CA (docs/security-design.md §3 "CA 계층": the Intermediate
+# signs leaf certificates; the Root CA key only ever signs the Intermediate).
+#
+# This is the certificate a Device validates when it opens the mTLS connection,
+# so it needs serverAuth and SANs covering every name the Gateway is reached by:
+# "gateway" inside the Compose network, and localhost/127.0.0.1 from the host.
+#
+# Common Name is set for readability only. It is never used for an authentication
+# decision anywhere in this project (docs/security-design.md §4, §5).
+[req]
+default_bits       = 256
+prompt             = no
+distinguished_name = dn
+req_extensions     = v3_gateway
+utf8               = yes
+
+[dn]
+C  = KR
+O  = CertGate
+CN = certgate-gateway
+
+[v3_gateway]
+basicConstraints       = critical, CA:false
+keyUsage               = critical, digitalSignature, keyEncipherment
+extendedKeyUsage       = serverAuth
+subjectKeyIdentifier   = hash
+subjectAltName         = @alt_names
+
+[alt_names]
+DNS.1 = gateway
+DNS.2 = localhost
+IP.1  = 127.0.0.1

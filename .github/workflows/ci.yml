@@ -88,32 +88,64 @@ jobs:
       - name: validate compose config
         run: docker compose -f infra/compose.yaml --env-file .env.example config
 
+  pki:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # PKI Script에는 runnable check가 있는데 지금까지 CI에서 실행되지 않았다.
+      # 각 Script는 매 실행마다 임시 디렉터리에 새 PKI를 만들고 검증 후 지운다
+      # (pki/README.md "Test는 매 실행마다 임시 PKI를 생성").
+      - name: init-ca.sh
+        run: ./pki/scripts/test_init_ca.sh
+      - name: issue-gateway-cert.sh
+        run: ./pki/scripts/test_issue_gateway_cert.sh
+
   compose-smoke:
     runs-on: ubuntu-latest
     needs: compose-config
     steps:
       - uses: actions/checkout@v4
+      # 실행 이미지에는 인증서를 굽지 않고 Job 실행 중에 임시 PKI를 만들어 bind
+      # mount로 주입한다(docs/operations.md "CI 준비": "E2E 임시 Key는 Job 실행
+      # 중 생성하고 Artifact로 업로드하지 않음"). 이 Step이 없으면 compose가
+      # 없는 bind mount 원본을 디렉터리로 만들어 컨테이너가 깨진다.
+      - name: generate temporary PKI
+        run: |
+          set -euo pipefail
+          ./pki/scripts/init-ca.sh
+          ./pki/scripts/issue-gateway-cert.sh
       - name: build images
         run: docker compose -f infra/compose.yaml --env-file .env.example build
       - name: start stack
         run: docker compose -f infra/compose.yaml --env-file .env.example up -d
-      - name: wait for all services to report healthy
+      # 기대하는 서비스 이름을 명시하고 그 전부가 healthy가 되기를 기다린다.
+      # 이전 판은 "unhealthy가 없으면 통과"였는데, docker compose ps는 -a 없이는
+      # 실행 중인 컨테이너만 나열하므로 기동에 실패해 종료된 서비스가 목록에서
+      # 아예 빠지고 그대로 통과했다. Gateway가 한 번도 뜨지 못하는 상태를 CI가
+      # 초록불로 덮고 있었다(Issue #34).
+      - name: wait for every expected service to report healthy
         run: |
           set -euo pipefail
+          expected="admin-console backend-service gateway management-api postgres"
+          compose="docker compose -f infra/compose.yaml --env-file .env.example"
           timeout=180
           elapsed=0
-          until [ "$elapsed" -ge "$timeout" ]; do
-            unhealthy="$(docker compose -f infra/compose.yaml --env-file .env.example ps --format json \
-              | jq -s -r '.[] | select(.Health != null and .Health != "" and .Health != "healthy") | .Name')"
-            if [ -z "$unhealthy" ]; then
-              echo "All services are healthy."
+          while [ "$elapsed" -lt "$timeout" ]; do
+            healthy="$($compose ps --format json | jq -s -r '.[] | select(.Health == "healthy") | .Service')"
+            missing=""
+            for service in $expected; do
+              echo "$healthy" | grep -qx "$service" || missing="$missing $service"
+            done
+            if [ -z "$missing" ]; then
+              echo "All expected services are healthy: $expected"
               exit 0
             fi
             sleep 5
             elapsed=$((elapsed + 5))
           done
-          echo "Timed out waiting for services to become healthy:"
-          docker compose -f infra/compose.yaml --env-file .env.example ps
+          echo "Timed out. Services still not healthy:$missing"
+          echo "--- docker compose ps -a (종료된 컨테이너 포함) ---"
+          $compose ps -a
           exit 1
       # Console origin에서 /api proxy를 실제로 타는지 검증한다. 앞의 healthcheck는
       # 각 컨테이너가 살아 있는지만 보고 이 경로를 한 번도 지나가지 않으므로, nginx
@@ -150,6 +182,37 @@ jobs:
             printf '%s\n' "$stream"
             exit 1
           fi
+      # Gateway가 실제로 mTLS를 강제하는지 확인한다. Issue #34 이전에는 Gateway가
+      # Compose에서 아예 뜨지 못했으므로 이 경로는 CI에서 검증된 적이 없다.
+      - name: verify gateway enforces mTLS
+        run: |
+          set -euo pipefail
+          set -a; . ./.env.example; set +a
+          gateway="https://127.0.0.1:${GATEWAY_MTLS_PORT}"
+
+          echo "1) Gateway 서버 인증서가 우리 CA chain으로 검증되는지"
+          subject="$(echo | openssl s_client -connect "127.0.0.1:${GATEWAY_MTLS_PORT}" \
+            -CAfile pki/runtime/ca-chain.crt -verify_return_error 2>/dev/null | openssl x509 -noout -subject)"
+          echo "   $subject"
+
+          echo "2) Client 인증서 없는 접속이 차단되는지 (Fail Closed)"
+          # docs/security-design.md §5: Client Certificate는 항상 필수다. 성공하면
+          # mTLS가 강제되지 않는다는 뜻이므로 실패해야 정상이다.
+          if curl -fsS --cacert pki/runtime/ca-chain.crt --max-time 10 "$gateway/telemetry" -o /dev/null 2>/dev/null; then
+            echo "   FAIL: Gateway accepted a request without a client certificate"
+            exit 1
+          fi
+          echo "   OK: 인증서 없는 접속이 거부됐다"
+
+          echo "3) Root CA Key가 어느 컨테이너에도 없는지 (docs/security-design.md §3)"
+          compose="docker compose -f infra/compose.yaml --env-file .env.example"
+          for service in gateway management-api; do
+            if $compose exec -T "$service" sh -c 'test -e /run/certgate/root-ca.key'; then
+              echo "   FAIL: $service 컨테이너에 root-ca.key가 들어 있다"
+              exit 1
+            fi
+            echo "   OK: $service 에 root-ca.key 없음"
+          done
       - name: dump logs on failure
         if: failure()
         run: docker compose -f infra/compose.yaml --env-file .env.example logs

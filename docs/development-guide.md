@@ -41,6 +41,7 @@
 Foundation 이후 CI에서 다음을 실행한다.
 
 - Go: fmt 검사, vet, test(<code>-race</code>)
+- PKI Script: CA Chain·Gateway 인증서 SAN·확장 검증(<code>pki/scripts/test_*.sh</code>)
 - Spring: test, build
 - React: typecheck, test, build
 - Docker Compose Config 검증

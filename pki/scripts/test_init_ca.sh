@@ -15,6 +15,21 @@ key_perm() {
   stat -f "%Lp" "$1" 2>/dev/null || stat -c "%a" "$1"
 }
 
+# Windows (Git Bash/MSYS) does not implement Unix permission bits: chmod 600
+# reads back as 644. The assertion is only meaningful on Unix, which is where it
+# matters anyway -- CI runs on ubuntu-latest and the services run in Linux
+# containers. Skipping keeps the rest of the check runnable on a Windows dev box.
+assert_key_perm() {
+  case "$(uname -s)" in
+    Linux | Darwin)
+      [ "$(key_perm "$1")" = "600" ] || fail "$(basename "$1") is not 600"
+      ;;
+    *)
+      echo "SKIP: $(basename "$1") permission check (not meaningful on $(uname -s))"
+      ;;
+  esac
+}
+
 "$SCRIPT_DIR/init-ca.sh" "$WORK_DIR/ca-a" >/dev/null
 
 for f in root-ca.key root-ca.crt intermediate-ca.key intermediate-ca.crt ca-chain.crt; do
@@ -42,8 +57,8 @@ echo "$intermediate_text" | grep -q "CA:TRUE" || fail "intermediate is not a CA"
 echo "$intermediate_text" | grep -q "pathlen:0" || fail "intermediate is missing pathlen:0"
 
 # Private keys must not be group/world readable.
-[ "$(key_perm "$WORK_DIR/ca-a/root-ca.key")" = "600" ] || fail "root-ca.key is not 600"
-[ "$(key_perm "$WORK_DIR/ca-a/intermediate-ca.key")" = "600" ] || fail "intermediate-ca.key is not 600"
+assert_key_perm "$WORK_DIR/ca-a/root-ca.key"
+assert_key_perm "$WORK_DIR/ca-a/intermediate-ca.key"
 
 # Failure path: an independent CA's root must NOT verify this intermediate.
 "$SCRIPT_DIR/init-ca.sh" "$WORK_DIR/ca-b" >/dev/null
