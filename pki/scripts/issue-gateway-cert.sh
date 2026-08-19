@@ -43,22 +43,25 @@ if [ "$intermediate_cert_pub" != "$intermediate_key_pub" ]; then
   exit 1
 fi
 
-# GNU date(-d) first, then BSD/macOS(-j -f). Same ordering rationale as
-# key_perm in the test scripts: the wrong one must fail cleanly, not succeed
-# with a value that means something else.
-to_epoch() {
-  date -u -d "$1" +%s 2>/dev/null || date -u -j -f "%b %e %T %Y %Z" "$1" +%s
-}
-
 intermediate_not_after="$(openssl x509 -in "$CA_DIR/intermediate-ca.crt" -noout -enddate | cut -d= -f2)"
-intermediate_remaining_days=$(( ($(to_epoch "$intermediate_not_after") - $(date -u +%s)) / 86400 ))
 
-if [ "$intermediate_remaining_days" -le 0 ]; then
+if ! openssl x509 -in "$CA_DIR/intermediate-ca.crt" -noout -checkend 0; then
   echo "error: Intermediate CA expired on $intermediate_not_after. Re-run init-ca.sh." >&2
   exit 1
 fi
 
-if [ "$GATEWAY_CERT_DAYS" -gt "$intermediate_remaining_days" ]; then
+# The common case -- a freshly initialized 3-year Intermediate against a 1-year
+# request -- is answered by openssl alone, so no date(1) parsing happens at all.
+# That matters for portability: GNU date and BSD/macOS date disagree on both the
+# flag (-d vs -j -f) and the accepted input, and this script must run on both.
+if ! openssl x509 -in "$CA_DIR/intermediate-ca.crt" -noout -checkend $(( GATEWAY_CERT_DAYS * 86400 )); then
+  # Only the clamp path needs real arithmetic. GNU date(-d) first, then
+  # BSD/macOS(-j -f): the wrong one must fail cleanly rather than return a value
+  # that means something else.
+  to_epoch() {
+    date -u -d "$1" +%s 2>/dev/null || date -u -j -f "%b %e %T %Y %Z" "$1" +%s
+  }
+  intermediate_remaining_days=$(( ($(to_epoch "$intermediate_not_after") - $(date -u +%s)) / 86400 ))
   echo "note: clamping validity from ${GATEWAY_CERT_DAYS}d to the Intermediate CA's remaining ${intermediate_remaining_days}d"
   GATEWAY_CERT_DAYS="$intermediate_remaining_days"
 fi
