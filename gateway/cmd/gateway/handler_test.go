@@ -446,16 +446,16 @@ func waitForPendingCount(t *testing.T, gw *testGateway, want int) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		count, err := gw.store.PendingCount(context.Background())
+		count, _, err := gw.store.Stats(context.Background())
 		if err != nil {
-			t.Fatalf("PendingCount: %v", err)
+			t.Fatalf("Stats: %v", err)
 		}
 		if count == want {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("PendingCount did not reach %d in time", want)
+	t.Fatalf("pendingCount did not reach %d in time", want)
 }
 
 // Codex review of PR #22, High #3: a Device disconnecting mid-request must

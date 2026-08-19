@@ -137,13 +137,14 @@ func TestMarkFailed_CapsAtMaxInterval(t *testing.T) {
 	}
 }
 
-func TestPendingCountAndOldestAgeSeconds(t *testing.T) {
+func TestStats_ReportsDepthAndOldestAge(t *testing.T) {
 	store := openTestStore(t)
 	fixedNow := time.Now()
 	store.now = func() time.Time { return fixedNow }
 
-	if count, err := store.PendingCount(context.Background()); err != nil || count != 0 {
-		t.Fatalf("PendingCount = %d, %v, want 0, nil", count, err)
+	count, age, err := store.Stats(context.Background())
+	if err != nil || count != 0 || age != 0 {
+		t.Fatalf("Stats = %d, %d, %v, want 0, 0, nil for an empty Outbox", count, age, err)
 	}
 
 	if err := store.Enqueue(context.Background(), testEvent("t6")); err != nil {
@@ -151,12 +152,38 @@ func TestPendingCountAndOldestAgeSeconds(t *testing.T) {
 	}
 
 	store.now = func() time.Time { return fixedNow.Add(5 * time.Second) }
-	count, err := store.PendingCount(context.Background())
-	if err != nil || count != 1 {
-		t.Fatalf("PendingCount = %d, %v, want 1, nil", count, err)
+	count, age, err = store.Stats(context.Background())
+	if err != nil || count != 1 || age != 5 {
+		t.Fatalf("Stats = %d, %d, %v, want 1, 5, nil", count, age, err)
 	}
-	age, err := store.OldestAgeSeconds(context.Background())
-	if err != nil || age != 5 {
-		t.Fatalf("OldestAgeSeconds = %d, %v, want 5, nil", age, err)
+}
+
+// The Monitor trips CRITICAL thresholds on these two numbers, so they must
+// describe the same Outbox. Two separate queries let a Sender delete land in
+// between and report a non-empty Outbox whose oldest age is 0 (Codex 리뷰
+// PR #31 Medium).
+func TestStats_DepthAndAgeAgreeOnTheSameOutbox(t *testing.T) {
+	store := openTestStore(t)
+	fixedNow := time.Now()
+	store.now = func() time.Time { return fixedNow }
+
+	for i := 0; i < 3; i++ {
+		if err := store.Enqueue(context.Background(), testEvent("t7")); err != nil {
+			t.Fatalf("Enqueue: %v", err)
+		}
+	}
+	store.now = func() time.Time { return fixedNow.Add(30 * time.Second) }
+
+	for i := 0; i < 20; i++ {
+		count, age, err := store.Stats(context.Background())
+		if err != nil {
+			t.Fatalf("Stats: %v", err)
+		}
+		if count == 0 && age != 0 {
+			t.Fatalf("Stats = %d, %d: an empty Outbox cannot have a non-zero oldest age", count, age)
+		}
+		if count > 0 && age == 0 {
+			t.Fatalf("Stats = %d, %d: a 30s-old backlog cannot report age 0", count, age)
+		}
 	}
 }

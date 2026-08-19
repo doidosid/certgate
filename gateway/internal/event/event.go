@@ -24,6 +24,14 @@ const (
 	ReasonInternalError       = "INTERNAL_ERROR"
 )
 
+// Reason Codes for the Gateway's own health, not for a Device request
+// (docs/api-spec.md §10). The Gateway is the only component that can see its
+// local Outbox, so it is the Producer for both (docs/security-design.md §9).
+const (
+	ReasonEventOutboxBacklog   = "EVENT_OUTBOX_BACKLOG"
+	ReasonEventDeliveryDelayed = "EVENT_DELIVERY_DELAYED"
+)
+
 // Decision values (docs/data-model.md "SecurityEvent").
 const (
 	DecisionAllowed = "ALLOWED"
@@ -38,7 +46,11 @@ const (
 	SeverityCritical = "CRITICAL"
 )
 
-const typeAccess = "ACCESS"
+// Event types (docs/data-model.md "SecurityEvent": ACCESS, TLS, SYSTEM, PKI).
+const (
+	typeAccess = "ACCESS"
+	typeSystem = "SYSTEM"
+)
 
 // Event is one Security Event Batch entry (docs/api-spec.md §7).
 type Event struct {
@@ -87,6 +99,33 @@ func New(p Params) Event {
 		ClientIP:          p.ClientIP,
 		LatencyMs:         p.LatencyMs,
 		TraceID:           p.TraceID,
+	}
+}
+
+// SystemParams carries the fields needed to record one Gateway self-observation.
+type SystemParams struct {
+	Now        time.Time
+	ReasonCode string
+	TraceID    string
+}
+
+// NewSystem builds a SYSTEM Security Event describing the Gateway's own state
+// rather than a Device request, so it carries no Device, Certificate, method,
+// path, or Client IP. Both conditions it is used for — Outbox backlog and
+// delivery delay — are listed as CRITICAL in docs/security-design.md §9, and
+// the Producer decides severity at creation time, so severity is fixed here
+// instead of being derived from the Reason Code. The decision is ERROR because
+// the Event reports a degraded Gateway, not an access verdict
+// (docs/data-model.md "SecurityEvent": decision is ALLOWED, DENIED, or ERROR).
+func NewSystem(p SystemParams) Event {
+	return Event{
+		ID:         uuid.NewString(),
+		OccurredAt: p.Now,
+		Type:       typeSystem,
+		Severity:   SeverityCritical,
+		Decision:   DecisionError,
+		ReasonCode: p.ReasonCode,
+		TraceID:    p.TraceID,
 	}
 }
 

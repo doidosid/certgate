@@ -127,30 +127,27 @@ func (s *Store) Due(ctx context.Context, limit int) ([]event.Event, error) {
 	return events, rows.Err()
 }
 
-// PendingCount supports the Dashboard Outbox indicator
-// (docs/api-spec.md §9 "outbox": pendingCount, oldestAgeSeconds).
-func (s *Store) PendingCount(ctx context.Context) (int, error) {
-	var count int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM outbox_event`).Scan(&count); err != nil {
-		return 0, fmt.Errorf("outbox: count pending: %w", err)
-	}
-	return count, nil
-}
-
-// OldestAgeSeconds returns the age in seconds of the oldest pending event,
-// or 0 if the outbox is empty.
-func (s *Store) OldestAgeSeconds(ctx context.Context) (int, error) {
+// Stats reports the number of pending events and the age in seconds of the
+// oldest one, for the Dashboard Outbox indicator (docs/api-spec.md §9
+// "outbox": pendingCount, oldestAgeSeconds) and for the Monitor's threshold
+// checks. oldestAgeSeconds is 0 when the Outbox is empty.
+//
+// Both values come from a single statement so they always describe the same
+// Outbox. Reading them with two queries lets a concurrent Sender delete land
+// in between, which could report a non-empty Outbox whose oldest age is 0, or
+// trip a backlog threshold that had already cleared (Codex 리뷰 PR #31 Medium).
+func (s *Store) Stats(ctx context.Context) (pendingCount, oldestAgeSeconds int, err error) {
 	var oldestCreatedAt sql.NullInt64
-	err := s.db.QueryRowContext(ctx, `SELECT MIN(created_at) FROM outbox_event`).Scan(&oldestCreatedAt)
-	if err != nil {
-		return 0, fmt.Errorf("outbox: read oldest event age: %w", err)
+	row := s.db.QueryRowContext(ctx, `SELECT COUNT(*), MIN(created_at) FROM outbox_event`)
+	if err := row.Scan(&pendingCount, &oldestCreatedAt); err != nil {
+		return 0, 0, fmt.Errorf("outbox: read stats: %w", err)
 	}
 	if !oldestCreatedAt.Valid {
-		return 0, nil
+		return pendingCount, 0, nil
 	}
 	age := s.now().Unix() - oldestCreatedAt.Int64
 	if age < 0 {
-		return 0, nil
+		age = 0
 	}
-	return int(age), nil
+	return pendingCount, int(age), nil
 }

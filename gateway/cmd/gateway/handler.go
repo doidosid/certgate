@@ -29,6 +29,11 @@ import (
 // that decision produces (Codex review of PR #22, High #3).
 const outboxEnqueueTimeout = 2 * time.Second
 
+// outboxStatsTimeout bounds the two counting queries the Dashboard stats
+// endpoint runs, so a stalled SQLite read cannot hold the internal listener's
+// goroutine open indefinitely.
+const outboxStatsTimeout = 2 * time.Second
+
 type contextKey int
 
 const requestMetaKey contextKey = iota
@@ -257,7 +262,7 @@ func (h *accessHandler) recordEvent(p event.Params) {
 	ctx, cancel := context.WithTimeout(context.Background(), outboxEnqueueTimeout)
 	defer cancel()
 	if err := h.store.Enqueue(ctx, evt); err != nil {
-		log.Printf("gateway: enqueue security event failed: %v (reasonCode=%s traceId=%s)", err, p.ReasonCode, p.TraceID)
+		logOutboxFailure(h.clock(), p.TraceID, p.ReasonCode, err)
 	}
 }
 
@@ -288,6 +293,48 @@ type logLine struct {
 	LatencyMs         int64  `json:"latencyMs"`
 }
 
+// systemLogLine is the structured JSON log for a SYSTEM Security Event the
+// Gateway raises about itself. It keeps the common fields of
+// docs/operations.md "로그" but drops logLine's access-decision fields, which
+// describe a Device request that does not exist here.
+type systemLogLine struct {
+	Timestamp  string `json:"timestamp"`
+	Level      string `json:"level"`
+	Service    string `json:"service"`
+	TraceID    string `json:"traceId"`
+	Severity   string `json:"severity"`
+	Decision   string `json:"decision"`
+	ReasonCode string `json:"reasonCode"`
+}
+
+// outboxFailureLogLine reports a Security Event that could not be written to
+// the Durable Outbox. docs/architecture.md "장애 원칙" requires this failure to
+// be recorded in structured form and the Event not to be treated as preserved,
+// which outboxPersisted=false states explicitly. The error text is a SQLite
+// message, never Event content, so nothing from docs/security-design.md §10's
+// "기록 금지" list reaches the log.
+type outboxFailureLogLine struct {
+	Timestamp       string `json:"timestamp"`
+	Level           string `json:"level"`
+	Service         string `json:"service"`
+	TraceID         string `json:"traceId,omitempty"`
+	ReasonCode      string `json:"reasonCode"`
+	OutboxPersisted bool   `json:"outboxPersisted"`
+	Error           string `json:"error"`
+}
+
+func logOutboxFailure(now time.Time, traceID, reasonCode string, err error) {
+	logJSON(outboxFailureLogLine{
+		Timestamp:       now.UTC().Format(time.RFC3339),
+		Level:           "ERROR",
+		Service:         "gateway",
+		TraceID:         traceID,
+		ReasonCode:      reasonCode,
+		OutboxPersisted: false,
+		Error:           err.Error(),
+	})
+}
+
 func logLevelFor(decision string) string {
 	switch decision {
 	case event.DecisionAllowed:
@@ -300,7 +347,26 @@ func logLevelFor(decision string) string {
 }
 
 func logDecision(l logLine) {
-	b, err := json.Marshal(l)
+	logJSON(l)
+}
+
+// logSystemEvent records a Gateway self-observation Security Event on the same
+// structured log stream, so an operator sees the CRITICAL condition even while
+// the Outbox cannot deliver the Event to the Management API.
+func logSystemEvent(evt event.Event) {
+	logJSON(systemLogLine{
+		Timestamp:  evt.OccurredAt.UTC().Format(time.RFC3339),
+		Level:      logLevelFor(evt.Decision),
+		Service:    "gateway",
+		TraceID:    evt.TraceID,
+		Severity:   evt.Severity,
+		Decision:   evt.Decision,
+		ReasonCode: evt.ReasonCode,
+	})
+}
+
+func logJSON(line any) {
+	b, err := json.Marshal(line)
 	if err != nil {
 		log.Printf("gateway: log encode error: %v", err)
 		return
@@ -310,14 +376,14 @@ func logDecision(l logLine) {
 
 func cacheInvalidationHandler(internalToken string, cache *access.Cache) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
+		// Token first, method second — same contract as the stats endpoint
+		// (docs/api-spec.md §8).
+		if !validBearer(r.Header.Get("Authorization"), internalToken) {
+			writeServiceTokenInvalid(w)
 			return
 		}
-		if !validBearer(r.Header.Get("Authorization"), internalToken) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusUnauthorized)
-			_ = json.NewEncoder(w).Encode(map[string]string{"code": "SERVICE_TOKEN_INVALID"})
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
 
@@ -337,6 +403,54 @@ func cacheInvalidationHandler(internalToken string, cache *access.Cache) http.Ha
 		cache.Invalidate(body.Key)
 		w.WriteHeader(http.StatusNoContent)
 	}
+}
+
+// outboxStatsHandler exposes the Outbox depth and the age of its oldest
+// pending Event so the Management API can fill the Dashboard's "outbox" field
+// (docs/api-spec.md §8, §9; docs/operations.md "Health": "Dashboard는 Gateway
+// Outbox 대기 수·최고 지연과 서비스 상태를 조회"). It is on the internal
+// listener behind the same internal Service Token as Cache invalidation, never
+// on the mTLS listener Devices reach.
+func outboxStatsHandler(internalToken string, store *outbox.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Token first, method second: docs/api-spec.md §8 makes 401 the answer
+		// to every unauthenticated request, and answering 405 instead would
+		// tell an unauthenticated caller which methods the endpoint supports
+		// (Codex 리뷰 PR #31 Low).
+		if !validBearer(r.Header.Get("Authorization"), internalToken) {
+			writeServiceTokenInvalid(w)
+			return
+		}
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), outboxStatsTimeout)
+		defer cancel()
+
+		pendingCount, oldestAgeSeconds, err := store.Stats(ctx)
+		if err != nil {
+			log.Printf("gateway: outbox stats query failed: %v", err)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]string{"code": event.ReasonInternalError})
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]int{
+			"pendingCount":     pendingCount,
+			"oldestAgeSeconds": oldestAgeSeconds,
+		})
+	}
+}
+
+func writeServiceTokenInvalid(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnauthorized)
+	_ = json.NewEncoder(w).Encode(map[string]string{"code": "SERVICE_TOKEN_INVALID"})
 }
 
 func validBearer(header, token string) bool {

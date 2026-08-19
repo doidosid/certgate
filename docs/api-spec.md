@@ -57,7 +57,7 @@
 | 관리자 API | 개발 환경의 localhost·Docker 내부망으로 제한 | 인터넷 공개 금지 |
 | Enrollment API | Device별 단기 Bearer Token | CSR 제출·상태·다운로드만 허용 |
 | Gateway 내부 API | <code>Authorization: Bearer SERVICE_TOKEN</code> | Docker 내부망만 |
-| Gateway Cache API | 별도 내부 Service Token | Docker 내부망만 |
+| Gateway 제공 내부 API (Cache·Outbox) | 별도 내부 Service Token | Docker 내부망만 |
 
 관리자 로그인 UI는 MVP 제외 범위다. 따라서 관리자 API는 인증이 없다는 사실보다 **외부에 공개하지 않는 배포 제한**이 보안 경계가 된다.
 
@@ -291,9 +291,11 @@ Gateway는 Security Event 생성과 SQLite Durable Outbox 저장을 하나의 �
 
 Event ID Unique Constraint로 재전송을 멱등 처리한다.
 
-## 8. Gateway 내부 Cache API
+## 8. Gateway 제공 내부 API
 
-이 API는 Go Gateway가 제공하고 Management API가 호출한다.
+이 API는 Go Gateway가 제공하고 Management API가 호출한다. 모두 별도 내부 Service Token(<code>Authorization: Bearer INTERNAL_TOKEN</code>)을 사용하며, Device가 접속하는 mTLS Listener가 아니라 Docker 내부망 전용 Listener에만 노출한다. Token이 없거나 다르면 <code>401 SERVICE_TOKEN_INVALID</code>다.
+
+### Cache 무효화
 
 <code>POST http://gateway:8081/internal/cache/invalidations</code>
 
@@ -304,7 +306,24 @@ Event ID Unique Constraint로 재전송을 멱등 처리한다.
 }
 ~~~
 
-성공은 <code>204 No Content</code>다. 별도 내부 Service Token을 사용한다.
+성공은 <code>204 No Content</code>다.
+
+### Outbox 상태
+
+<code>GET http://gateway:8081/internal/outbox/stats</code>
+
+Gateway의 SQLite Durable Outbox는 Gateway 안에만 있어서 Management API가 직접 볼 수 없다. Dashboard의 <code>outbox</code> 항목(§9)은 이 API로 채운다.
+
+~~~json
+{
+  "pendingCount": 12,
+  "oldestAgeSeconds": 24
+}
+~~~
+
+Outbox가 비어 있으면 두 값 모두 <code>0</code>이다. 조회 실패는 <code>500 INTERNAL_ERROR</code>다.
+
+이 값이 임계치를 넘으면(대기 100건 이상, 최고 지연 60초 이상) Gateway가 스스로 CRITICAL Security Event(<code>EVENT_OUTBOX_BACKLOG</code>, <code>EVENT_DELIVERY_DELAYED</code>)를 만들어 같은 Outbox에 넣는다(docs/security-design.md §9). 이 API는 Dashboard 표시용 조회일 뿐이고 판정에는 관여하지 않는다.
 
 ## 9. Console 조회 API
 

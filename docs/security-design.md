@@ -89,7 +89,7 @@ CRL·OCSP는 제출 이후 확장 기능이다.
 ## 8. Service 인증
 
 - Gateway → Management API: Gateway Service Token
-- Management API → Gateway Cache API: 별도 Internal Token
+- Management API → Gateway 제공 내부 API(Cache 무효화·Outbox 상태): 별도 Internal Token
 - Token은 환경변수 또는 Secret File로 주입
 - Token 값을 로그에 남기지 않음
 - 개발 기본값을 운영 값으로 사용하지 않음
