@@ -115,6 +115,41 @@ jobs:
           echo "Timed out waiting for services to become healthy:"
           docker compose -f infra/compose.yaml --env-file .env.example ps
           exit 1
+      # Console origin에서 /api proxy를 실제로 타는지 검증한다. 앞의 healthcheck는
+      # 각 컨테이너가 살아 있는지만 보고 이 경로를 한 번도 지나가지 않으므로, nginx
+      # 설정 오타나 향후 proxy_pass 변경으로 생기는 CORS·SSE 회귀를 잡지 못한다
+      # (Codex 리뷰 PR #33 Medium).
+      - name: verify console /api proxy contract
+        run: |
+          set -euo pipefail
+          set -a; . ./.env.example; set +a
+          console="http://127.0.0.1:${ADMIN_CONSOLE_PORT}"
+
+          echo "1) REST 경로가 Management API에 도달하는지"
+          curl -fsS "$console/api/v1/devices" | jq -e 'has("content") and .page == 0' > /dev/null
+
+          echo "2) SPA fallback이 /api 를 가로채지 않는지"
+          curl -fsS -o /dev/null "$console/devices"
+
+          echo "3) X-Trace-Id가 왕복에서 보존되는지 (docs/api-spec.md §1)"
+          sent="proxy-smoke-trace-id"
+          received="$(curl -fsS -D - -o /dev/null -H "X-Trace-Id: $sent" "$console/api/v1/devices" \
+            | tr -d '\r' | awk 'tolower($1) == "x-trace-id:" { print $2 }')"
+          if [ "$received" != "$sent" ]; then
+            echo "X-Trace-Id = '$received', want '$sent'"
+            exit 1
+          fi
+
+          echo "4) SSE가 버퍼링 없이 즉시 열리는지"
+          # proxy_buffering이 켜져 있으면 connected 주석 프레임이 즉시 나오지 않아
+          # 이 짧은 max-time 안에 아무것도 받지 못한다. curl은 stream을 끊을 때
+          # 28로 끝나므로 종료 코드는 무시하고 받은 내용만 본다.
+          stream="$(curl -sN --max-time 5 "$console/api/v1/security-events/stream" || true)"
+          if ! printf '%s' "$stream" | grep -q "connected"; then
+            echo "SSE stream did not deliver the connected frame within 5s:"
+            printf '%s\n' "$stream"
+            exit 1
+          fi
       - name: dump logs on failure
         if: failure()
         run: docker compose -f infra/compose.yaml --env-file .env.example logs
