@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import DataTable, { type Column } from "./DataTable";
 
 interface Row {
@@ -81,5 +82,32 @@ describe("DataTable", () => {
 		renderTable();
 
 		expect(screen.queryByRole("button", { name: "sensor-floor-01" })).not.toBeInTheDocument();
+	});
+
+	/**
+	 * 다른 화면으로 가는 행은 button이 아니라 anchor여야 새 탭 열기·가운데 클릭·
+	 * 주소 복사가 동작한다. 이동을 button으로 표현하면 그게 전부 막힌다.
+	 */
+	it("renders a real link when the row navigates elsewhere", () => {
+		render(
+			<MemoryRouter>
+				<DataTable
+					columns={columns}
+					rows={rows}
+					getRowId={(row) => row.id}
+					page={0}
+					size={20}
+					totalElements={rows.length}
+					onPageChange={vi.fn()}
+					onSizeChange={vi.fn()}
+					getRowHref={(row) => `/devices/${row.id}`}
+				/>
+			</MemoryRouter>,
+		);
+
+		expect(screen.getByRole("link", { name: "sensor-floor-01" })).toHaveAttribute("href", "/devices/a");
+		expect(screen.queryByRole("button", { name: "sensor-floor-01" })).not.toBeInTheDocument();
+		// 이동 방식이어도 표 구조는 그대로여야 한다.
+		expect(screen.getAllByRole("row")).toHaveLength(3);
 	});
 });
