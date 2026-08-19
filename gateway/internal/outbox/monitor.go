@@ -2,6 +2,7 @@ package outbox
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,9 +23,34 @@ const (
 // Recorder is the subset of Store that Monitor depends on, so tests can make
 // an individual read or write fail without a broken database file.
 type Recorder interface {
-	PendingCount(ctx context.Context) (int, error)
-	OldestAgeSeconds(ctx context.Context) (int, error)
+	Stats(ctx context.Context) (pendingCount, oldestAgeSeconds int, err error)
 	Enqueue(ctx context.Context, evt event.Event) error
+}
+
+// condition tracks one Outbox threshold across checks.
+//
+// firing means a breach has been reported and has not recovered yet; it is
+// what makes detection edge-triggered. unsent means a detected breach still
+// has no durable record, and is deliberately independent of the current
+// reading: once a breach has happened its CRITICAL Event must be stored even
+// if the Outbox drains before the write finally succeeds. Tying the retry to
+// "is it still breached?" instead loses the notification entirely when a
+// transient SQLite failure is followed by recovery (Codex 리뷰 PR #31 High).
+type condition struct {
+	reasonCode string
+	firing     bool
+	unsent     bool
+}
+
+// observe folds one reading into the condition's state.
+func (c *condition) observe(breached bool) {
+	switch {
+	case breached && !c.firing:
+		c.firing = true
+		c.unsent = true
+	case !breached:
+		c.firing = false
+	}
 }
 
 // Monitor watches the Gateway's own Outbox and produces the CRITICAL SYSTEM
@@ -45,6 +71,11 @@ type Recorder interface {
 // burying the Console in duplicates. A condition re-arms as soon as its value
 // falls back below the threshold, so a later outage is reported again.
 //
+// The edge state lives in memory, so a Gateway restart during an ongoing
+// breach reports that breach once more. That is accepted: the duplicate is
+// bounded by the restart count, and persisting the state would mean a second
+// durable store beyond the Outbox that docs/operations.md defines.
+//
 // A Monitor is not safe for concurrent use; Run drives it from one goroutine.
 type Monitor struct {
 	store                 Recorder
@@ -52,8 +83,8 @@ type Monitor struct {
 	delayThresholdSeconds int
 	now                   func() time.Time
 
-	backlogFiring bool
-	delayFiring   bool
+	backlog condition
+	delay   condition
 }
 
 // NewMonitor builds a Monitor over store using the given thresholds.
@@ -63,65 +94,46 @@ func NewMonitor(store Recorder, backlogThreshold, delayThresholdSeconds int) *Mo
 		backlogThreshold:      backlogThreshold,
 		delayThresholdSeconds: delayThresholdSeconds,
 		now:                   time.Now,
+		backlog:               condition{reasonCode: event.ReasonEventOutboxBacklog},
+		delay:                 condition{reasonCode: event.ReasonEventDeliveryDelayed},
 	}
 }
 
-// Check reads the Outbox once and enqueues a CRITICAL Event for each condition
-// that has just become breached, returning the Events it enqueued. Both values
-// are read before anything is written so the two conditions are judged against
-// the same snapshot.
+// Check reads the Outbox once, folds the reading into both conditions, and
+// enqueues a CRITICAL Event for every breach that does not have a durable
+// record yet. It returns the Events it enqueued.
 //
-// A condition is marked as firing only after its Event is durably enqueued, so
-// a failed write leaves the condition armed and the next Check retries it.
+// A condition is cleared only after its Event is durably enqueued, so a failed
+// write is retried on the next Check whether or not the Outbox has recovered
+// in the meantime.
 func (m *Monitor) Check(ctx context.Context) ([]event.Event, error) {
-	pending, err := m.store.PendingCount(ctx)
+	pendingCount, oldestAgeSeconds, err := m.store.Stats(ctx)
 	if err != nil {
 		return nil, err
 	}
-	oldestAgeSeconds, err := m.store.OldestAgeSeconds(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	backlogBreached := pending >= m.backlogThreshold
-	delayBreached := oldestAgeSeconds >= m.delayThresholdSeconds
-	if !backlogBreached {
-		m.backlogFiring = false
-	}
-	if !delayBreached {
-		m.delayFiring = false
-	}
+	m.backlog.observe(pendingCount >= m.backlogThreshold)
+	m.delay.observe(oldestAgeSeconds >= m.delayThresholdSeconds)
 
 	var produced []event.Event
-	if backlogBreached && !m.backlogFiring {
-		evt, err := m.record(ctx, event.ReasonEventOutboxBacklog)
-		if err != nil {
-			return produced, err
+	for _, c := range []*condition{&m.backlog, &m.delay} {
+		if !c.unsent {
+			continue
 		}
-		m.backlogFiring = true
-		produced = append(produced, evt)
-	}
-	if delayBreached && !m.delayFiring {
-		evt, err := m.record(ctx, event.ReasonEventDeliveryDelayed)
-		if err != nil {
-			return produced, err
+		evt := event.NewSystem(event.SystemParams{
+			Now:        m.now(),
+			ReasonCode: c.reasonCode,
+			TraceID:    uuid.NewString(),
+		})
+		if err := m.store.Enqueue(ctx, evt); err != nil {
+			// The Reason Code belongs in the error: the operational log is the
+			// only trace of this CRITICAL condition until the write succeeds,
+			// and Store.Enqueue's own error names only the event id.
+			return produced, fmt.Errorf("outbox: record %s security event: %w", c.reasonCode, err)
 		}
-		m.delayFiring = true
+		c.unsent = false
 		produced = append(produced, evt)
 	}
 	return produced, nil
-}
-
-func (m *Monitor) record(ctx context.Context, reasonCode string) (event.Event, error) {
-	evt := event.NewSystem(event.SystemParams{
-		Now:        m.now(),
-		ReasonCode: reasonCode,
-		TraceID:    uuid.NewString(),
-	})
-	if err := m.store.Enqueue(ctx, evt); err != nil {
-		return event.Event{}, err
-	}
-	return evt, nil
 }
 
 // Run checks on every tick until ctx is done, reporting each produced Event to

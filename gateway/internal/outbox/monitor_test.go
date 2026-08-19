@@ -3,6 +3,7 @@ package outbox
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,16 +18,14 @@ type fakeRecorder struct {
 	oldestAgeSeconds int
 	enqueued         []event.Event
 	enqueueErr       error
-	pendingErr       error
-	oldestErr        error
+	statsErr         error
 }
 
-func (f *fakeRecorder) PendingCount(context.Context) (int, error) {
-	return f.pending, f.pendingErr
-}
-
-func (f *fakeRecorder) OldestAgeSeconds(context.Context) (int, error) {
-	return f.oldestAgeSeconds, f.oldestErr
+func (f *fakeRecorder) Stats(context.Context) (int, int, error) {
+	if f.statsErr != nil {
+		return 0, 0, f.statsErr
+	}
+	return f.pending, f.oldestAgeSeconds, nil
 }
 
 func (f *fakeRecorder) Enqueue(_ context.Context, evt event.Event) error {
@@ -210,8 +209,84 @@ func TestCheck_EnqueueFailure_RetriesOnNextCheck(t *testing.T) {
 	}
 }
 
+// The breach happened, so its CRITICAL Event must be recorded even if the
+// Outbox drains before the write succeeds. Retrying only while the threshold is
+// still exceeded would drop the notification entirely — one transient SQLite
+// failure followed by recovery and the incident leaves no trace anywhere
+// (Codex 리뷰 PR #31 High).
+func TestCheck_EnqueueFailureThenRecovery_StillRecordsTheBreach(t *testing.T) {
+	recorder := &fakeRecorder{pending: 120, enqueueErr: errors.New("disk full")}
+	monitor := NewMonitor(recorder, 100, 60)
+
+	if _, err := monitor.Check(context.Background()); err == nil {
+		t.Fatal("Check: want error when the Event cannot be enqueued")
+	}
+
+	// The Sender drains the Outbox before the next tick, clearing the breach.
+	recorder.pending = 0
+	recorder.enqueueErr = nil
+
+	produced, err := monitor.Check(context.Background())
+	if err != nil {
+		t.Fatalf("recovery Check: %v", err)
+	}
+	if len(produced) != 1 || produced[0].ReasonCode != event.ReasonEventOutboxBacklog {
+		t.Fatalf("produced = %v, want [%s] — the breach still has no durable record",
+			reasonCodes(produced), event.ReasonEventOutboxBacklog)
+	}
+
+	// ...and it is recorded once, not again on the next quiet tick.
+	produced, err = monitor.Check(context.Background())
+	if err != nil {
+		t.Fatalf("quiet Check: %v", err)
+	}
+	if len(produced) != 0 {
+		t.Errorf("produced = %v, want none once the breach is recorded", reasonCodes(produced))
+	}
+}
+
+// The same guarantee for the delay condition.
+func TestCheck_DelayEnqueueFailureThenRecovery_StillRecordsTheBreach(t *testing.T) {
+	recorder := &fakeRecorder{oldestAgeSeconds: 90, enqueueErr: errors.New("disk full")}
+	monitor := NewMonitor(recorder, 100, 60)
+
+	if _, err := monitor.Check(context.Background()); err == nil {
+		t.Fatal("Check: want error when the Event cannot be enqueued")
+	}
+
+	recorder.oldestAgeSeconds = 0
+	recorder.enqueueErr = nil
+
+	produced, err := monitor.Check(context.Background())
+	if err != nil {
+		t.Fatalf("recovery Check: %v", err)
+	}
+	if len(produced) != 1 || produced[0].ReasonCode != event.ReasonEventDeliveryDelayed {
+		t.Errorf("produced = %v, want [%s]", reasonCodes(produced), event.ReasonEventDeliveryDelayed)
+	}
+}
+
+// The enqueue error must name the condition: until the write succeeds the
+// operational log is the only trace of this CRITICAL condition, and
+// Store.Enqueue's own error names only the event id.
+func TestCheck_EnqueueFailure_ErrorNamesTheReasonCode(t *testing.T) {
+	recorder := &fakeRecorder{pending: 120, enqueueErr: errors.New("disk full")}
+	monitor := NewMonitor(recorder, 100, 60)
+
+	_, err := monitor.Check(context.Background())
+	if err == nil {
+		t.Fatal("Check: want error")
+	}
+	if !strings.Contains(err.Error(), event.ReasonEventOutboxBacklog) {
+		t.Errorf("error = %q, want it to name %s", err, event.ReasonEventOutboxBacklog)
+	}
+	if !strings.Contains(err.Error(), "disk full") {
+		t.Errorf("error = %q, want the underlying cause wrapped", err)
+	}
+}
+
 func TestCheck_ReadFailure_ReturnsErrorWithoutEnqueueing(t *testing.T) {
-	recorder := &fakeRecorder{pending: 120, oldestErr: errors.New("read failed")}
+	recorder := &fakeRecorder{pending: 120, statsErr: errors.New("read failed")}
 	monitor := NewMonitor(recorder, 100, 60)
 
 	if _, err := monitor.Check(context.Background()); err == nil {

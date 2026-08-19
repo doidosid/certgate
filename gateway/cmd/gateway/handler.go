@@ -348,14 +348,14 @@ func logJSON(line any) {
 
 func cacheInvalidationHandler(internalToken string, cache *access.Cache) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
+		// Token first, method second — same contract as the stats endpoint
+		// (docs/api-spec.md §8).
+		if !validBearer(r.Header.Get("Authorization"), internalToken) {
+			writeServiceTokenInvalid(w)
 			return
 		}
-		if !validBearer(r.Header.Get("Authorization"), internalToken) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusUnauthorized)
-			_ = json.NewEncoder(w).Encode(map[string]string{"code": "SERVICE_TOKEN_INVALID"})
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
 
@@ -385,21 +385,23 @@ func cacheInvalidationHandler(internalToken string, cache *access.Cache) http.Ha
 // on the mTLS listener Devices reach.
 func outboxStatsHandler(internalToken string, store *outbox.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			w.WriteHeader(http.StatusMethodNotAllowed)
+		// Token first, method second: docs/api-spec.md §8 makes 401 the answer
+		// to every unauthenticated request, and answering 405 instead would
+		// tell an unauthenticated caller which methods the endpoint supports
+		// (Codex 리뷰 PR #31 Low).
+		if !validBearer(r.Header.Get("Authorization"), internalToken) {
+			writeServiceTokenInvalid(w)
 			return
 		}
-		if !validBearer(r.Header.Get("Authorization"), internalToken) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusUnauthorized)
-			_ = json.NewEncoder(w).Encode(map[string]string{"code": "SERVICE_TOKEN_INVALID"})
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
 
 		ctx, cancel := context.WithTimeout(r.Context(), outboxStatsTimeout)
 		defer cancel()
 
-		pendingCount, oldestAgeSeconds, err := outboxStats(ctx, store)
+		pendingCount, oldestAgeSeconds, err := store.Stats(ctx)
 		if err != nil {
 			log.Printf("gateway: outbox stats query failed: %v", err)
 			w.Header().Set("Content-Type", "application/json")
@@ -417,14 +419,10 @@ func outboxStatsHandler(internalToken string, store *outbox.Store) http.HandlerF
 	}
 }
 
-func outboxStats(ctx context.Context, store *outbox.Store) (pendingCount, oldestAgeSeconds int, err error) {
-	if pendingCount, err = store.PendingCount(ctx); err != nil {
-		return 0, 0, err
-	}
-	if oldestAgeSeconds, err = store.OldestAgeSeconds(ctx); err != nil {
-		return 0, 0, err
-	}
-	return pendingCount, oldestAgeSeconds, nil
+func writeServiceTokenInvalid(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnauthorized)
+	_ = json.NewEncoder(w).Encode(map[string]string{"code": "SERVICE_TOKEN_INVALID"})
 }
 
 func validBearer(header, token string) bool {

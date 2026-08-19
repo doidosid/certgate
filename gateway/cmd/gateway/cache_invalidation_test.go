@@ -68,6 +68,23 @@ func TestCacheInvalidationHandler_RejectsNonPost(t *testing.T) {
 	}
 }
 
+// Same contract as the stats endpoint: 401 before 405 for an unauthenticated
+// caller (docs/api-spec.md §8, Codex 리뷰 PR #31 Low).
+func TestCacheInvalidationHandler_UnauthenticatedNonPost_Is401NotMethodNotAllowed(t *testing.T) {
+	fetcher := &fakeAccessFetcher{}
+	cache := access.New(fetcher, 30*time.Second, nil)
+	handler := cacheInvalidationHandler("correct-token", cache)
+
+	req := httptest.NewRequest(http.MethodGet, "/internal/cache/invalidations", nil)
+	rec := httptest.NewRecorder()
+
+	handler(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
 func TestCacheInvalidationHandler_RejectsUnknownType(t *testing.T) {
 	fetcher := &fakeAccessFetcher{}
 	cache := access.New(fetcher, 30*time.Second, nil)

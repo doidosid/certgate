@@ -79,12 +79,12 @@ func TestFlush_FailureReschedulesAllEvents(t *testing.T) {
 		t.Fatal("expected Flush to report the publisher error")
 	}
 
-	count, err := store.PendingCount(context.Background())
+	count, _, err := store.Stats(context.Background())
 	if err != nil {
-		t.Fatalf("PendingCount: %v", err)
+		t.Fatalf("Stats: %v", err)
 	}
 	if count != 2 {
-		t.Fatalf("PendingCount = %d, want 2 (failed batch must not lose events)", count)
+		t.Fatalf("pendingCount = %d, want 2 (failed batch must not lose events)", count)
 	}
 
 	due, err := store.Due(context.Background(), 10)
@@ -125,11 +125,11 @@ func TestRun_FlushesOnEveryTickUntilCancelled(t *testing.T) {
 	defer cancel()
 	sender.Run(ctx, 5*time.Millisecond, nil)
 
-	count, err := store.PendingCount(context.Background())
+	count, _, err := store.Stats(context.Background())
 	if err != nil {
-		t.Fatalf("PendingCount: %v", err)
+		t.Fatalf("Stats: %v", err)
 	}
 	if count != 0 {
-		t.Fatalf("expected Run to have flushed the pending event, PendingCount = %d", count)
+		t.Fatalf("expected Run to have flushed the pending event, pendingCount = %d", count)
 	}
 }

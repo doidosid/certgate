@@ -116,6 +116,34 @@ func TestOutboxStatsHandler_RejectsNonGet(t *testing.T) {
 	}
 }
 
+// docs/api-spec.md §8 answers every unauthenticated request with 401. Checking
+// the method first would answer 405 instead, telling an unauthenticated caller
+// which methods the endpoint supports (Codex 리뷰 PR #31 Low).
+func TestOutboxStatsHandler_UnauthenticatedNonGet_Is401NotMethodNotAllowed(t *testing.T) {
+	handler := outboxStatsHandler("correct-token", newStatsTestStore(t))
+
+	for _, token := range []string{"", "wrong-token"} {
+		req := httptest.NewRequest(http.MethodPost, "/internal/outbox/stats", nil)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		rec := httptest.NewRecorder()
+
+		handler(rec, req)
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("token %q: status = %d, want %d", token, rec.Code, http.StatusUnauthorized)
+		}
+		var body map[string]string
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("token %q: decode body: %v", token, err)
+		}
+		if body["code"] != "SERVICE_TOKEN_INVALID" {
+			t.Errorf("token %q: code = %q, want SERVICE_TOKEN_INVALID", token, body["code"])
+		}
+	}
+}
+
 func TestOutboxStatsHandler_ClosedStore_ReturnsInternalError(t *testing.T) {
 	store, err := outbox.Open(filepath.Join(t.TempDir(), "outbox.db"))
 	if err != nil {
