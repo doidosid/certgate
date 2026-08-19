@@ -17,5 +17,13 @@ export default defineConfig({
 	test: {
 		environment: "jsdom",
 		setupFiles: ["./src/setupTests.ts"],
+		// Vite는 .env를 mode별로 읽는데 테스트에는 그 파일이 없어 import.meta.env가
+		// 비어 있었다. 그러면 API Client가 "undefined/devices" 같은 URL을 만들고 MSW
+		// Handler와 어긋나, 화면 테스트가 조용히 실제 계약과 다른 경로를 검증하게 된다.
+		// .env.example과 같은 상대 경로를 넣어 테스트도 운영과 같은 경로 모양을 쓴다.
+		env: {
+			VITE_API_BASE_URL: "/api/v1",
+			VITE_SSE_URL: "/api/v1/security-events/stream",
+		},
 	},
 });
