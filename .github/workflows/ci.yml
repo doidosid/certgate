@@ -37,12 +37,14 @@ jobs:
       - name: go vet
         working-directory: ${{ matrix.module }}
         run: go vet ./...
-      # -race requires cgo, which needs a C compiler. ubuntu-latest ships one,
-      # so CGO_ENABLED defaults to 1 here and no extra install is needed. A
-      # Windows dev machine without MinGW-w64 has CGO_ENABLED=0 and cannot run
-      # this locally, which is exactly why the check belongs in CI: the Gateway
-      # runs its Outbox Sender, Outbox Monitor, Access Cache, and mTLS Handler
-      # as concurrent goroutines over shared state.
+      # -race needs cgo, and cgo needs a C compiler. ubuntu-latest ships one,
+      # so CGO_ENABLED is 1 here and no extra install step is needed. On a
+      # Windows dev machine with no C compiler the Go toolchain falls back to
+      # CGO_ENABLED=0 and -race cannot run at all, which is why this check
+      # belongs in CI rather than in a developer's local routine: the Gateway
+      # runs its Outbox Sender, Access Cache, and mTLS Handler as concurrent
+      # goroutines over shared state. Note this detects races only on paths the
+      # tests actually execute concurrently.
       - name: go test (race detector)
         working-directory: ${{ matrix.module }}
         run: go test -race ./...

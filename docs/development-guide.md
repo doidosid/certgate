@@ -21,7 +21,7 @@
 
 ## 코딩 규칙
 
-- Go: gofmt, go test, 오류 Wrapping, Context 전달. 동시성 코드는 CI의 <code>go test -race</code>가 검증한다 — 로컬 Windows에서 <code>-race</code>가 <code>requires cgo</code>로 실패하면 C 컴파일러(MinGW-w64)가 없어 <code>CGO_ENABLED=0</code>인 것이므로, 설치하거나 CI 결과로 확인한다
+- Go: gofmt, go test, 오류 Wrapping, Context 전달. CI의 <code>go test -race</code>가 테스트가 실제로 동시 실행한 경로의 race를 탐지한다 — 로컬 Windows에서 <code>-race requires cgo</code>가 나오면 <code>CGO_ENABLED=0</code> 상태라는 뜻이고, 보통 C 컴파일러(MinGW-w64)가 없어서 Go가 자동으로 꺼둔 경우다. <code>go env CGO_ENABLED</code>로 확인하고, 로컬 실행이 필요하면 컴파일러를 설치한다
 - Java: 생성자 주입, Transaction 경계는 Service, Entity 직접 응답 금지
 - TypeScript: strict, API Type과 화면 Type 구분, any 금지
 - SQL: Migration으로만 Schema 변경
