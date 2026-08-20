@@ -9,15 +9,15 @@ CertGate 저장소에서 작업하는 Claude Code를 위한 가이드다. 이 �
 ```text
 Issue
  ↓
-Claude — Branch 생성 → 구현 → Test → PR 생성
+Claude — Branch 생성 → 구현 → Test → 자체 검증 → PR 생성
  ↓
-Claude — Codex 리뷰 실행 (headless)
+Claude — 스스로 "Merge 가능"이라고 판단할 때까지 다듬는다
  ↓
-Claude — 지적 검증 → 반영 또는 근거 있는 반박
+Claude — Codex 리뷰 실행 (headless, PR당 한 번)
  ↓
-Claude — Codex 재검증
+Claude — 지적 검증 → 반영 또는 근거 있는 반박 → 반영이 맞는지 직접 확인
  ↓
-Merge (Codex·Claude 양쪽이 Merge 가능하다고 판단할 때)
+Merge
 ```
 
 Claude는 작업 영역에 맞는 Branch를 만들고, 그 안에서 구현·테스트를 마친 뒤 PR을 연다. `main`에는 직접 작업하지 않는다 — `main`은 항상 안정 상태를 유지한다. PR을 열기 전 작업 트리에 바로 Commit하고 끝내지 않는다 — Codex 리뷰가 PR 위에서 이뤄지는 것을 전제로 작업한다.
@@ -26,9 +26,13 @@ Claude는 작업 영역에 맞는 Branch를 만들고, 그 안에서 구현·테
 
 ### Codex 리뷰 실행
 
-`codex exec --sandbox workspace-write "<리뷰 요청>"`으로 직접 실행한다. 요청에는 대상 diff(`git diff origin/main...<branch>`), `AGENTS.md`를 따르라는 지시, 결과를 `codexReview/PR-{번호}.md`에 저장하라는 지시, 코드는 수정하지 말라는 지시를 넣는다. 그 PR에서 특히 확인받고 싶은 지점(계약 일치, 실패 경로, 보안 경계 등)을 구체적으로 적으면 리뷰 품질이 올라간다. 리뷰 실행 후에는 `git status`로 Codex가 소스를 건드리지 않았는지 확인한다.
+**Codex 사용량은 한정 자원이다. PR당 한 번만 돌린다.** 구현·테스트·자체 검토·브라우저 확인·문서 계약 대조를 모두 마치고 **스스로 Merge 가능하다고 판단한 시점에, Merge 직전에** 실행한다. 수정할 때마다 재검증을 요청하지 않는다.
 
-수정 커밋을 올린 뒤에는 같은 방식으로 재검증을 요청한다(`codexReview/PR-{번호}.md` 맨 끝에 절을 덧붙이게 한다).
+리뷰는 모든 PR에 붙이지 않는다. 실패 시 영향이 큰 영역(보안 경계, 인증서·Key·Token 취급, 폐기와 Cache 무효화, Outbox·Event 보존, Transaction 경계, 서비스 간 계약 변경)만 받는다. 순수 UI 화면 작업과 문서 변경은 리뷰 없이 진행하고, 건너뛴 근거를 PR 본문에 남긴다.
+
+`codex exec --sandbox workspace-write "<리뷰 요청>"`으로 직접 실행한다. 요청에는 대상 diff(`git diff origin/main...<branch>`), `AGENTS.md`를 따르라는 지시, 결과를 `codexReview/PR-{번호}.md`에 저장하라는 지시, 코드는 수정하지 말라는 지시를 넣는다. 그 PR에서 특히 확인받고 싶은 지점(계약 일치, 실패 경로, 보안 경계 등)을 구체적으로 적으면 리뷰 품질이 올라간다. 한 번만 돌리므로 확인받고 싶은 지점을 처음부터 빠짐없이 담는다. 리뷰 실행 후에는 `git status`로 Codex가 소스를 건드리지 않았는지 확인한다.
+
+지적을 반영한 뒤 **재검증을 위해 다시 돌리지 않는다.** 반영이 맞는지는 Claude가 직접 확인한다 — 재현, 실패하는 것을 확인하는 mutation 테스트, Library 소스 확인 같은 방법을 쓴다. 재검증으로 얻으려던 확신은 이런 직접 확인으로 대체한다.
 
 ### 리뷰 반영 판단
 
@@ -45,8 +49,8 @@ Codex가 놓친 문제를 Claude가 발견하면 그것도 함께 고친다. 리
 아래를 모두 만족하면 사용자 승인 없이 Merge한다.
 
 1. CI가 전부 통과한다.
-2. Codex가 Merge 가능하다고 판단한다(Critical/High 없음, 남은 지적이 Merge를 막지 않는 수준).
-3. **Claude도 독립적으로 Merge 가능하다고 판단한다.** Codex가 통과시켰더라도 Claude가 보기에 문제가 남았으면 Merge하지 않고 먼저 고친다.
+2. **Claude가 독립적으로 Merge 가능하다고 판단한다.** 이것이 1차 판단이고, Codex 리뷰는 그 판단을 내린 뒤에 받는 두 번째 의견이다.
+3. 리뷰를 받은 PR이면 Codex의 Critical/High가 없고, 남은 지적을 반영했거나 근거를 들어 반박했다. Codex가 통과시켰더라도 Claude가 보기에 문제가 남았으면 Merge하지 않고 먼저 고친다.
 
 Merge 후에는 무엇을 반영했고 무엇을 반박했는지, 새로 만든 Issue가 있는지 사용자에게 정리해 보고한다. 되돌리기 어렵거나 범위를 벗어나는 판단(설계 변경, 문서 계약 변경, 기각된 대안의 재도입)이 필요하면 그때는 자동 진행을 멈추고 사용자에게 확인한다.
 
