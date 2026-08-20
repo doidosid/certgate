@@ -28,7 +28,7 @@
 - **구현하지 않은 동작은 비활성 또는 숨김 처리한다**(Issue #7 완료 기준). 동작하지 않는 버튼을 남기지 않는다.
 - 별도 Alert 화면·Alert 상태 관리를 만들지 않는다. CRITICAL은 Toast + Security Event 화면이 전부다(ui-design.md §1).
 - 물리 삭제 UI를 제공하지 않는다(ui-design.md §4).
-- Branch 전략(CLAUDE.md): Console 코드 → `feature/console`, Java → `feature/management-api`, nginx·compose·env → `infra`, 문서 → `docs`. `main` 직접 Commit 금지. PR → Codex 리뷰 → 사용자 승인 → Merge.
+- Branch 전략(CLAUDE.md): Console 코드 → `feature/console`, Java → `feature/management-api`, nginx·compose·env → `infra`, 문서 → `docs`. `main` 직접 Commit 금지. 리뷰·Merge 흐름은 CLAUDE.md의 "협업 흐름"과 "Merge 조건"을 따른다(2026-08-20 개정 — 조건을 만족하면 Claude가 Merge한다).
 
 ### 서버 API 현황 (2026-08-19 기준, 실제 코드 확인)
 
@@ -4379,15 +4379,27 @@ Task 8 이후 관련 파일을 만질 때 함께 처리하면 된다.
 
 **`.claude/settings.local.json`** (gitignore 대상). Windows 전용 절대 경로(`JAVA_HOME`, MinGW `CC`)가 들어 있던 파일이라 **macOS로 가져오면 안 된다.** macOS에서는 Homebrew JDK 21과 Xcode CLT가 PATH에 있으면 별도 설정이 필요 없다.
 
-### 2-1. macOS → Windows로 돌아갈 때 (2026-08-20)
+### 2-1. 다른 기기로 돌아갈 때 (2026-08-21 갱신)
 
-Console 작업을 macOS에서 이어받아 Task 3~7까지 진행했다. Windows로 돌아가면 다음을 확인한다.
+Issue #7은 끝났고 모든 작업이 `main`에 merge돼 있다. 기기를 옮기면 다음을 확인한다.
 
 ~~~bash
-git checkout main && git pull            # PR #43·#44 반영분
-cd admin-console && npm ci               # msw·@testing-library/user-event가 새로 추가됐다
-npm run typecheck && npm test            # Task 8 이후 84건 통과가 기준선
+git checkout main && git pull
+cd admin-console && npm ci               # msw·@testing-library/user-event가 필요하다
+npm run typecheck && npm test            # 20 files / 202 tests 통과가 기준선
 ~~~
+
+**기준선 확인이 끝나면 `main`에 머물지 말고 다음 작업에 맞는 Branch로 옮긴다.** `main`에는 직접 작업하지 않는다(CLAUDE.md "Branch 전략"). 성격에 맞는 Branch가 이미 있으면 원격과 맞춰 전환하고, 없으면 `main`에서 새로 딴다.
+
+~~~bash
+git fetch origin
+# 이미 있는 Branch로: 원격 기준으로 맞춘다
+git checkout -B feature/console origin/feature/console
+# 새로 시작: main에서 딴다
+git checkout -b feature/e2e origin/main
+~~~
+
+`infra` Branch는 보류된 PR #37(회귀 있음)을 물고 있다. 인프라 변경을 거기 얹으면 함께 막히므로 `main`에서 딴 `infra-<주제>` Branch를 쓴다(PR #48·#51이 그렇게 갔다).
 
 > **Windows에서 `npm ci`가 EPERM으로 실패할 수 있다(2026-08-20 실측).** `@rolldown/binding-win32-x64-msvc`의 `.node` 파일을 지우지 못해 중단되고, 그 시점의 `node_modules`는 반쯤 지워진 상태라 `vitest`·`msw`가 없어 테스트가 설정 로드 단계에서 죽는다. `rm -rf node_modules && npm ci`로 해결된다. 실패한 `npm ci`의 종료 코드는 파이프(`| tail`) 뒤에서 0으로 보일 수 있으니 설치 성공은 `node_modules/vitest` 존재로 확인한다.
 

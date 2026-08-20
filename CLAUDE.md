@@ -48,7 +48,7 @@ Codex가 놓친 문제를 Claude가 발견하면 그것도 함께 고친다. 리
 
 아래를 모두 만족하면 사용자 승인 없이 Merge한다.
 
-1. CI가 전부 통과한다.
+1. CI가 전부 통과한다. **실행할 수 없거나 상태를 확정할 수 없으면 통과로 보지 않는다** — 그 경우 Merge하지 않는다.
 2. **Claude가 독립적으로 Merge 가능하다고 판단한다.** 이것이 1차 판단이고, Codex 리뷰는 그 판단을 내린 뒤에 받는 두 번째 의견이다.
 3. 리뷰를 받은 PR이면 Codex의 Critical/High가 없고, 남은 지적을 반영했거나 근거를 들어 반박했다. Codex가 통과시켰더라도 Claude가 보기에 문제가 남았으면 Merge하지 않고 먼저 고친다.
 
@@ -65,8 +65,9 @@ Merge 후에는 무엇을 반영했고 무엇을 반박했는지, 새로 만든 
 
 - 작은 Issue마다 Branch를 새로 만들지 않는다. 같은 도메인의 Issue 여러 개가 같은 `feature/*` Branch 위에 쌓일 수 있다(예: PKI 관련 Issue들은 모두 `feature/pki` 위에서 진행).
 - 새 작업을 시작할 때는 변경 내용의 성격으로 Branch를 판단한다: 코드 기능 구현 → 해당 도메인의 `feature/*`(이미 있으면 재사용, 없으면 새로 생성), 문서만 변경 → `docs`, Docker·CI·배포·모니터링 → `infra`. 한 작업이 여러 성격에 걸치면 더 큰 비중을 차지하는 쪽을 기준으로 판단하고, 애매하면 사용자에게 확인한다.
-- 작업 완료 후 PR 생성 → Codex 리뷰 → 사용자 승인 → Merge 흐름을 따른다.
+- 작업 완료 후 위 "협업 흐름"을 따른다: PR 생성 → (필요하면) Codex 리뷰 → 반영 또는 반박 → Merge 조건을 만족하면 Claude가 Merge. 사용자 확인은 Merge의 일반 단계가 아니라 "Merge 조건" 절의 중단 조건에 걸릴 때만이다.
 - `main` 직접 Commit은 피한다.
+- 성격에 맞는 Branch가 이미 다른 작업(보류된 PR 등)을 물고 있어 함께 막힐 상황이면, `main`에서 딴 단독 Branch로 낸다. `infra`처럼 이름이 이미 Branch로 쓰이고 있으면 Git ref 제약상 `infra/...` 하위 이름을 만들 수 없으므로 `infra-<주제>` 형태를 쓴다(예: PR #48 `infra-compose-service-token`).
 
 ## 프로젝트 개요
 
@@ -76,15 +77,19 @@ CertGate는 X.509 인증서와 mTLS로 네트워크 Device의 신원을 검증�
 
 ## 현재 상태
 
-**최종 갱신: 2026-08-19.** 제출 목표는 2026-08-23이다.
+**최종 갱신: 2026-08-21.** 제출 목표는 2026-08-23이다.
 
-완료된 Issue: #5 Foundation, #1 Enrollment·PKI, #2 Gateway mTLS, #3 Management API, #6 Event Outbox·SSE. `device-agent`·`gateway`·`backend-service`(Go), `management-api`(Spring), `admin-console`(React), `infra`, `pki`에 실제 소스와 테스트가 있고 CI 10개 Job이 돈다.
+완료된 Issue: #5 Foundation, #1 Enrollment·PKI, #2 Gateway mTLS, #3 Management API, #6 Event Outbox·SSE, **#7 Admin Console 실제 연결**. `device-agent`·`gateway`·`backend-service`(Go), `management-api`(Spring), `admin-console`(React), `infra`, `pki`에 실제 소스와 테스트가 있고 CI 9개 Job이 돈다.
 
-**진행 중: Issue #7 (React 관리 콘솔과 실제 API 연결).** 이것이 남은 일정의 병목이다. 실행 계획은 [`docs/superpowers/plans/2026-08-19-admin-console-api-integration.md`](docs/superpowers/plans/2026-08-19-admin-console-api-integration.md)에 있다 — 18 Task·118 Step. **작업을 시작하기 전에 그 문서의 맨 끝 "다른 기기에서 이어서 작업하기" 절을 먼저 읽는다.** 진행 상황 표, 다음 착수 지점, 저장소에 없는 것(PKI 자료·node_modules)을 만드는 절차, OS별 차이가 거기 있다.
+**`admin-console`의 5개 화면(Dashboard, Devices, Certificate Requests, Certificates, Security Events)과 전역 CRITICAL SSE Toast는 모두 구현돼 실제 API에 연결돼 있다.** 자리표시자는 남아 있지 않다. 실제 화면 캡처는 [README의 "관리 콘솔 화면"](README.md#관리-콘솔-화면)에 있다.
 
-미착수: #4 E2E·장애 복구, #8 제출 패키지. 후속 개선 Issue: #25·#27·#30(Codex Low 테스트 검출력), #36(Gateway readiness 미구현).
+**남은 것: #4 E2E·장애 복구, #8 제출 패키지.** #4가 다음 병목이다 — Compose 스택 위로 Device → Gateway → Backend를 끝까지 도는 테스트가 없어서, `compose.yaml`이 management-api에 `GATEWAY_SERVICE_TOKEN`을 전달하지 않아 **모든 Device 요청이 503이던 문제**(PR #48)를 아무도 잡지 못했다. 같은 종류의 구멍을 막는 것이 #4의 실질적인 목표다.
 
-`admin-console`은 5개 화면이 아직 자리표시자다. 나머지 서비스는 구현돼 있으므로 **"기존 코드 확인"은 실제로 코드를 읽는 것을 뜻한다.** 문서와 코드가 어긋나 보이면 어느 쪽이 최신인지 확인하고, 코드가 이미 있는 영역에서는 Build File과 실제 구현이 문서의 버전 표기보다 우선한다.
+후속 개선 Issue: #25·#27·#30(Codex Low 테스트 검출력), #36(Gateway readiness 미구현), #39(매핑되지 않은 경로가 404 대신 500), #42(Gateway가 handshake에서 Intermediate를 보내지 않음 — PR #51), #50(인증서 화면의 미구현 UI 계약 항목).
+
+Issue #7의 실행 계획과 인수인계는 [`docs/superpowers/plans/2026-08-19-admin-console-api-integration.md`](docs/superpowers/plans/2026-08-19-admin-console-api-integration.md)에 있다. Console을 다시 만질 때는 그 문서 맨 끝 "다른 기기에서 이어서 작업하기" 절의 **"다시 뒤집지 말 것"** 항목들을 먼저 읽는다 — SSE 보완 조회의 커서를 브라우저 시계로 되돌리는 것 같은 회귀를 막기 위한 기록이다.
+
+나머지 서비스도 모두 구현돼 있으므로 **"기존 코드 확인"은 실제로 코드를 읽는 것을 뜻한다.** 문서와 코드가 어긋나 보이면 어느 쪽이 최신인지 확인하고, 코드가 이미 있는 영역에서는 Build File과 실제 구현이 문서의 버전 표기보다 우선한다.
 
 `docs/implementation-plan.md`의 날짜별 목표는 설계 시점 계획이라 실제 진행과 차이가 있다. 세부 순서는 위 Issue #7 계획 문서를 따른다.
 
@@ -225,6 +230,6 @@ Private Key, Token, 운영 데이터, 개인정보를 대화나 코드 제안에
 
 Codex(`AGENTS.md`)는 Claude가 PR로 올린 코드를 검증하는 시니어 리뷰어다. Claude는 스스로 구현한 코드를 Codex 리뷰의 대체물로 과신하지 않는다 — 보안·인증·폐기·Outbox처럼 실패 시 영향이 큰 영역은 특히 독립 리뷰를 거치는 것을 전제로 작업한다.
 
-역할 분담은 위 "협업 흐름" 절을 따른다: Claude가 Issue→Branch→구현→Test→PR→리뷰 실행→반영→Merge까지 진행하고, Codex는 그 사이에서 독립 검증을 맡는다. Codex는 리뷰만 하고 코드를 수정하지 않는다.
+역할 분담은 위 "협업 흐름" 절을 따른다: Claude가 Issue→Branch→구현→Test→PR→리뷰 실행→반영→Merge까지 진행하고, Codex는 그 사이에서 독립 검증을 맡는다. 이 흐름에서 Codex는 리뷰만 하고 코드를 수정하지 않는다(사용자가 명시적으로 수정을 요청한 경우는 `AGENTS.md`의 예외를 따른다).
 
 Codex 리뷰는 **두 번째 의견**이지 결재가 아니다. Codex가 지적하지 않았다고 문제가 없는 것도, Codex가 지적했다고 반드시 고쳐야 하는 것도 아니다. 최종 판단과 그 결과의 책임은 Claude에 있다. 실제로 Codex가 사실과 다른 진단을 내놓은 적도(`codexReview/PR-41.md`), Claude가 놓친 실제 버그를 잡아준 적도(`codexReview/PR-40.md`) 있다 — 양쪽 다 검증을 거쳐 걸러야 한다.
