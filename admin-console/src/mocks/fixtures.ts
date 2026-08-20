@@ -104,12 +104,30 @@ export const enrollmentTokenIssued = {
 	enrollmentExpiresAt: "2026-08-20T06:00:00Z",
 } satisfies EnrollmentTokenIssued;
 
+/**
+ * 세 상태를 모두 담아 둔다. 상태 필터가 실제로 다른 결과를 보여주는지 Mock 모드에서도
+ * 확인할 수 있어야 한다 — 항목이 하나뿐이면 어떤 상태를 선택해도 같은 값이 보이거나
+ * 빈 목록만 나와서, 필터가 "안 먹는 것"처럼 보인다(실제로는 서버 계약이 아니라 이
+ * Mock의 표현력 문제였다).
+ */
 export const certificateRequestPage = page<CertificateRequestItem>([
 	{
 		id: "241a9ba8-b4d0-4a20-8684-486847ae98a4",
 		deviceId: "0d6515ae-d560-4777-b102-054e71f98ef9",
 		status: "PENDING",
 		requestedAt: "2026-08-13T05:40:00Z",
+	},
+	{
+		id: "3b2c1d0e-9f8e-4a7d-8c6b-5a4938271605",
+		deviceId: "0d6515ae-d560-4777-b102-054e71f98ef9",
+		status: "APPROVED",
+		requestedAt: "2026-08-12T02:10:00Z",
+	},
+	{
+		id: "7c6d5e4f-3a2b-4190-8877-665544332211",
+		deviceId: "1a1b2c3d-0000-4000-8000-000000000002",
+		status: "REJECTED",
+		requestedAt: "2026-08-11T09:00:00Z",
 	},
 ]) satisfies PageResponse<CertificateRequestItem>;
 
@@ -126,6 +144,7 @@ export const certificateRequestDetail = {
 	decisionNote: null,
 } satisfies CertificateRequestDetail;
 
+/** 상태 필터가 실제로 다른 결과를 보여주도록 네 상태를 모두 담아 둔다. */
 export const certificatePage = page<CertificateItem>([
 	{
 		id: "74ecff78-d52a-4f80-ae54-ac688b1c93ad",
@@ -138,6 +157,42 @@ export const certificatePage = page<CertificateItem>([
 		revokedAt: null,
 		revocationReason: null,
 		revocationNote: null,
+	},
+	{
+		id: "b1a2c3d4-5e6f-4708-9a1b-2c3d4e5f6071",
+		deviceId: "1a1b2c3d-0000-4000-8000-000000000002",
+		serialNumber: "9A3F1C22",
+		status: "EXPIRING_SOON",
+		notBefore: "2026-07-13T05:45:00Z",
+		notAfter: "2026-08-20T05:45:00Z",
+		issuedAt: "2026-07-13T05:45:00Z",
+		revokedAt: null,
+		revocationReason: null,
+		revocationNote: null,
+	},
+	{
+		id: "c2b3a4d5-6f70-4819-8a2b-3c4d5e6f7082",
+		deviceId: "0d6515ae-d560-4777-b102-054e71f98ef9",
+		serialNumber: "5D8E2B10",
+		status: "EXPIRED",
+		notBefore: "2026-05-13T05:45:00Z",
+		notAfter: "2026-07-13T05:45:00Z",
+		issuedAt: "2026-05-13T05:45:00Z",
+		revokedAt: null,
+		revocationReason: null,
+		revocationNote: null,
+	},
+	{
+		id: "d3c4b5e6-7081-492a-9b3c-4d5e6f708193",
+		deviceId: "1a1b2c3d-0000-4000-8000-000000000002",
+		serialNumber: "1F4A9C77",
+		status: "REVOKED",
+		notBefore: "2026-06-13T05:45:00Z",
+		notAfter: "2026-09-13T05:45:00Z",
+		issuedAt: "2026-06-13T05:45:00Z",
+		revokedAt: "2026-08-01T09:00:00Z",
+		revocationReason: "KEY_COMPROMISE",
+		revocationNote: "단말 분실 신고",
 	},
 ]) satisfies PageResponse<CertificateItem>;
 

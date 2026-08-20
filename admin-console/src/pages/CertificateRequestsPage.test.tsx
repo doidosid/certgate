@@ -339,7 +339,9 @@ describe("CertificateRequestsPage", () => {
 	it("links the request's device to its detail page", async () => {
 		renderAt("/certificate-requests");
 
-		const link = await screen.findByRole("link", { name: "1층 온도 센서" });
-		expect(link).toHaveAttribute("href", `/devices/${certificateRequestPage.content[0].deviceId}`);
+		// fixture의 여러 CSR 중 둘이 같은 Device를 가리킨다 — 재발급 등으로 실제로도
+		// 있을 수 있는 모양이다. 그중 첫 번째 링크가 그 Device로 정확히 가는지만 본다.
+		const links = await screen.findAllByRole("link", { name: "1층 온도 센서" });
+		expect(links[0]).toHaveAttribute("href", `/devices/${certificateRequestPage.content[0].deviceId}`);
 	});
 });
