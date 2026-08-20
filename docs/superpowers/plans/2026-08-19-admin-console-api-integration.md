@@ -3795,6 +3795,7 @@ Device 몇 개를 등록하고 Device Agent로 CSR을 제출해 승인·발급�
 - `README.md`의 와이어프레임 링크를 실제 화면 이미지로 교체한다.
 - `docs/ui-design.md` §10에 "와이어프레임은 설계 단계 자료이고 실제 구현 화면은 README를 참고" 취지로 문장을 정리한다.
 - 실행 방법(`npm run dev` + `VITE_USE_MOCK`, Compose 기동)을 `admin-console/README.md`에 적는다.
+- **2026-08-20 사용자 결정.** README(또는 Issue #8 제출 패키지)에 "프로덕션이라면 Prometheus/Grafana로 확장" 취지의 후속 계획 한 줄을 남긴다. Dashboard(Task 13)에 실제로 Prometheus/Grafana를 붙이는 안을 검토했으나, 이 저장소의 관측 전략은 JSON 구조화 로그 + `GET /dashboard/summary`로 이미 확정되어 있고(operations.md, api-spec.md §9), 남은 일정(3일)에 메트릭 스택 도입은 과하다고 판단해 보류했다(ai-usage.md 2026-08-13의 Redis/Kafka/Alert Table 기각과 같은 판단 근거). 실무 관측 패턴을 안다는 것만 문서에 남기고 실제 도입은 하지 않는다.
 
 - [ ] **Step 5: Commit**
 
@@ -4282,12 +4283,13 @@ Task 3의 Commit에 이 문서 변경을 함께 포함한다 — 코드 결정�
 | Task 9 Certificate Requests 목록·상세·승인·거절 | **merge 완료** (PR #46) |
 | Task 10 Certificates 목록·상세·폐기·다운로드 | **구현 완료** (2026-08-20) |
 | Task 11 Device 등록·상태·Role·Token 재발급 | **구현 완료** (2026-08-20) |
-| Task 13 Dashboard 화면 | **다음 착수 지점** |
-| Task 14·15 | 미착수 |
+| Task 13 Dashboard 화면 | **구현 완료** (2026-08-20) |
+| Task 14 SSE 전역 Toast | **다음 착수 지점** |
+| Task 15 README 실제 화면 | 미착수 |
 
 부수적으로 등록된 Issue: **#36** (Gateway `/healthz`가 Management API readiness를 반영하지 않음), **#39** (매핑되지 않은 경로가 404 대신 500), **#42** (Gateway가 handshake에서 Intermediate를 보내지 않음). 모두 이 계획 범위 밖이다.
 
-**다음 작업은 Task 13(Dashboard 화면)이다.** PR #46으로 Task 8·9·18이 merge됐고, Task 10·11은 구현을 마쳤다. 계획의 PR 4 묶음(Task 9~11)이 끝났다.
+**다음 작업은 Task 14(SSE 전역 CRITICAL Toast)다.** PR #46·#47로 Task 8·9·10·11·18이 merge됐고, Task 13은 구현을 마쳤다.
 
 Task 8을 구현하며 계획 본문의 Task 8 스케치와 다르게 결정한 3가지 — 다시 뒤집지 말 것:
 
