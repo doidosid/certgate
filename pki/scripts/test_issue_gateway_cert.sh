@@ -52,6 +52,25 @@ if openssl verify -CAfile "$WORK_DIR/ca-a/root-ca.crt" "$WORK_DIR/ca-a/gateway.c
   fail "gateway certificate verified without the intermediate; it is not signed by the Intermediate CA"
 fi
 
+# gateway.crt는 leaf 단독이 아니라 Intermediate까지 이어 붙인 Chain이어야 한다.
+# 서버가 handshake에서 보내는 것이 이 파일이므로, leaf만 두면 Root CA만 신뢰하는
+# Client가 Chain을 만들지 못한다(Issue #42).
+cert_count="$(grep -c "BEGIN CERTIFICATE" "$WORK_DIR/ca-a/gateway.crt")"
+[ "$cert_count" -eq 2 ] \
+  || fail "gateway.crt has $cert_count certificate(s); expected leaf + intermediate"
+
+# 두 번째 인증서가 실제로 이 CA의 Intermediate인지 확인한다. 아무거나 붙였는지
+# 개수만으로는 알 수 없다.
+second_cert="$(awk '/BEGIN CERTIFICATE/{n++} n==2' "$WORK_DIR/ca-a/gateway.crt")"
+[ "$second_cert" = "$(cat "$WORK_DIR/ca-a/intermediate-ca.crt")" ] \
+  || fail "the second certificate in gateway.crt is not this CA's intermediate"
+
+# 핵심 회귀 방지: Root만 신뢰하는 Client가 서버가 보내는 것(=이 파일)만으로 Chain을
+# 만들 수 있어야 한다.
+openssl verify -CAfile "$WORK_DIR/ca-a/root-ca.crt" -untrusted "$WORK_DIR/ca-a/gateway.crt" \
+  "$WORK_DIR/ca-a/gateway.crt" >/dev/null \
+  || fail "a client trusting only the root cannot build the chain from gateway.crt"
+
 cert_text="$(openssl x509 -in "$WORK_DIR/ca-a/gateway.crt" -noout -text)"
 
 # A Device reaches the Gateway as "gateway" inside Compose and as
