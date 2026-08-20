@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import Box from "@mui/material/Box";
+import Paper from "@mui/material/Paper";
 import Link from "@mui/material/Link";
 import MenuItem from "@mui/material/MenuItem";
 import TextField from "@mui/material/TextField";
@@ -53,13 +53,13 @@ export default function DeviceFilters({ query, status, roleName, onChange }: Pro
 		roleName && !loadedRoleNames.includes(roleName) ? [roleName, ...loadedRoleNames] : loadedRoleNames;
 
 	return (
-		<Box sx={{ display: "flex", gap: 2, mb: 2, flexWrap: "wrap" }}>
+		<Paper sx={{ p: 2, mb: 2.5, display: "flex", gap: 2, flexWrap: "wrap", alignItems: "flex-start" }}>
 			<TextField
 				label="이름 또는 Device Key"
 				size="small"
 				value={searchText}
 				onChange={(event) => setSearchText(event.target.value)}
-				sx={{ minWidth: 240 }}
+				sx={{ width: 260 }}
 			/>
 			<TextField
 				select
@@ -67,7 +67,7 @@ export default function DeviceFilters({ query, status, roleName, onChange }: Pro
 				size="small"
 				value={status}
 				onChange={(event) => onChange("status", event.target.value)}
-				sx={{ minWidth: 140 }}
+				sx={{ width: 128 }}
 			>
 				<MenuItem value="">전체</MenuItem>
 				<MenuItem value="ACTIVE">활성</MenuItem>
@@ -85,7 +85,7 @@ export default function DeviceFilters({ query, status, roleName, onChange }: Pro
 				size="small"
 				value={roleName}
 				onChange={(event) => onChange("roleName", event.target.value)}
-				sx={{ minWidth: 160 }}
+				sx={{ width: 176 }}
 				error={roles.isError}
 				helperText={
 					roles.isError ? (
@@ -110,6 +110,6 @@ export default function DeviceFilters({ query, status, roleName, onChange }: Pro
 					</MenuItem>
 				))}
 			</TextField>
-		</Box>
+		</Paper>
 	);
 }

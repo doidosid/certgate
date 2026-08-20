@@ -4278,6 +4278,7 @@ Task 3의 Commit에 이 문서 변경을 함께 포함한다 — 코드 결정�
 | Task 6 Devices 목록·검색·필터 | **merge 완료** (PR #44, 2026-08-20) |
 | Task 7 Device 상세 화면 | **merge 완료** (PR #44) |
 | Task 8 Security Events 목록·상세 | **구현 완료** (PR 예정, 2026-08-20 Windows) |
+| Task 18 Console 디자인 톤 | **구현 완료** (PR #46, 2026-08-20) |
 | Task 9 Certificate Requests | **다음 착수 지점** |
 | Task 10·11·13~15 | 미착수 |
 

@@ -1,4 +1,4 @@
-import Box from "@mui/material/Box";
+import Paper from "@mui/material/Paper";
 import MenuItem from "@mui/material/MenuItem";
 import TextField from "@mui/material/TextField";
 import DeviceSelect from "../device/DeviceSelect";
@@ -38,11 +38,17 @@ export default function SecurityEventFilters({ values, onChange }: Props) {
 	const toInvalid = values.to !== "" && toInstant === undefined;
 
 	return (
-		<Box sx={{ display: "flex", gap: 2, mb: 2, flexWrap: "wrap", alignItems: "flex-start" }}>
+		/*
+		 * 컨트롤을 페이지 바닥에 흩어 놓지 않고 한 판으로 묶는다. 조건을 세우는 자리와
+		 * 결과를 읽는 자리를 눈으로 구분할 수 있어야 한다. 폭을 고정해 접힐 때도 열이
+		 * 어긋나지 않게 한다.
+		 */
+		<Paper sx={{ p: 2, mb: 2.5, display: "flex", gap: 2, flexWrap: "wrap", alignItems: "flex-start" }}>
 			<TextField
 				label="시작"
 				type="datetime-local"
 				size="small"
+				sx={{ width: 190 }}
 				value={values.from}
 				slotProps={{ inputLabel: { shrink: true } }}
 				onChange={(event) => onChange("from", event.target.value)}
@@ -53,6 +59,7 @@ export default function SecurityEventFilters({ values, onChange }: Props) {
 				label="종료"
 				type="datetime-local"
 				size="small"
+				sx={{ width: 190 }}
 				value={values.to}
 				slotProps={{ inputLabel: { shrink: true } }}
 				onChange={(event) => onChange("to", event.target.value)}
@@ -70,7 +77,7 @@ export default function SecurityEventFilters({ values, onChange }: Props) {
 				select
 				label="결과"
 				size="small"
-				sx={{ minWidth: 120 }}
+				sx={{ width: 128 }}
 				value={values.decision}
 				onChange={(event) => onChange("decision", event.target.value)}
 			>
@@ -83,7 +90,7 @@ export default function SecurityEventFilters({ values, onChange }: Props) {
 				select
 				label="심각도"
 				size="small"
-				sx={{ minWidth: 120 }}
+				sx={{ width: 128 }}
 				value={values.severity}
 				onChange={(event) => onChange("severity", event.target.value)}
 			>
@@ -101,7 +108,7 @@ export default function SecurityEventFilters({ values, onChange }: Props) {
 				select
 				label="이벤트 코드"
 				size="small"
-				sx={{ minWidth: 220 }}
+				sx={{ width: 224 }}
 				value={values.reasonCode}
 				onChange={(event) => onChange("reasonCode", event.target.value)}
 			>
@@ -112,6 +119,6 @@ export default function SecurityEventFilters({ values, onChange }: Props) {
 					</MenuItem>
 				))}
 			</TextField>
-		</Box>
+		</Paper>
 	);
 }

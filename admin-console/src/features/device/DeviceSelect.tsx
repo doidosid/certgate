@@ -104,7 +104,7 @@ export default function DeviceSelect({ value, onChange, label = "디바이스" }
 
 	return (
 		<Autocomplete
-			sx={{ minWidth: 260 }}
+			sx={{ width: 240 }}
 			size="small"
 			options={options}
 			value={selectedOption}

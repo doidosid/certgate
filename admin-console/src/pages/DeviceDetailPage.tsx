@@ -13,6 +13,7 @@ import {
 import { severityLabel } from "../features/securityEvent/labels";
 import DateTimeText from "../shared/ui/DateTimeText";
 import Field from "../shared/ui/Field";
+import Mono from "../shared/ui/Mono";
 import PageHeader from "../shared/ui/PageHeader";
 import QueryState from "../shared/ui/QueryState";
 import StatusChip from "../shared/ui/StatusChip";
@@ -46,7 +47,7 @@ export default function DeviceDetailPage() {
 										기본 정보
 									</Typography>
 									<Field label="이름">{device.data.name}</Field>
-									<Field label="Device Key">{device.data.deviceKey}</Field>
+									<Field label="Device Key"><Mono>{device.data.deviceKey}</Mono></Field>
 									<Field label="Role">{device.data.roleName}</Field>
 									<Field label="상태">
 										<StatusChip
@@ -72,7 +73,7 @@ export default function DeviceDetailPage() {
 									</Typography>
 									{device.data.certificate ? (
 										<>
-											<Field label="Serial">{device.data.certificate.serialNumber}</Field>
+											<Field label="Serial"><Mono>{device.data.certificate.serialNumber}</Mono></Field>
 											<Field label="상태">
 												<StatusChip
 													label={certificateStatusLabel(device.data.certificate.status)}

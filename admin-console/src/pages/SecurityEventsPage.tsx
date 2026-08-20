@@ -18,6 +18,7 @@ import { localDateTimeToInstant } from "../shared/api/localDateTime";
 import { usePageParams } from "../shared/api/usePageParams";
 import DataTable, { type Column } from "../shared/ui/DataTable";
 import DateTimeText from "../shared/ui/DateTimeText";
+import Mono from "../shared/ui/Mono";
 import Field from "../shared/ui/Field";
 import PageHeader from "../shared/ui/PageHeader";
 import QueryState from "../shared/ui/QueryState";
@@ -36,15 +37,15 @@ const COLUMNS: Column<SecurityEvent>[] = [
 		render: (row) => <StatusChip label={severityLabel(row.severity)} color={severityColor(row.severity)} />,
 	},
 	{ key: "deviceId", header: "디바이스", render: (row) => <DeviceNameLink deviceId={row.deviceId} /> },
-	{ key: "requestPath", header: "요청 경로", render: (row) => row.requestPath ?? "—" },
+	{ key: "requestPath", header: "요청 경로", render: (row) => <Mono>{row.requestPath ?? "—"}</Mono> },
 	{
 		key: "decision",
 		header: "결과",
 		render: (row) => <StatusChip label={decisionLabel(row.decision)} color={decisionColor(row.decision)} />,
 	},
-	{ key: "reasonCode", header: "사유", render: (row) => row.reasonCode },
-	{ key: "clientIp", header: "접속 IP", render: (row) => row.clientIp ?? "—" },
-	{ key: "latencyMs", header: "응답(ms)", render: (row) => row.latencyMs ?? "—" },
+	{ key: "reasonCode", header: "사유", render: (row) => <Mono>{row.reasonCode}</Mono> },
+	{ key: "clientIp", header: "접속 IP", render: (row) => <Mono tabular>{row.clientIp ?? "—"}</Mono> },
+	{ key: "latencyMs", header: "응답(ms)", render: (row) => <Mono tabular>{row.latencyMs ?? "—"}</Mono> },
 ];
 
 /**
@@ -137,22 +138,24 @@ export default function SecurityEventsPage() {
 									color={decisionColor(selected.decision)}
 								/>
 							</Field>
-							<Field label="사유">{selected.reasonCode}</Field>
+							<Field label="사유"><Mono>{selected.reasonCode}</Mono></Field>
 							<Field label="디바이스">
 								<DeviceNameLink deviceId={selected.deviceId} />
 							</Field>
-							<Field label="인증서 Serial">{selected.certificateSerial ?? "—"}</Field>
+							<Field label="인증서 Serial"><Mono>{selected.certificateSerial ?? "—"}</Mono></Field>
 							<Field label="HTTP">
-								{selected.httpMethod === null && selected.requestPath === null
-									? "—"
-									: `${selected.httpMethod ?? "—"} ${selected.requestPath ?? ""}`.trim()}
+								<Mono>
+									{selected.httpMethod === null && selected.requestPath === null
+										? "—"
+										: `${selected.httpMethod ?? "—"} ${selected.requestPath ?? ""}`.trim()}
+								</Mono>
 							</Field>
-							<Field label="접속 IP">{selected.clientIp ?? "—"}</Field>
+							<Field label="접속 IP"><Mono tabular>{selected.clientIp ?? "—"}</Mono></Field>
 							<Field label="응답 시간">
-								{selected.latencyMs === null ? "—" : `${selected.latencyMs} ms`}
+								<Mono tabular>{selected.latencyMs === null ? "—" : `${selected.latencyMs} ms`}</Mono>
 							</Field>
 							{/* 같은 Trace ID로 Gateway·Management API 로그까지 따라갈 수 있다(ui-design.md §7). */}
-							<Field label="Trace ID">{selected.traceId}</Field>
+							<Field label="Trace ID"><Mono>{selected.traceId}</Mono></Field>
 						</>
 					)}
 				</Box>

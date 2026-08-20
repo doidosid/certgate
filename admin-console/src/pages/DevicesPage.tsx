@@ -10,6 +10,7 @@ import type { DeviceListItem } from "../shared/api/types";
 import { usePageParams } from "../shared/api/usePageParams";
 import DataTable, { type Column } from "../shared/ui/DataTable";
 import DateTimeText from "../shared/ui/DateTimeText";
+import Mono from "../shared/ui/Mono";
 import PageHeader from "../shared/ui/PageHeader";
 import QueryState from "../shared/ui/QueryState";
 import StatusChip from "../shared/ui/StatusChip";
@@ -17,7 +18,7 @@ import StatusChip from "../shared/ui/StatusChip";
 /** ui-design.md §4 목록 컬럼: 이름, Device Key, Role, 상태, 인증서 상태, 만료일, 마지막 접속. */
 const COLUMNS: Column<DeviceListItem>[] = [
 	{ key: "name", header: "이름", render: (row) => row.name },
-	{ key: "deviceKey", header: "Device Key", render: (row) => row.deviceKey },
+	{ key: "deviceKey", header: "Device Key", render: (row) => <Mono>{row.deviceKey}</Mono> },
 	{ key: "roleName", header: "Role", render: (row) => row.roleName },
 	{
 		key: "status",
