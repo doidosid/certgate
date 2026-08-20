@@ -45,6 +45,18 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       GATEWAY_INTERNAL_URL: ${GATEWAY_INTERNAL_URL}
       GATEWAY_INTERNAL_TOKEN: ${GATEWAY_INTERNAL_TOKEN}
+      # Gateway가 /internal/* 을 호출할 때 제시하는 Token이다. 없으면
+      # application.yml의 gateway.service-token이 빈 값이 되고, 빈 Token은
+      # 통과시키지 않고 전부 거절하도록 되어 있어(§7 인증 경계) Gateway의 Access
+      # Context 조회와 Security Event Batch가 모두 SERVICE_TOKEN_INVALID로 실패한다.
+      # 그러면 Gateway는 Fail Closed로 모든 요청을 503으로 막는다 — Compose로 띄운
+      # 스택에서 E2E 경로 전체가 죽는다.
+      GATEWAY_SERVICE_TOKEN: ${GATEWAY_SERVICE_TOKEN}
+      # 아래 둘도 application.yml이 읽지만 전달되지 않고 있었다. 코드 기본값
+      # (24시간·30일)이 .env.example 값과 같아 조용히 통과했을 뿐이라, .env에서
+      # 값을 바꿔도 컨테이너에는 반영되지 않았다(Codex 리뷰 PR #49 Medium).
+      ENROLLMENT_TOKEN_TTL_HOURS: ${ENROLLMENT_TOKEN_TTL_HOURS}
+      DEVICE_CERTIFICATE_VALIDITY_DAYS: ${DEVICE_CERTIFICATE_VALIDITY_DAYS}
       ROOT_CA_CERT_PATH: ${ROOT_CA_CERT_PATH}
       INTERMEDIATE_CA_CERT_PATH: ${INTERMEDIATE_CA_CERT_PATH}
       INTERMEDIATE_CA_KEY_PATH: ${INTERMEDIATE_CA_KEY_PATH}
