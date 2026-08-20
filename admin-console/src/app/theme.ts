@@ -115,6 +115,12 @@ export const theme = createTheme({
 	components: {
 		MuiCssBaseline: {
 			styleOverrides: {
+				/*
+				 * 브라우저가 직접 그리는 UI(datetime-local 달력, 체크박스, 스크롤바)는 CSS로
+				 * 색을 지정할 수 없고 기본 파란색으로 나온다. 기간 필터의 달력이 화면에서
+				 * 유일하게 파란 요소가 되는데, accent-color 하나로 강조색에 맞출 수 있다.
+				 */
+				"html, body": { accentColor: TEAL },
 				body: { backgroundColor: CANVAS, color: INK },
 				// 움직임을 줄이도록 설정한 사용자에게는 전환을 사실상 끈다.
 				"@media (prefers-reduced-motion: reduce)": {
