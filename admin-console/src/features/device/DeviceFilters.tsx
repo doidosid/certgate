@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import Box from "@mui/material/Box";
+import Link from "@mui/material/Link";
 import MenuItem from "@mui/material/MenuItem";
 import TextField from "@mui/material/TextField";
 import { useRoles } from "./queries";
@@ -10,9 +12,30 @@ interface Props {
 	onChange: (key: "query" | "status" | "roleName", value: string) => void;
 }
 
+/** 입력이 멈춘 뒤 요청을 보낼 때까지 기다리는 시간. */
+const SEARCH_DEBOUNCE_MS = 300;
+
 /** ui-design.md §4 "검색·필터: 이름, Device Key, 상태, Role". */
 export default function DeviceFilters({ query, status, roleName, onChange }: Props) {
 	const roles = useRoles();
+
+	// 검색어는 입력 중에도 화면에 즉시 반영하고, 서버 요청은 입력이 멈춘 뒤에만
+	// 보낸다. URL(=요청 조건)을 keystroke마다 갱신하면 글자 수만큼 요청이 나간다
+	// (Codex 리뷰 PR #44 Low).
+	const [searchText, setSearchText] = useState(query);
+
+	// 뒤로가기·링크 이동처럼 바깥에서 URL이 바뀌면 입력도 그 값을 따라간다.
+	useEffect(() => {
+		setSearchText(query);
+	}, [query]);
+
+	useEffect(() => {
+		if (searchText === query) {
+			return;
+		}
+		const timer = setTimeout(() => onChange("query", searchText), SEARCH_DEBOUNCE_MS);
+		return () => clearTimeout(timer);
+	}, [searchText, query, onChange]);
 
 	// URL에서 읽은 roleName이 아직 목록에 없으면(로딩 중이거나 조회 실패) select가
 	// 값을 표시하지 못하고 out-of-range 상태가 된다. 현재 값을 임시 option으로
@@ -26,8 +49,8 @@ export default function DeviceFilters({ query, status, roleName, onChange }: Pro
 			<TextField
 				label="이름 또는 Device Key"
 				size="small"
-				value={query}
-				onChange={(event) => onChange("query", event.target.value)}
+				value={searchText}
+				onChange={(event) => setSearchText(event.target.value)}
 				sx={{ minWidth: 240 }}
 			/>
 			<TextField
@@ -42,6 +65,12 @@ export default function DeviceFilters({ query, status, roleName, onChange }: Pro
 				<MenuItem value="ACTIVE">활성</MenuItem>
 				<MenuItem value="DISABLED">비활성</MenuItem>
 			</TextField>
+			{/*
+			 * Role 목록만 실패해도 Device 목록은 정상이다. 필터가 왜 안 되는지 알려주고,
+			 * 새로고침 없이 되돌릴 수 있게 재시도를 붙인다(Codex 리뷰 PR #44 Low).
+			 * 실패에도 disabled로 두지 않는다 — URL로 들어온 Role 필터를 "전체"로
+			 * 되돌릴 방법이 없어지기 때문이다.
+			 */}
 			<TextField
 				select
 				label="Role"
@@ -49,11 +78,22 @@ export default function DeviceFilters({ query, status, roleName, onChange }: Pro
 				value={roleName}
 				onChange={(event) => onChange("roleName", event.target.value)}
 				sx={{ minWidth: 160 }}
-				disabled={roles.isPending || roles.isError}
-				// Role 목록만 실패해도 Device 목록은 정상이다. 필터가 왜 안 되는지
-				// 알려주지 않으면 사용자는 기능이 사라진 이유를 알 수 없다.
 				error={roles.isError}
-				helperText={roles.isError ? "Role 목록을 불러오지 못했습니다." : undefined}
+				helperText={
+					roles.isError ? (
+						<>
+							Role 목록을 불러오지 못했습니다.{" "}
+							<Link
+								component="button"
+								type="button"
+								aria-label="Role 목록 다시 불러오기"
+								onClick={() => void roles.refetch()}
+							>
+								다시 시도
+							</Link>
+						</>
+					) : undefined
+				}
 			>
 				<MenuItem value="">전체</MenuItem>
 				{roleOptions.map((name) => (
