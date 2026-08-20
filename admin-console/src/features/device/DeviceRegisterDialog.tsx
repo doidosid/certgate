@@ -109,7 +109,7 @@ export default function DeviceRegisterDialog({ open, onClose }: Props) {
 									? register.error.message
 									: "요청을 처리하지 못했습니다."}
 								{register.error instanceof ApiError && (
-									<Typography variant="caption" component="div" color="text.secondary">
+									<Typography variant="caption" component="div" color="textSecondary">
 										{register.error.code} · traceId {register.error.traceId}
 									</Typography>
 								)}

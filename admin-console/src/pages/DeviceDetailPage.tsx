@@ -89,7 +89,7 @@ export default function DeviceDetailPage() {
 											</Field>
 										</>
 									) : (
-										<Typography color="text.secondary">발급된 인증서가 없습니다.</Typography>
+										<Typography color="textSecondary">발급된 인증서가 없습니다.</Typography>
 									)}
 								</CardContent>
 							</Card>
@@ -102,7 +102,7 @@ export default function DeviceDetailPage() {
 										적용 정책
 									</Typography>
 									{device.data.policyRules.length === 0 ? (
-										<Typography color="text.secondary">허용 규칙이 없어 모든 요청이 차단됩니다.</Typography>
+										<Typography color="textSecondary">허용 규칙이 없어 모든 요청이 차단됩니다.</Typography>
 									) : (
 										device.data.policyRules.map((rule) => (
 											<Field key={`${rule.httpMethod} ${rule.pathPattern}`} label={rule.httpMethod}>
@@ -121,7 +121,7 @@ export default function DeviceDetailPage() {
 										최근 보안 이벤트
 									</Typography>
 									{device.data.recentEvents.length === 0 ? (
-										<Typography color="text.secondary">최근 이벤트가 없습니다.</Typography>
+										<Typography color="textSecondary">최근 이벤트가 없습니다.</Typography>
 									) : (
 										device.data.recentEvents.map((event) => (
 											<Field key={event.id} label={severityLabel(event.severity)}>

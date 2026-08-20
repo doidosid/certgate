@@ -3795,6 +3795,7 @@ Device 몇 개를 등록하고 Device Agent로 CSR을 제출해 승인·발급�
 - `README.md`의 와이어프레임 링크를 실제 화면 이미지로 교체한다.
 - `docs/ui-design.md` §10에 "와이어프레임은 설계 단계 자료이고 실제 구현 화면은 README를 참고" 취지로 문장을 정리한다.
 - 실행 방법(`npm run dev` + `VITE_USE_MOCK`, Compose 기동)을 `admin-console/README.md`에 적는다.
+- **2026-08-20 사용자 결정.** README(또는 Issue #8 제출 패키지)에 "프로덕션이라면 Prometheus/Grafana로 확장" 취지의 후속 계획 한 줄을 남긴다. Dashboard(Task 13)에 실제로 Prometheus/Grafana를 붙이는 안을 검토했으나, 이 저장소의 관측 전략은 JSON 구조화 로그 + `GET /dashboard/summary`로 이미 확정되어 있고(operations.md, api-spec.md §9), 남은 일정(3일)에 메트릭 스택 도입은 과하다고 판단해 보류했다(ai-usage.md 2026-08-13의 Redis/Kafka/Alert Table 기각과 같은 판단 근거). 실무 관측 패턴을 안다는 것만 문서에 남기고 실제 도입은 하지 않는다.
 
 - [ ] **Step 5: Commit**
 
@@ -4257,11 +4258,13 @@ Task 3의 Commit에 이 문서 변경을 함께 포함한다 — 코드 결정�
 
 ---
 
-## 다른 기기에서 이어서 작업하기 (2026-08-19 기준)
+## 다른 기기에서 이어서 작업하기 (2026-08-21 기준, Issue #7 구현 완료)
 
-이 계획은 Windows PC에서 착수했고 이후 macOS에서 이어간다. 저장소에 없는 것(gitignore 대상)이 있어서 새 기기에서는 아래 준비가 필요하다.
+이 계획은 Windows PC에서 착수했고 이후 macOS·Windows를 오가며 이어간다. 저장소에 없는 것(gitignore 대상)이 있어서 새 기기에서는 아래 준비가 필요하다.
 
 > **이 절이 계획 본문보다 우선한다.** 계획 본문(특히 "서버 API 현황", 각 Task의 PR 묶음, Compose·SSE 관련 서술)은 2026-08-19 착수 시점 기준이라 이후 진행과 어긋난 곳이 있다. 예를 들어 본문은 `GET /roles`·`GET /dashboard/summary`를 미구현으로, Task 2와 12를 하나의 "PR 2"로 적지만 실제로는 각각 PR #38·#40으로 나뉘어 merge됐다. 본문과 이 절이 다르면 **이 절과 실제 코드**를 믿는다.
+
+> **2026-08-21 인수인계.** 아래 "지금 당장 이어서 할 일"부터 시작한다.
 
 ### 1. 진행 상황 — 어디까지 됐나
 
@@ -4280,14 +4283,55 @@ Task 3의 Commit에 이 문서 변경을 함께 포함한다 — 코드 결정�
 | Task 8 Security Events 목록·상세 | **merge 완료** (PR #46) |
 | Task 18 Console 디자인 톤 | **merge 완료** (PR #46) — 이후 레퍼런스 기준(다크 사이드바 + 라이트 콘텐츠)으로 재정렬 |
 | Task 9 Certificate Requests 목록·상세·승인·거절 | **merge 완료** (PR #46) |
-| Task 10 Certificates 목록·상세·폐기·다운로드 | **구현 완료** (2026-08-20) |
-| Task 11 Device 등록·상태·Role·Token 재발급 | **구현 완료** (2026-08-20) |
-| Task 13 Dashboard 화면 | **다음 착수 지점** |
-| Task 14·15 | 미착수 |
+| Task 10 Certificates 목록·상세·폐기·다운로드 | **merge 완료** (PR #47) |
+| Task 11 Device 등록·상태·Role·Token 재발급 | **merge 완료** (PR #47) |
+| Task 13 Dashboard 화면 | **구현 완료, PR 미생성** (`feature/console` 커밋 `1900981`) |
+| Mock 목록 필터링 결함 수정 | **구현 완료, PR 미생성** (`feature/console` 커밋 `1f3bb69`) |
+| Task 14 SSE 전역 CRITICAL Toast | **구현 완료, PR 미생성** (`feature/console` 커밋 `dd07ffe`) |
+| Task 15 README 실제 화면 | **구현 완료** (`feature/console` 커밋 `855cbc8`) — Prometheus/Grafana 후속 계획 한 줄 포함 |
+| Codex 리뷰 반영 (High 1·Medium 6) | **구현 완료** (`feature/console` 커밋 `8fbc1c4`) — 아래 참고 |
+| Compose 설정 누락 수정 | **merge 완료** (PR #48) — Task 15 중 발견 |
 
 부수적으로 등록된 Issue: **#36** (Gateway `/healthz`가 Management API readiness를 반영하지 않음), **#39** (매핑되지 않은 경로가 404 대신 500), **#42** (Gateway가 handshake에서 Intermediate를 보내지 않음). 모두 이 계획 범위 밖이다.
 
-**다음 작업은 Task 13(Dashboard 화면)이다.** PR #46으로 Task 8·9·18이 merge됐고, Task 10·11은 구현을 마쳤다. 계획의 PR 4 묶음(Task 9~11)이 끝났다.
+### 지금 당장 이어서 할 일 (2026-08-21 기준)
+
+**Issue #7의 구현 항목은 Task 1~16·18까지 전부 끝났다.** 완료 기준 네 가지(별도 Alert 화면·상태 관리 없음, Mock과 실제 API Type 일치, 미구현 동작 비활성·숨김, README를 실제 화면으로 교체)를 모두 만족한다. 남은 것은 PR과 Merge다.
+
+1. **PR #49(`feature/console`)가 열려 있고 Codex 리뷰를 한 번 받아 반영을 마쳤다.** 리뷰 결과는 `codexReview/PR-49.md`(PR #48과 통합 리뷰)다. CI 통과를 확인하고 Merge하면 Issue #7이 끝난다.
+2. **PR #48은 merge 완료다.** Compose가 management-api에 `GATEWAY_SERVICE_TOKEN`·`ENROLLMENT_TOKEN_TTL_HOURS`·`DEVICE_CERTIFICATE_VALIDITY_DAYS`를 전달하지 않던 문제였다.
+3. **테스트 기준선은 20 files / 202 tests다**(`npm test`). typecheck·build도 통과 상태다.
+4. **Codex 사용량을 다 쓰지 않았다.** 사용자 방침(2026-08-21)은 "Issue #4에 한 번 더". 그 뒤로는 쓰지 않는다.
+5. **남은 것:** Issue #42(Gateway가 handshake에서 Intermediate를 보내지 않음), Task 17(CI 취약점 스캔, `infra`), Issue #50(인증서 화면의 미구현 계약 항목), 그리고 Issue #4(E2E·장애 복구)·#8(제출 패키지).
+
+#### Codex 리뷰(PR #49) 반영 결과 — 다시 뒤집지 말 것
+
+**High 1건: SSE 보완 조회가 CRITICAL을 놓치던 두 경로.** 커서를 `new Date()`로 시작해 브라우저 시계가 서버보다 앞선 기기에서는 커서가 영영 앞으로 가지 않았고(이후 모든 보완 조회가 미래에서 시작), 첫 `onopen`에서 보완을 건너뛰어 마운트와 서버 emitter 등록 사이의 Event가 어느 경로로도 오지 않았다. 지금은 **커서에 서버가 준 `occurredAt`만** 넣고(마운트 시 최신 CRITICAL 한 페이지로 커서를 세우되 그것들은 Toast로 띄우지 않는다), **첫 연결을 포함한 모든 open에서** 보완한다. 브라우저 시계를 커서로 되돌리지 마라 — 테스트가 잡는다.
+
+**Medium 6건.** ① 5건 초과 알림을 버리지 않고 큐에 두었다가 이어서 보여준다. 보완 조회도 최대 4페이지(50건씩)를 훑고 중간에 실패하면 커서를 옮기지 않는다. ② payload의 `message`·`deviceKey` 타입을 검사한다(객체가 오면 화면 전체가 내려갔다). ③ Toast·Dashboard 패널이 `?reasonCode=`가 아니라 `?eventId=`로 그 Event의 Drawer를 연다. ④ 전역 EventSource stub이 연결을 기록하도록 바꾸고 `routes.test.tsx`가 배선을 확인한다(빈 껍데기였을 때는 `AppLayout`에서 Provider를 지워도 전부 통과했다). ⑤ Mock의 `to` 경계를 서버(`<=`)와 맞추고 `filterPage`가 실제로 page를 자른다. ⑥ README에 "알려진 화면 계약 차이"를 명시했다.
+
+**반영하지 않은 것.** `seenEventIds` 무제한 증가(Low)는 Codex도 "일반 MVP 트래픽에서는 무시할 수준"이라 했고, LRU/TTL을 넣으면 "언제 잊어도 안전한가"라는 판단이 새로 생겨 얻는 것보다 위험이 크다. `ui-design.md` §5·§6 계약 자체의 변경은 문서 계약 변경이라 사용자 확인이 필요하다 — **Issue #50**으로 분리했다.
+
+**검출력 확인.** Provider 테스트에 mutation 5종(첫 open 보완 생략·브라우저 시계 커서·한 페이지만 보완·5건 초과 폐기·payload 검증 완화)을 넣어 전부 실패하는 것을 확인했다. 이 테스트들을 약화시키지 마라.
+
+#### Task 15에서 실제로 한 것과 알게 된 것 (2026-08-21)
+
+- **캡처는 Mock이 아니라 실제 스택이다.** Compose로 5개 서비스를 띄우고 가상 Device 7대를 등록해 CSR 승인 4건·거절 1건·승인 대기 1건을 만들고, Gateway mTLS로 정상 요청·`ACCESS_DENIED`·인증서 폐기 후 차단·Device 비활성화 후 차단까지 실제로 수행한 뒤 5개 화면을 찍었다. 다시 만들려면 같은 순서를 반복하면 된다(Device 등록 → agent 실행 → CSR 승인 → mTLS 요청).
+- **Compose에 실제 버그가 있었다 — PR #48.** `compose.yaml`이 management-api에 `GATEWAY_SERVICE_TOKEN`을 전달하지 않아 Gateway의 Access Context 조회와 Security Event Batch가 전부 `SERVICE_TOKEN_INVALID`로 실패했고, Gateway는 설계대로 Fail Closed 해서 **모든 Device 요청이 503**이었다. Compose 스택 위에서 Device→Gateway→Backend를 끝까지 도는 자동 테스트가 없어 드러나지 않았다(Issue #4 범위).
+- **Device는 Leaf만 보내면 안 된다.** Gateway의 Client CA Pool에는 `root-ca.crt`만 들어간다(`compose.yaml`, security-design.md §5 "Root CA 기준 Chain 검증"). Device 인증서 뒤에 `intermediate-ca.crt`를 이어 붙여 제시해야 handshake가 통과한다. 붙이지 않으면 Gateway 로그에 `x509: certificate signed by unknown authority`가 남는다. `device-agent`의 mTLS Client는 아직 미구현이라 이번에는 `curl --cert fullchain.crt`로 대신했다 — 구현할 때 이 점을 반영해야 한다.
+- **Device 상태 변경은 Cache 무효화를 부르지 않는다.** 인증서 폐기만 Commit 후 무효화를 호출한다(api-spec.md §5). 비활성화한 Device는 Access Context Cache TTL(30초)이 지나야 차단되므로, 검증할 때 30초 이상 기다려야 한다. 설계대로이고 버그가 아니다.
+- **macOS curl로 Gateway 서버 인증서를 검증하려면 `--cacert pki/runtime/ca-chain.crt`를 쓴다.** Gateway가 handshake에서 Intermediate를 보내지 않아 root만으로는 실패한다(Issue #42, 아직 미해결).
+
+#### Task 14에서 계획 본문과 다르게 결정한 것 — 다시 뒤집지 말 것
+
+1. **Toast 제목은 `navigate()` 호출이 아니라 실제 anchor(`Link component={RouterLink}`)다.** 새 탭·가운데 클릭이 동작하고, Toast 전체를 클릭 영역으로 만들었을 때 닫기 버튼과 클릭이 겹치는 문제도 없다(Dashboard Critical 패널과 같은 판단).
+2. **서버의 한국어 message 표(`CriticalEventMessages`)를 Console에 복제하지 않는다.** 재연결 보완 조회 응답(`SecurityEvent`)에는 `message`가 없고 `deviceKey`도 없다(`deviceId`만 있다). 그 항목은 화면 다른 곳과 같이 `reasonCode`를 그대로 보여주고 Device는 `DeviceNameLink`로 이름을 찾는다. 표를 복제하면 두 곳이 조용히 어긋난다.
+3. **동시 표시·보완 조회 개수를 5로 제한한다**(`MAX_TOASTS`). 긴 단절 뒤 Toast가 화면을 덮으면 안 되고, 원본은 Security Events 목록에 남아 있다(api-spec.md §9).
+4. **jsdom에 `EventSource`가 없다.** `AppLayout`이 Provider를 감싸면서 모든 화면 테스트가 하나를 만들게 되므로 `setupTests.ts`에 아무 일도 하지 않는 껍데기를 stub으로 넣었다. 실제 SSE 동작은 `CriticalEventProvider.test.tsx`가 자체 가짜(`FakeEventSource`)로 검증한다.
+5. **MSW에 SSE handler를 추가했다**(`handlers.ts`의 `/security-events/stream`). 없으면 Mock 모드에서 `EventSource`가 3초마다 무한 재연결하고, Toast를 눈으로 확인할 방법이 아예 없다. 연결 3초 뒤 `criticalEventPayload`를 한 번 보낸다. 이 payload는 **목록 fixture에 실제로 있는 CRITICAL Event**(`EVENT_OUTBOX_BACKLOG`)를 가리킨다 — 없는 Event를 가리키면 알림을 눌러 이동한 목록이 비어 화면이 고장난 것처럼 보인다.
+6. **보완 조회 시작점은 마운트 시각이고 앞으로만 움직인다.** 조회가 실패하면 시작점을 앞당기지 않으므로 다음 재연결이 같은 구간을 다시 조회한다. `from` 경계에 걸린 Event는 `eventId` Set으로 걸러 중복 Toast가 되지 않는다 — SSE의 `eventId`는 `SecurityEvent`의 id와 같다(`CriticalEventListener`가 `event.getId()`를 그대로 싣는다).
+
+**Task 15 착수 시 참고할 것.** PR #46·#47로 Task 8·9·10·11·18이 merge됐고, Task 13·14와 Mock 필터 수정은 구현을 마쳤다(PR 미생성).
 
 Task 8을 구현하며 계획 본문의 Task 8 스케치와 다르게 결정한 3가지 — 다시 뒤집지 말 것:
 

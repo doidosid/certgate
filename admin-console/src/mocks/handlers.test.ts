@@ -60,10 +60,16 @@ describe("MSW handlers", () => {
 		expect(roles.map((role) => role.name)).toEqual(["SENSOR", "OPERATOR"]);
 	});
 
-	it("passes query params through without breaking the match", async () => {
+	/**
+	 * status=ACTIVE는 devicePage의 두 항목(ACTIVE·DISABLED) 중 하나만 남겨야 한다. 필터를
+	 * 무시하고 항상 같은 목록을 돌려주면, 화면에서 필터를 바꿔도 아무 변화가 없어 "필터가
+	 * 안 먹는다"는 인상을 준다 — 실제로 사용자가 겪은 문제다.
+	 */
+	it("passes query params through and actually filters by them", async () => {
 		const page = await apiGet<PageResponse<DeviceListItem>>("/devices", { page: 0, status: "ACTIVE" });
 
-		expect(page.content).toHaveLength(2);
+		expect(page.content).toHaveLength(1);
+		expect(page.content[0].status).toBe("ACTIVE");
 	});
 
 	/**

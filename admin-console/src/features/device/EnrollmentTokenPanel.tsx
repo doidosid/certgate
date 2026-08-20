@@ -49,7 +49,7 @@ export default function EnrollmentTokenPanel({ token, expiresAt }: Props) {
 			</Alert>
 
 			<Box>
-				<Typography variant="body2" color="text.secondary" gutterBottom>
+				<Typography variant="body2" color="textSecondary" gutterBottom>
 					Enrollment Token
 				</Typography>
 				<Box
@@ -66,7 +66,7 @@ export default function EnrollmentTokenPanel({ token, expiresAt }: Props) {
 				</Box>
 			</Box>
 
-			<Typography variant="body2" color="text.secondary">
+			<Typography variant="body2" color="textSecondary">
 				만료: <DateTimeText value={expiresAt} />
 			</Typography>
 

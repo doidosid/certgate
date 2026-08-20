@@ -8,7 +8,7 @@ import {
 	severityColor,
 	severityLabel,
 } from "../features/securityEvent/labels";
-import { useSecurityEvents } from "../features/securityEvent/queries";
+import { useSecurityEvent, useSecurityEvents } from "../features/securityEvent/queries";
 import type { SecurityEvent } from "../shared/api/types";
 import { localDateTimeToInstant } from "../shared/api/localDateTime";
 import { usePageParams } from "../shared/api/usePageParams";
@@ -53,6 +53,15 @@ export default function SecurityEventsPage() {
 	const { page, size, setPage, setSize, setParam, get } = usePageParams();
 	const [selected, setSelected] = useState<SecurityEvent | null>(null);
 
+	/*
+	 * Dashboard 패널과 CRITICAL Toast는 "원인이 된 Event 상세로 이동"해야 한다
+	 * (ui-design.md §3·§8). 이 화면에는 Event 하나만 여는 route가 없으므로 목록 URL에
+	 * eventId를 실어 Drawer를 연다. 같은 reasonCode로 필터링만 하면 그 코드가 여러
+	 * 건일 때 어느 것이 원인인지 지목하지 못한다(Codex 리뷰 PR #49 Medium).
+	 */
+	const linkedEventId = get("eventId") ?? "";
+	const linkedEvent = useSecurityEvent(linkedEventId);
+
 	const values = {
 		from: get("from") ?? "",
 		to: get("to") ?? "",
@@ -72,6 +81,9 @@ export default function SecurityEventsPage() {
 		page,
 		size,
 	});
+
+	// 목록에서 고른 Event는 이미 상세와 같은 응답이라 다시 조회하지 않는다.
+	const detail = selected ?? linkedEvent.data ?? null;
 
 	return (
 		<>
@@ -106,46 +118,61 @@ export default function SecurityEventsPage() {
 			</QueryState>
 
 			<DetailDrawer
-				open={selected !== null}
+				open={selected !== null || linkedEventId !== ""}
 				title="보안 이벤트 상세"
-				onClose={() => setSelected(null)}
+				onClose={() => {
+					setSelected(null);
+					setParam("eventId", undefined);
+				}}
 			>
-				{selected && (
+				{/* 링크로 들어온 Event는 아직 없을 수 있다 — 로딩·실패를 Drawer 안에서 드러낸다. */}
+				{selected === null && linkedEventId !== "" && (
+					<QueryState
+						isLoading={linkedEvent.isPending}
+						isError={linkedEvent.isError}
+						error={linkedEvent.error}
+						isEmpty={false}
+						onRetry={() => linkedEvent.refetch()}
+					>
+						<></>
+					</QueryState>
+				)}
+				{detail && (
 						<>
 							<Field label="발생 시각">
-								<DateTimeText value={selected.occurredAt} />
+								<DateTimeText value={detail.occurredAt} />
 							</Field>
-							<Field label="유형">{eventTypeLabel(selected.type)}</Field>
+							<Field label="유형">{eventTypeLabel(detail.type)}</Field>
 							<Field label="심각도">
 								<StatusChip
-									label={severityLabel(selected.severity)}
-									color={severityColor(selected.severity)}
+									label={severityLabel(detail.severity)}
+									color={severityColor(detail.severity)}
 								/>
 							</Field>
 							<Field label="결과">
 								<StatusChip
-									label={decisionLabel(selected.decision)}
-									color={decisionColor(selected.decision)}
+									label={decisionLabel(detail.decision)}
+									color={decisionColor(detail.decision)}
 								/>
 							</Field>
-							<Field label="사유"><Mono>{selected.reasonCode}</Mono></Field>
+							<Field label="사유"><Mono>{detail.reasonCode}</Mono></Field>
 							<Field label="디바이스">
-								<DeviceNameLink deviceId={selected.deviceId} />
+								<DeviceNameLink deviceId={detail.deviceId} />
 							</Field>
-							<Field label="인증서 Serial"><Mono>{selected.certificateSerial ?? "—"}</Mono></Field>
+							<Field label="인증서 Serial"><Mono>{detail.certificateSerial ?? "—"}</Mono></Field>
 							<Field label="HTTP">
 								<Mono>
-									{selected.httpMethod === null && selected.requestPath === null
+									{detail.httpMethod === null && detail.requestPath === null
 										? "—"
-										: `${selected.httpMethod ?? "—"} ${selected.requestPath ?? ""}`.trim()}
+										: `${detail.httpMethod ?? "—"} ${detail.requestPath ?? ""}`.trim()}
 								</Mono>
 							</Field>
-							<Field label="접속 IP"><Mono tabular>{selected.clientIp ?? "—"}</Mono></Field>
+							<Field label="접속 IP"><Mono tabular>{detail.clientIp ?? "—"}</Mono></Field>
 							<Field label="응답 시간">
-								<Mono tabular>{selected.latencyMs === null ? "—" : `${selected.latencyMs} ms`}</Mono>
+								<Mono tabular>{detail.latencyMs === null ? "—" : `${detail.latencyMs} ms`}</Mono>
 							</Field>
 							{/* 같은 Trace ID로 Gateway·Management API 로그까지 따라갈 수 있다(ui-design.md §7). */}
-							<Field label="Trace ID"><Mono>{selected.traceId}</Mono></Field>
+							<Field label="Trace ID"><Mono>{detail.traceId}</Mono></Field>
 						</>
 					)}
 			</DetailDrawer>
