@@ -4272,12 +4272,34 @@ Task 3의 Commit에 이 문서 변경을 함께 포함한다 — 코드 결정�
 | Task 2 `GET /roles` + Task 16 JSON 구조화 로그 | **merge 완료** (PR #38, 2026-08-20) |
 | Task 12 `GET /dashboard/summary` | **merge 완료** (PR #40, 2026-08-20) |
 | PKI clamp 판단 이식성 | **PR #37 보류** — 아래 참고. 선행 조건 아님 |
-| Task 3 API Type·HTTP Client | **다음 착수 지점** |
-| Task 4·5·6~11·13~15 Console 전체 | 미착수 |
+| Task 3 API Type·HTTP Client | **merge 완료** (PR #43, 2026-08-20) |
+| Task 4 MSW Mock·Fixture | **merge 완료** (PR #43) |
+| Task 5 공통 UI Primitive | **merge 완료** (PR #43) |
+| Task 6 Devices 목록·검색·필터 | **merge 완료** (PR #44, 2026-08-20) |
+| Task 7 Device 상세 화면 | **merge 완료** (PR #44) |
+| Task 8 Security Events 목록·상세 | **다음 착수 지점** |
+| Task 9~11·13~15 | 미착수 |
 
 부수적으로 등록된 Issue: **#36** (Gateway `/healthz`가 Management API readiness를 반영하지 않음), **#39** (매핑되지 않은 경로가 404 대신 500), **#42** (Gateway가 handshake에서 Intermediate를 보내지 않음). 모두 이 계획 범위 밖이다.
 
-**다음 작업은 Task 3(API Type·HTTP Client)이다.** 서버 API는 Task 2·12까지 준비됐으므로 이제 Console 쪽이 전부 남았다. Dashboard 화면(Task 13)을 먼저 하고 싶더라도 바로는 못 한다 — Task 13은 Task 3의 `DashboardSummary` Type·`apiGet`, Task 4의 MSW Fixture, Task 5의 `QueryState`·`StatusChip`, Task 8의 `severityLabel`을 소비한다. 현재 `admin-console/src`에 그 선행 산출물이 하나도 없다 — Vite scaffold와 `app/{router,routes,queryClient}`, `shared/api/env.ts`, `shared/ui/AppLayout.tsx`, Placeholder Page는 있지만 `shared/api/{types,client,ApiError}.ts`·`mocks/`·`features/`·`QueryState`·`StatusChip`은 없다.
+**다음 작업은 Task 8(Security Events 목록·상세)이다.** PR #44가 merge되면 바로 시작할 수 있다. 계획의 PR 3 묶음(Task 3~8) 중 Task 8만 남은 상태다.
+
+#### Console 작업에서 알아둘 것 (2026-08-20 기준)
+
+- **PR을 계획보다 잘게 쪼개면 갈 곳 없는 링크가 생긴다.** Task 6만 먼저 PR로 내면서 목록의 상세 링크가 등록되지 않은 route를 가리켜 빈 화면이 됐다(Codex 리뷰 PR #44 Medium). Task 7을 같은 PR에 넣어 해결했다. 화면 간 이동이 걸린 Task는 계획의 묶음을 지키는 편이 낫다.
+- **`DataTable`은 첫 열을 control로 감싼다.** 이동이면 `getRowHref`로 실제 anchor(새 탭·가운데 클릭 동작), 그 자리에서 끝나는 동작이면 `onRowClick`으로 button이 된다. 첫 열에 자체 link/button을 넣으면 control이 중첩되니 주의한다.
+- **빈 목록 판단은 `totalElements === 0`으로 한다.** `content.length === 0`으로 하면 범위를 벗어난 page에서 pagination까지 사라져 첫 페이지로 돌아올 수 없다.
+- **보조 조회(예: Role 목록) 실패는 주 목록과 별개로 드러내야 한다.** 조용히 실패하면 필터가 이유 없이 사라진다.
+- **테스트 환경의 API Base URL은 `vite.config.ts`의 `test.env`에 있다.** `.env`가 없으면 `import.meta.env`가 비어 요청이 `undefined/devices`가 되고 MSW가 못 잡는다.
+- **`routes.test.tsx`는 `QueryClientProvider`로 감싸야 한다.** 화면이 `useQuery`를 쓰기 시작하면서 필요해졌다.
+
+#### PR #44에서 Merge를 막지 않는다고 판단해 남겨둔 것 (Codex 리뷰 Low 3건)
+
+Task 8 이후 관련 파일을 만질 때 함께 처리하면 된다.
+
+1. **`DeviceDetailPage`의 카드 제목이 `h1` 다음 `h6`로 건너뛴다.** `Typography variant="h6"`의 기본 element가 `h6`라 보조기술의 문서 개요에서 heading 2~5가 빈다. 각 카드 제목에 `component="h2"`만 주면 시각 디자인을 바꾸지 않고 계층이 맞는다. 접근성 항목이라 Task 8에서 같은 카드 패턴을 쓸 때 함께 고치는 편이 낫다.
+2. **Role 조회 실패 시 화면 안에서 재시도할 수 없다.** 실패 사실은 helper text로 드러나지만 `roles.refetch()`를 부를 control이 없어 새로고침해야 한다.
+3. **검색 입력에 debounce가 없다.** keystroke마다 요청이 나간다. React Query가 최신 key 결과만 화면에 연결하므로 표시가 틀어지지는 않으나, 데이터가 늘기 전에 debounce나 명시적 검색 submit + 요청 취소를 넣는 편이 좋다.
 
 **PR #37은 선행 조건이 아니다(2026-08-19 정정).** 이전 판에 "PR #37·#38을 먼저 merge하고 시작한다"고 적혀 있었으나, macOS에서 실측한 결과 **PR 적용 전 `main`의 `issue-gateway-cert.sh`가 정상 동작한다** — Darwin 25.5 / OpenSSL 3.6.3에서 `test_issue_gateway_cert.sh`가 clamp 케이스 포함 PASS했고 BSD `date -j -f` fallback이 실제로 동작했다. 게다가 현재 PR #37에는 회귀가 있다: 만료까지 1일 미만 남은 CA에서 `main`은 조기 거부하는데 PR은 `-days 0`으로 인증서를 만든 뒤 검증에서 실패한다(직접 재현, PR #37 코멘트 참고). Console 작업을 우선하고 이 PR은 나중에 수정 후 merge한다.
 
@@ -4299,6 +4321,20 @@ Task 3의 Commit에 이 문서 변경을 함께 포함한다 — 코드 결정�
 **`admin-console/node_modules`**. `cd admin-console && npm ci`.
 
 **`.claude/settings.local.json`** (gitignore 대상). Windows 전용 절대 경로(`JAVA_HOME`, MinGW `CC`)가 들어 있던 파일이라 **macOS로 가져오면 안 된다.** macOS에서는 Homebrew JDK 21과 Xcode CLT가 PATH에 있으면 별도 설정이 필요 없다.
+
+### 2-1. macOS → Windows로 돌아갈 때 (2026-08-20)
+
+Console 작업을 macOS에서 이어받아 Task 3~7까지 진행했다. Windows로 돌아가면 다음을 확인한다.
+
+~~~bash
+git checkout main && git pull            # PR #43·#44 반영분
+cd admin-console && npm ci               # msw·@testing-library/user-event가 새로 추가됐다
+npm run typecheck && npm test            # 68건 통과가 기준선
+~~~
+
+- **`admin-console/public/mockServiceWorker.js`는 Git에 추적된다.** 지우면 `VITE_USE_MOCK=true`가 흰 화면이 되고, `src/mocks/handlers.test.ts`가 그 회귀를 잡는다.
+- **`.claude/settings.local.json`은 여전히 기기별 파일이다.** Windows 쪽 JDK·MinGW 경로 설정은 그 기기에만 두고 macOS로 가져오지 않는다(반대도 마찬가지).
+- Windows에서 Docker 스택을 띄울 때의 주의는 아래 3절과 같다. Console만 개발한다면 `npm run dev`와 MSW(`VITE_USE_MOCK=true`)로 Backend 없이도 화면 작업이 가능하다.
 
 ### 3. macOS에서 다르게 동작하는 것들
 
