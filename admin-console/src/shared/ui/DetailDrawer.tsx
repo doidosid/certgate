@@ -27,7 +27,11 @@ export default function DetailDrawer({ open, title, onClose, children, width = 4
 	return (
 		<Drawer anchor="right" open={open} onClose={onClose}>
 			<Toolbar />
-			<Box sx={{ width, p: 3 }}>
+			{/*
+			 * 폭을 고정하면 창이 그보다 좁을 때 패널의 왼쪽이 화면 밖으로 나가 제목과
+			 * 라벨이 잘린다(Codex 리뷰 PR #46 Low). 좁은 창에서는 전체 폭을 쓴다.
+			 */}
+			<Box sx={{ width: { xs: "100vw", sm: width }, maxWidth: "100vw", p: 3 }}>
 				<Typography variant="h6" component="h2" gutterBottom>
 					{title}
 				</Typography>

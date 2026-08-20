@@ -74,19 +74,39 @@ describe("DeviceSelect", () => {
 	});
 
 	/**
-	 * Autocomplete의 value prop 참조가 render마다 바뀌면 MUI가 그것을 선택 변경으로
-	 * 보고 입력창을 기존 Device 라벨로 되돌린다. 그러면 이미 선택된 상태에서 다른
-	 * Device를 검색할 수 없다(Codex 리뷰 PR #46 Medium).
+	 * 선택을 유지한 채로 입력해야 회귀를 잡는다. `value` prop의 참조가 render마다 바뀌면
+	 * MUI가 그것을 선택 변경으로 보고 입력창을 기존 라벨로 되돌린다 — 근거는
+	 * useAutocomplete의 `const valueChange = value !== previousProps.value`(참조 비교)와
+	 * 바로 아래의 `if (focused && !valueChange) return`이다. focus 중에 참조가 바뀌면
+	 * early return을 타지 못해 resetInputValue가 실행된다(Codex 리뷰 PR #46 Medium).
+	 *
+	 * 먼저 clear하면 입력이 ""가 되는 순간 MUI가 선택을 null로 만들어(handleInputChange의
+	 * clear 분기) 그 뒤 타이핑은 선택이 없는 상태에서 일어난다. 그 경로는 참조가 바뀌지
+	 * 않아 회귀 구현에서도 통과한다 — 그래서 지우지 않고 이어서 입력한다.
 	 */
-	it("keeps the typed text while a device is already selected", async () => {
+	it("keeps the typed text while a device stays selected", async () => {
+		serveSearch([]);
+		const onChange = vi.fn();
+		renderSelect(FIRST.id, onChange);
+
+		const input = await screen.findByDisplayValue(`${FIRST.name} (${FIRST.deviceKey})`);
+
+		// focus하면 MUI가 라벨을 전체 선택하므로(selectOnFocus 기본값) 입력이 라벨을 덮는다.
+		await userEvent.type(input, "far");
+
+		// 회귀 구현에서는 keystroke마다 입력이 라벨로 되돌아가 "far"가 남지 않는다.
+		expect(input).toHaveValue("far");
+		// 선택은 유지된다 — 입력이 ""를 거치지 않았으므로 clear 경로를 타지 않는다.
+		expect(onChange).not.toHaveBeenCalled();
+	});
+
+	/** 선택을 지우고 다시 검색하는 흐름도 동작해야 한다. */
+	it("searches again after the selection is cleared", async () => {
 		const seen: string[] = [];
 		serveSearch(seen);
 		renderSelect(FIRST.id);
 
-		const input = screen.getByLabelText("디바이스");
-		// 선택된 Device의 라벨이 먼저 채워진다.
-		expect(await screen.findByDisplayValue(`${FIRST.name} (${FIRST.deviceKey})`)).toBeInTheDocument();
-
+		const input = await screen.findByDisplayValue(`${FIRST.name} (${FIRST.deviceKey})`);
 		await userEvent.clear(input);
 		await userEvent.type(input, "far");
 
