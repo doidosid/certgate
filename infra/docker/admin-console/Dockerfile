@@ -9,7 +9,7 @@ RUN npm ci
 COPY admin-console/. .
 RUN npm run build
 
-FROM nginx:1.27.5-alpine
+FROM nginx:1.31.4-alpine
 COPY infra/docker/admin-console/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /src/dist /usr/share/nginx/html
 EXPOSE 80
