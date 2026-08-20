@@ -47,3 +47,21 @@
 - 동일 Event ID는 PostgreSQL에 한 번만 존재
 - Test Key·Certificate·Token은 Git과 로그에 없음
 - 핵심 E2E는 문서화된 단일 명령으로 실행
+
+## E2E 실행
+
+~~~bash
+./tests/e2e/run.sh
+~~~
+
+이 한 줄이 위 "필수 시나리오"를 실제 스택에서 검증한다. Mock이나 Stub을 쓰지 않는다 — Compose로 5개 서비스를 띄우고, 실제 Device Agent가 만든 Key·CSR로 인증서를 발급받아, 실제 mTLS로 Gateway에 요청한다.
+
+주의할 점:
+
+- **DB Volume을 지우고 시작한다**(`down -v`). 개발 중인 데이터가 있으면 먼저 백업한다.
+- Key·Certificate·Token은 전부 임시 디렉터리 안에만 만들고 종료 시 지운다. 마지막 시나리오가 컨테이너 로그와 작업 트리에 그것들이 남지 않았는지 직접 확인한다.
+- Access Context Cache TTL(30초)과 서비스 재시작을 실제로 기다리므로 **5분 안팎** 걸린다.
+- 실패해도 멈추지 않고 끝까지 돈 뒤 한 번에 보고한다. 한 시나리오가 깨졌을 때 나머지 상태도 같이 봐야 원인을 좁힐 수 있다.
+- 스택을 남겨 두고 직접 들여다보려면 `E2E_KEEP_STACK=1 ./tests/e2e/run.sh`.
+
+아직 CI에 넣지 않았다(development-guide.md "E2E는 안정화 후 CI에 포함"). 실행 시간이 길고 Docker·Go·OpenSSL 3.2 이상을 요구하며, 만료 인증서 시나리오는 OpenSSL이 낮으면 SKIP된다.
