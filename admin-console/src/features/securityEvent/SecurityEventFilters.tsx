@@ -1,9 +1,8 @@
-import type { ReactNode } from "react";
 import Box from "@mui/material/Box";
-import Link from "@mui/material/Link";
 import MenuItem from "@mui/material/MenuItem";
 import TextField from "@mui/material/TextField";
-import { DEVICE_OPTION_LIMIT, useDeviceOptions } from "../device/queries";
+import DeviceSelect from "../device/DeviceSelect";
+import { localDateTimeToInstant } from "../../shared/api/localDateTime";
 import { SECURITY_EVENT_REASON_CODES } from "./labels";
 
 export interface SecurityEventFilterValues {
@@ -22,50 +21,24 @@ interface Props {
 
 /** ui-design.md §7 "검색·필터: 기간, 디바이스, 결과, 이벤트 코드, 심각도". */
 export default function SecurityEventFilters({ values, onChange }: Props) {
-	const devices = useDeviceOptions();
-
-	const loaded = devices.data?.content ?? [];
-	const loadedOptions = loaded.map((device) => ({ id: device.id, label: device.name }));
-
-	// URL에 있던 값이 아직(또는 끝내) 목록에 없으면 select가 값을 표시하지 못하고
-	// out-of-range가 된다. 현재 값을 임시 선택지로 남겨 URL 상태와 화면이 어긋나지
-	// 않게 한다(DeviceFilters의 roleName과 같은 판단).
-	const deviceOptions =
-		values.deviceId && !loaded.some((device) => device.id === values.deviceId)
-			? [{ id: values.deviceId, label: values.deviceId }, ...loadedOptions]
-			: loadedOptions;
-
+	// URL에 있던 값이 선택지에 없으면 select가 값을 표시하지 못하고 out-of-range가
+	// 된다. 현재 값을 임시 선택지로 남겨 URL 상태와 화면이 어긋나지 않게 한다.
 	const knownReasonCodes: readonly string[] = SECURITY_EVENT_REASON_CODES;
 	const reasonCodeOptions =
 		values.reasonCode && !knownReasonCodes.includes(values.reasonCode)
 			? [values.reasonCode, ...knownReasonCodes]
 			: knownReasonCodes;
 
-	const truncated = (devices.data?.totalElements ?? 0) > loaded.length;
-
-	let deviceHelperText: ReactNode = undefined;
-	if (devices.isError) {
-		// Event 목록과 별개로 실패한다. 조용히 두면 필터가 이유 없이 비어 보인다
-		// (Codex 리뷰 PR #44 Low). 새로고침 없이 되돌릴 수 있게 재시도를 붙인다.
-		deviceHelperText = (
-			<>
-				Device 목록을 불러오지 못했습니다.{" "}
-				<Link
-					component="button"
-					type="button"
-					aria-label="Device 목록 다시 불러오기"
-					onClick={() => void devices.refetch()}
-				>
-					다시 시도
-				</Link>
-			</>
-		);
-	} else if (truncated) {
-		deviceHelperText = `Device가 많아 처음 ${DEVICE_OPTION_LIMIT}개만 표시합니다.`;
-	}
+	// 뒤집힌 기간은 서버에서 오류가 아니라 결과 0건으로 돌아온다. 이유를 말해주지
+	// 않으면 사용자는 이벤트가 없는 것과 구분할 수 없다.
+	const fromInstant = localDateTimeToInstant(values.from);
+	const toInstant = localDateTimeToInstant(values.to);
+	const rangeReversed = fromInstant !== undefined && toInstant !== undefined && fromInstant > toInstant;
+	const fromInvalid = values.from !== "" && fromInstant === undefined;
+	const toInvalid = values.to !== "" && toInstant === undefined;
 
 	return (
-		<Box sx={{ display: "flex", gap: 2, mb: 2, flexWrap: "wrap" }}>
+		<Box sx={{ display: "flex", gap: 2, mb: 2, flexWrap: "wrap", alignItems: "flex-start" }}>
 			<TextField
 				label="시작"
 				type="datetime-local"
@@ -73,6 +46,8 @@ export default function SecurityEventFilters({ values, onChange }: Props) {
 				value={values.from}
 				slotProps={{ inputLabel: { shrink: true } }}
 				onChange={(event) => onChange("from", event.target.value)}
+				error={fromInvalid}
+				helperText={fromInvalid ? "시각으로 읽을 수 없어 조건에서 제외됩니다." : undefined}
 			/>
 			<TextField
 				label="종료"
@@ -81,28 +56,16 @@ export default function SecurityEventFilters({ values, onChange }: Props) {
 				value={values.to}
 				slotProps={{ inputLabel: { shrink: true } }}
 				onChange={(event) => onChange("to", event.target.value)}
+				error={toInvalid || rangeReversed}
+				helperText={
+					toInvalid
+						? "시각으로 읽을 수 없어 조건에서 제외됩니다."
+						: rangeReversed
+							? "종료가 시작보다 앞서 결과가 없습니다."
+							: undefined
+				}
 			/>
-			{/*
-			 * 조회 실패에도 disabled로 두지 않는다 — URL로 들어온 deviceId 필터를
-			 * "전체"로 되돌릴 방법이 없어지기 때문이다.
-			 */}
-			<TextField
-				select
-				label="디바이스"
-				size="small"
-				sx={{ minWidth: 200 }}
-				value={values.deviceId}
-				onChange={(event) => onChange("deviceId", event.target.value)}
-				error={devices.isError}
-				helperText={deviceHelperText}
-			>
-				<MenuItem value="">전체</MenuItem>
-				{deviceOptions.map((option) => (
-					<MenuItem key={option.id} value={option.id}>
-						{option.label}
-					</MenuItem>
-				))}
-			</TextField>
+			<DeviceSelect value={values.deviceId} onChange={(deviceId) => onChange("deviceId", deviceId)} />
 			<TextField
 				select
 				label="결과"

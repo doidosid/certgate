@@ -17,7 +17,13 @@ export function useDevices(params: DeviceListParams) {
 }
 
 export function useDevice(deviceId: string) {
-	return useQuery({ queryKey: deviceKeys.detail(deviceId), queryFn: () => fetchDevice(deviceId) });
+	return useQuery({
+		queryKey: deviceKeys.detail(deviceId),
+		queryFn: () => fetchDevice(deviceId),
+		// 빈 id로 부르면 `/devices/`를 요청해 의미 없는 오류를 만든다. 선택값이 없는
+		// 필터(DeviceSelect)처럼 id가 아직 없는 호출자가 있다.
+		enabled: deviceId !== "",
+	});
 }
 
 /**

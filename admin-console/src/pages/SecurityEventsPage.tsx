@@ -13,6 +13,7 @@ import {
 } from "../features/securityEvent/labels";
 import { useSecurityEvents } from "../features/securityEvent/queries";
 import type { SecurityEvent } from "../shared/api/types";
+import { localDateTimeToInstant } from "../shared/api/localDateTime";
 import { usePageParams } from "../shared/api/usePageParams";
 import DataTable, { type Column } from "../shared/ui/DataTable";
 import DateTimeText from "../shared/ui/DateTimeText";
@@ -46,19 +47,6 @@ const COLUMNS: Column<SecurityEvent>[] = [
 ];
 
 /**
- * datetime-local 값은 사용자의 로컬 시간이고 서버는 ISO 8601 Instant를 받는다.
- * 날짜로 해석되지 않는 값(사용자가 URL을 직접 고친 경우)은 서버로 보내지 않는다 —
- * 400을 만들어 목록 전체를 오류 화면으로 바꿀 이유가 없다.
- */
-function toInstant(localValue: string): string | undefined {
-	if (!localValue) {
-		return undefined;
-	}
-	const parsed = new Date(localValue);
-	return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
-}
-
-/**
  * 보안 기록은 수정·삭제할 수 없다(ui-design.md §7). 이 화면에는 조회 외의 어떤
  * 변경 동작도 두지 않는다.
  */
@@ -76,8 +64,8 @@ export default function SecurityEventsPage() {
 	};
 
 	const events = useSecurityEvents({
-		from: toInstant(values.from),
-		to: toInstant(values.to),
+		from: localDateTimeToInstant(values.from),
+		to: localDateTimeToInstant(values.to),
 		deviceId: values.deviceId || undefined,
 		decision: values.decision || undefined,
 		severity: values.severity || undefined,

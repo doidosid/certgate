@@ -6,7 +6,7 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { http, HttpResponse } from "msw";
 import { routes } from "../app/routes";
 import { mockServer } from "../mocks/server";
-import { securityEventPage } from "../mocks/fixtures";
+import { devicePage, securityEventPage } from "../mocks/fixtures";
 
 function renderAt(path: string) {
 	const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -138,17 +138,32 @@ describe("SecurityEventsPage", () => {
 		renderAt("/security-events?from=2026-08-13T09:00&to=2026-08-13T18:30");
 		await screen.findByText("허용");
 
-		expect(seen[0]).toContain(`from=${encodeURIComponent(new Date("2026-08-13T09:00").toISOString())}`);
-		expect(seen[0]).toContain(`to=${encodeURIComponent(new Date("2026-08-13T18:30").toISOString())}`);
+		// 기대값을 구현과 같은 new Date(문자열)로 만들면 같은 보정 오류를 정답으로
+		// 받아들인다(Codex 리뷰 PR #46 Medium). 자리별 값으로 직접 만든다.
+		expect(seen[0]).toContain(`from=${encodeURIComponent(new Date(2026, 7, 13, 9, 0, 0).toISOString())}`);
+		expect(seen[0]).toContain(`to=${encodeURIComponent(new Date(2026, 7, 13, 18, 30, 0).toISOString())}`);
 	});
 
-	/** 사용자가 URL을 직접 고칠 수 있다. 날짜가 아닌 값을 서버로 흘려보내 400을 만들지 않는다. */
-	it("drops an unparseable datetime instead of sending it to the server", async () => {
+	/**
+	 * 사용자가 URL을 직접 고칠 수 있다. 날짜가 아닌 값과 달력에 없는 값을 서버로
+	 * 흘려보내지 않는다 — 후자는 조용히 다른 범위를 조회하게 만든다. 변환 규칙 자체는
+	 * shared/api/localDateTime.test.ts가 자리별로 검증한다.
+	 */
+	it.each([
+		["날짜가 아닌 값", "notadate"],
+		["달력에 없는 날", "2026-02-30T09:00"],
+	])("서버로 보내지 않는다: %s", async (_label, value) => {
 		const seen = captureListRequests();
-		renderAt("/security-events?from=notadate");
+		renderAt(`/security-events?from=${encodeURIComponent(value)}`);
 		await screen.findByText("허용");
 
 		expect(seen[0]).not.toContain("from=");
+	});
+
+	it("tells the user when the range is reversed instead of showing an unexplained empty result", async () => {
+		renderAt("/security-events?from=2026-08-13T18:00&to=2026-08-13T09:00");
+
+		expect(await screen.findByText("종료가 시작보다 앞서 결과가 없습니다.")).toBeInTheDocument();
 	});
 
 	it("changes the filter and refetches with it", async () => {
@@ -202,8 +217,8 @@ describe("SecurityEventsPage", () => {
 		await expect.poll(() => attempts > before).toBe(true);
 	});
 
-	/** 조용히 잘리면 없는 Device를 사용자가 필터에서 찾지 못하는 이유를 알 수 없다. */
-	it("says so when there are more devices than the filter can list", async () => {
+	/** 한 페이지에 담기지 않는 수의 Device가 일치하면 검색어를 좁히라고 말해야 한다. */
+	it("says so when more devices match than one page can list", async () => {
 		mockServer.use(
 			http.get("/api/v1/devices", () =>
 				HttpResponse.json({ content: [], page: 0, size: 100, totalElements: 240, totalPages: 3 }),
@@ -211,6 +226,70 @@ describe("SecurityEventsPage", () => {
 		);
 		renderAt("/security-events");
 
-		expect(await screen.findByText(/처음 100개만/)).toBeInTheDocument();
+		expect(await screen.findByText(/일치하는 Device가 100개를 넘습니다\(240개\)/)).toBeInTheDocument();
+	});
+
+	/**
+	 * 첫 100개만 select에 담으면 101번째 이후 Device의 이벤트는 필터로 볼 수 없다
+	 * (Codex 리뷰 PR #46 Medium). 선택지를 화면에서 걸러내지 않고 검색어를 서버로
+	 * 보내야 한다.
+	 */
+	it("finds a device outside the first page by searching the server and filters by it", async () => {
+		const seen = captureListRequests();
+		const farDevice = {
+			...devicePage.content[0],
+			id: "aaaaaaaa-0000-4000-8000-0000000000aa",
+			deviceKey: "sensor-far-101",
+			name: "101번째 센서",
+		};
+		mockServer.use(
+			http.get("/api/v1/devices", ({ request }) => {
+				const query = new URL(request.url).searchParams.get("query");
+				if (query === "far") {
+					return HttpResponse.json({
+						content: [farDevice],
+						page: 0,
+						size: 100,
+						totalElements: 1,
+						totalPages: 1,
+					});
+				}
+				// 검색어가 없으면 첫 페이지만 오고, 전체는 그보다 훨씬 많다.
+				return HttpResponse.json({ ...devicePage, totalElements: 240, totalPages: 3 });
+			}),
+		);
+
+		renderAt("/security-events");
+		await screen.findByText("허용");
+
+		await userEvent.type(screen.getByLabelText("디바이스"), "far");
+		await userEvent.click(
+			await screen.findByRole("option", { name: /101번째 센서/ }, { timeout: 3000 }),
+		);
+
+		await expect
+			.poll(() => seen.some((search) => search.includes(`deviceId=${farDevice.id}`)))
+			.toBe(true);
+	});
+
+	/** 셀 안의 Device 링크는 이동만 해야 한다 — 행 클릭의 Drawer까지 같이 열리면 안 된다. */
+	it("navigates to the device detail without opening the event drawer", async () => {
+		renderAt("/security-events");
+
+		await userEvent.click(await screen.findByRole("link", { name: "1층 온도 센서" }));
+
+		expect(await screen.findByRole("heading", { name: "Device 상세" })).toBeInTheDocument();
+		expect(screen.queryByRole("heading", { name: "보안 이벤트 상세" })).not.toBeInTheDocument();
+	});
+
+	/** SYSTEM Event의 상세는 대부분이 null이다. 빈 칸이 아니라 없음으로 보여야 한다. */
+	it("shows the nullable detail fields of a SYSTEM event as 없음", async () => {
+		renderAt("/security-events");
+		await userEvent.click(await screen.findByText("EVENT_OUTBOX_BACKLOG"));
+
+		const drawer = (await screen.findByRole("heading", { name: "보안 이벤트 상세" })).closest("div");
+		expect(drawer?.textContent).toContain("시스템");
+		// 디바이스·인증서 Serial·HTTP·접속 IP·응답 시간 다섯 자리가 모두 없음이다.
+		expect(drawer?.textContent?.match(/—/g)?.length).toBeGreaterThanOrEqual(5);
 	});
 });
