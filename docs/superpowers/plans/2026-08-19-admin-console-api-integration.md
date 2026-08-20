@@ -4277,12 +4277,21 @@ Task 3의 Commit에 이 문서 변경을 함께 포함한다 — 코드 결정�
 | Task 5 공통 UI Primitive | **merge 완료** (PR #43) |
 | Task 6 Devices 목록·검색·필터 | **merge 완료** (PR #44, 2026-08-20) |
 | Task 7 Device 상세 화면 | **merge 완료** (PR #44) |
-| Task 8 Security Events 목록·상세 | **다음 착수 지점** |
-| Task 9~11·13~15 | 미착수 |
+| Task 8 Security Events 목록·상세 | **구현 완료** (PR 예정, 2026-08-20 Windows) |
+| Task 9 Certificate Requests | **다음 착수 지점** |
+| Task 10·11·13~15 | 미착수 |
 
 부수적으로 등록된 Issue: **#36** (Gateway `/healthz`가 Management API readiness를 반영하지 않음), **#39** (매핑되지 않은 경로가 404 대신 500), **#42** (Gateway가 handshake에서 Intermediate를 보내지 않음). 모두 이 계획 범위 밖이다.
 
-**다음 작업은 Task 8(Security Events 목록·상세)이다.** PR #44가 merge되면 바로 시작할 수 있다. 계획의 PR 3 묶음(Task 3~8) 중 Task 8만 남은 상태다.
+**다음 작업은 Task 9(Certificate Requests 목록·상세·승인·거절)다.** 계획의 PR 3 묶음(Task 3~8)은 끝났다.
+
+Task 8을 구현하며 계획 본문의 Task 8 스케치와 다르게 결정한 3가지 — 다시 뒤집지 말 것:
+
+1. **"디바이스" 열과 필터를 넣었다.** 계획은 두 곳 모두 빠뜨렸지만 `ui-design.md` §7이 요구한다. 서버 응답(`SecurityEventResponse`)에는 `deviceId`(UUID)만 있어서 Device 목록(`useDeviceOptions`, size 100)으로 이름을 찾아 보여주고 상세로 링크한다(`features/device/DeviceNameLink.tsx`). 목록에 없는 id는 이름을 비우지 않고 UUID를 그대로 드러내고, 100개를 넘으면 필터가 그 사실을 알린다.
+2. **이벤트 코드 필터는 자유 입력이 아니라 선택이다.** 선택지는 `api-spec.md` §10 전체가 아니라 실제로 Security Event가 될 수 있는 Reason Code만 넣었다 — 근거는 `gateway/internal/event/event.go`의 상수이며, `CERTIFICATE_REQUIRED`처럼 TLS handshake에서 끝나 Event가 되지 않는 것은 제외했다(`security-design.md` §5).
+3. **빈 상태는 `totalElements === 0`으로 판단한다.** 계획 본문의 `content.length === 0`은 범위를 벗어난 page에서 pagination까지 지운다(PR #44 Medium과 같은 문제).
+
+같은 PR에서 PR #44 Codex Low 3건을 모두 처리했다: 카드 제목 heading 단계(`component="h2"`), Role·Device 보조 조회 실패의 화면 내 재시도, Devices 검색 debounce(300ms). Device 상세의 `Field`는 `shared/ui/Field.tsx`로 옮겨 두 상세 화면이 공유한다.
 
 #### Console 작업에서 알아둘 것 (2026-08-20 기준)
 
@@ -4329,8 +4338,10 @@ Console 작업을 macOS에서 이어받아 Task 3~7까지 진행했다. Windows�
 ~~~bash
 git checkout main && git pull            # PR #43·#44 반영분
 cd admin-console && npm ci               # msw·@testing-library/user-event가 새로 추가됐다
-npm run typecheck && npm test            # 68건 통과가 기준선
+npm run typecheck && npm test            # Task 8 이후 84건 통과가 기준선
 ~~~
+
+> **Windows에서 `npm ci`가 EPERM으로 실패할 수 있다(2026-08-20 실측).** `@rolldown/binding-win32-x64-msvc`의 `.node` 파일을 지우지 못해 중단되고, 그 시점의 `node_modules`는 반쯤 지워진 상태라 `vitest`·`msw`가 없어 테스트가 설정 로드 단계에서 죽는다. `rm -rf node_modules && npm ci`로 해결된다. 실패한 `npm ci`의 종료 코드는 파이프(`| tail`) 뒤에서 0으로 보일 수 있으니 설치 성공은 `node_modules/vitest` 존재로 확인한다.
 
 - **`admin-console/public/mockServiceWorker.js`는 Git에 추적된다.** 지우면 `VITE_USE_MOCK=true`가 흰 화면이 되고, `src/mocks/handlers.test.ts`가 그 회귀를 잡는다.
 - **`.claude/settings.local.json`은 여전히 기기별 파일이다.** Windows 쪽 JDK·MinGW 경로 설정은 그 기기에만 두고 macOS로 가져오지 않는다(반대도 마찬가지).
