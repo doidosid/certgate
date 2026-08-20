@@ -139,15 +139,21 @@ describe("DashboardPage", () => {
 		expect(await screen.findByText("최근 Critical Event가 없습니다.")).toBeInTheDocument();
 	});
 
-	/** ui-design.md §3 "패널 항목 클릭 시 보안 이벤트 상세로 이동". */
-	it("navigates to the filtered security events list when a recent critical item is clicked", async () => {
+	/**
+	 * ui-design.md §3 "패널 항목 클릭 시 보안 이벤트 상세로 이동". 같은 reasonCode로
+	 * 필터링만 하면 그 코드가 여러 건일 때 어느 것이 원인인지 지목하지 못한다
+	 * (Codex 리뷰 PR #49 Medium). 클릭한 그 Event의 상세가 열려야 한다.
+	 */
+	it("opens the detail of the clicked event, not just its reason code filter", async () => {
 		renderAt("/");
 
 		await userEvent.click(await screen.findByText("EVENT_OUTBOX_BACKLOG"));
 
-		expect(await screen.findByRole("heading", { name: "Security Events" })).toBeInTheDocument();
-		// URL의 reasonCode 필터가 실제로 화면에 반영됐는지, select 값으로 확인한다.
-		expect(await screen.findByDisplayValue("EVENT_OUTBOX_BACKLOG")).toBeInTheDocument();
+		// Drawer는 modal이라 열리면 뒤 페이지가 aria-hidden이 된다 — 목록 heading은
+		// 접근성 트리에서 빠지므로 Drawer 쪽으로 확인한다.
+		expect(await screen.findByRole("heading", { name: "보안 이벤트 상세" })).toBeInTheDocument();
+		// 그 Event만 가진 값으로 상세가 맞는지 확인한다.
+		expect(await screen.findByText("b0b1b2b3-0000-4000-8000-00000000000a")).toBeInTheDocument();
 	});
 
 	it("shows the server error message and traceId when the summary fails", async () => {

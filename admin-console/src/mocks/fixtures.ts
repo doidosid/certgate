@@ -264,16 +264,40 @@ export const dashboardSummary = {
 } satisfies DashboardSummary;
 
 /**
- * Mock 모드에서 CRITICAL Toast를 실제로 띄워 보기 위한 SSE payload
- * (docs/api-spec.md §9 "SSE 형식"). message는 서버가 Reason Code로 만들어 보내는
- * 사용자용 문구다(CriticalEventMessages).
+ * Mock 모드에서 CRITICAL Toast를 실제로 띄워 보기 위해 "방금 발생한" Event를 만든다.
+ *
+ * fixture 목록에 미리 넣어 두면 안 된다 — Provider는 마운트할 때 서버의 최신 CRITICAL을
+ * 읽어 커서를 세우고 그것들을 이미 본 것으로 표시하므로, 페이지를 열기 전부터 있던
+ * Event로는 알림이 뜨지 않는다(그게 올바른 동작이다).
  */
-export const criticalEventPayload = {
-	// 목록 fixture에 실제로 있는 CRITICAL Event를 가리킨다 — 알림을 눌러 이동한 목록이
-	// 비어 있으면 화면이 고장난 것처럼 보인다.
-	eventId: securityEventPage.content[1].id,
-	occurredAt: securityEventPage.content[1].occurredAt,
-	deviceKey: null,
-	reasonCode: securityEventPage.content[1].reasonCode,
-	message: "Gateway Security Event Outbox가 적체되었습니다.",
-} satisfies CriticalEventPayload;
+export function newCriticalEvent(occurredAt: string): SecurityEvent {
+	return {
+		id: crypto.randomUUID(),
+		occurredAt,
+		type: "ACCESS",
+		severity: "CRITICAL",
+		deviceId: devicePage.content[1].id,
+		certificateSerial: "9A3F1C22",
+		httpMethod: "POST",
+		requestPath: "/telemetry",
+		decision: "DENIED",
+		reasonCode: "CERTIFICATE_REVOKED",
+		clientIp: "203.0.113.44",
+		latencyMs: 6,
+		traceId: crypto.randomUUID(),
+	} satisfies SecurityEvent;
+}
+
+/**
+ * 그 Event를 SSE `data` 필드 모양으로 바꾼다(docs/api-spec.md §9 "SSE 형식").
+ * `message`는 서버가 Reason Code로 만들어 보내는 사용자용 문구다(CriticalEventMessages).
+ */
+export function criticalEventPayload(event: SecurityEvent): CriticalEventPayload {
+	return {
+		eventId: event.id,
+		occurredAt: event.occurredAt,
+		deviceKey: devicePage.content[1].deviceKey,
+		reasonCode: event.reasonCode,
+		message: "폐기된 인증서의 접근이 차단되었습니다.",
+	} satisfies CriticalEventPayload;
+}

@@ -31,7 +31,7 @@ npm install
 VITE_USE_MOCK=true npm run dev      # http://localhost:5173
 ~~~
 
-MSW(`src/mocks`)가 Service Worker로 모든 API 요청을 가로챈다. 목록 handler는 쿼리 파라미터로 실제 필터링까지 하므로 필터·검색 동작을 그대로 확인할 수 있고, SSE도 흉내내므로 연결 3초 뒤 Critical Toast가 한 번 뜬다. `public/mockServiceWorker.js`는 Git에 추적되는 파일이라 지우면 흰 화면이 된다.
+MSW(`src/mocks`)가 Service Worker로 모든 API 요청을 가로챈다. 목록 handler는 쿼리 파라미터로 실제 필터링과 pagination을 하고 기간 경계도 서버와 같이 맞춰 두었으므로(`mocks/filterPage.ts`) 필터·검색·페이지 이동을 확인할 수 있다. SSE도 흉내내므로 연결 3초 뒤 Critical Toast가 한 번 뜬다. `public/mockServiceWorker.js`는 Git에 추적되는 파일이라 지우면 흰 화면이 된다.
 
 ### 2. 전체 스택 — 실제 API에 연결한다
 

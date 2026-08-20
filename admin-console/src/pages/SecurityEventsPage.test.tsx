@@ -310,4 +310,36 @@ describe("SecurityEventsPage", () => {
 		// 디바이스·인증서 Serial·HTTP·접속 IP·응답 시간 다섯 자리가 모두 없음이다.
 		expect(drawer?.textContent?.match(/—/g)?.length).toBeGreaterThanOrEqual(5);
 	});
+	/*
+	 * Dashboard 패널과 CRITICAL Toast가 "원인이 된 그 Event"를 여는 경로다
+	 * (ui-design.md §3·§8). 목록에 없는 page를 보고 있어도 열려야 하므로 Drawer는
+	 * 목록이 아니라 GET /security-events/{id}로 채운다.
+	 */
+	it("opens the drawer for the event named in the URL", async () => {
+		const linked = securityEventPage.content[1];
+		renderAt(`/security-events?eventId=${linked.id}`);
+
+		expect(await screen.findByRole("heading", { name: "보안 이벤트 상세" })).toBeInTheDocument();
+		expect(await screen.findByText(linked.traceId)).toBeInTheDocument();
+	});
+
+	it("shows the server error inside the drawer when the linked event does not exist", async () => {
+		renderAt("/security-events?eventId=00000000-0000-4000-8000-000000000000");
+
+		expect(await screen.findByRole("heading", { name: "보안 이벤트 상세" })).toBeInTheDocument();
+		expect(await screen.findByText("보안 이벤트를 찾을 수 없습니다.")).toBeInTheDocument();
+	});
+
+	it("drops the eventId from the URL when the linked drawer is closed", async () => {
+		const linked = securityEventPage.content[1];
+		renderAt(`/security-events?eventId=${linked.id}`);
+		await screen.findByRole("heading", { name: "보안 이벤트 상세" });
+
+		// DetailDrawer에는 닫기 버튼이 없다 — backdrop 클릭이나 Escape로 닫는다.
+		await userEvent.keyboard("{Escape}");
+
+		// 닫은 뒤에는 목록이 다시 접근성 트리에 들어온다 — Drawer가 정말 닫혔다는 뜻이다.
+		expect(await screen.findByRole("heading", { name: "Security Events" })).toBeInTheDocument();
+		expect(screen.queryByRole("heading", { name: "보안 이벤트 상세" })).not.toBeInTheDocument();
+	});
 });

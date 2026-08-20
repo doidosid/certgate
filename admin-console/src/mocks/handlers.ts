@@ -1,8 +1,23 @@
 import { http, HttpResponse } from "msw";
 import * as fixtures from "./fixtures";
-import { filterPage, includesCaseInsensitive } from "./filterPage";
+import { filterPage, includesCaseInsensitive, withinRange } from "./filterPage";
+import type { SecurityEvent } from "../shared/api/types";
 
 const BASE = "/api/v1";
+
+/**
+ * Mock 모드에서 SSE로 새로 "발생시킨" Event. 목록·상세 handler가 fixture와 함께
+ * 돌려주므로 Toast를 눌러 상세로 들어가는 흐름까지 이어진다.
+ *
+ * Provider는 마운트할 때 서버에서 최신 CRITICAL을 읽어 커서를 세우고 그것들을 "이미
+ * 본 것"으로 표시한다 — 페이지를 열기 전의 기록으로 알림을 띄우지 않기 위해서다.
+ * 그래서 데모용 Event는 fixture에 미리 넣어 두면 안 되고, 연결 뒤에 새로 생겨야 한다.
+ */
+const liveCriticalEvents: SecurityEvent[] = [];
+
+function allSecurityEvents(): SecurityEvent[] {
+	return [...liveCriticalEvents, ...fixtures.securityEventPage.content];
+}
 
 export const handlers = [
 	http.get(`${BASE}/roles`, () => HttpResponse.json(fixtures.roles)),
@@ -19,6 +34,7 @@ export const handlers = [
 					(includesCaseInsensitive(device.name, query) || includesCaseInsensitive(device.deviceKey, query)) &&
 					(!status || device.status === status) &&
 					(!roleName || device.roleName === roleName),
+				params,
 			),
 		);
 	}),
@@ -39,6 +55,7 @@ export const handlers = [
 			filterPage(
 				fixtures.certificateRequestPage.content,
 				(item) => (!status || item.status === status) && (!deviceId || item.deviceId === deviceId),
+				params,
 			),
 		);
 	}),
@@ -64,7 +81,9 @@ export const handlers = [
 				(item) =>
 					(!status || item.status === status) &&
 					(!deviceId || item.deviceId === deviceId) &&
+					// 서버도 expiresBefore만 배타(`c.notAfter < :expiresBefore`)다.
 					(!expiresBefore || item.notAfter < expiresBefore),
+				params,
 			),
 		);
 	}),
@@ -95,14 +114,14 @@ export const handlers = [
 		const severity = params.get("severity");
 		return HttpResponse.json(
 			filterPage(
-				fixtures.securityEventPage.content,
+				allSecurityEvents(),
 				(event) =>
-					(!from || event.occurredAt >= from) &&
-					(!to || event.occurredAt < to) &&
+					withinRange(event.occurredAt, from, to) &&
 					(!deviceId || event.deviceId === deviceId) &&
 					(!decision || event.decision === decision) &&
 					(!reasonCode || event.reasonCode === reasonCode) &&
 					(!severity || event.severity === severity),
+				params,
 			),
 		);
 	}),
@@ -118,16 +137,30 @@ export const handlers = [
 			start(controller) {
 				controller.enqueue(encoder.encode(": connected\n\n"));
 				setTimeout(() => {
-					const data = JSON.stringify(fixtures.criticalEventPayload);
+					// 연결 뒤에 새로 생긴 Event여야 한다 — fixture에 이미 있는 것은 Provider가
+					// 페이지를 열기 전의 기록으로 보고 알리지 않는다.
+					const event = fixtures.newCriticalEvent(new Date().toISOString());
+					liveCriticalEvents.unshift(event);
+					const data = JSON.stringify(fixtures.criticalEventPayload(event));
 					controller.enqueue(encoder.encode(`event: critical-security-event\ndata: ${data}\n\n`));
 				}, 3_000);
 			},
 		});
 		return new HttpResponse(stream, { headers: { "Content-Type": "text/event-stream" } });
 	}),
-	http.get(`${BASE}/security-events/:eventId`, () =>
-		HttpResponse.json(fixtures.securityEventPage.content[0]),
-	),
+	/*
+	 * id로 실제로 찾는다. 무엇을 주든 첫 번째 Event를 돌려주면, CRITICAL Toast·Dashboard
+	 * 패널이 "원인이 된 그 Event"를 여는지 화면 테스트가 검증할 수 없다.
+	 */
+	http.get(`${BASE}/security-events/:eventId`, ({ params }) => {
+		const found = allSecurityEvents().find((event) => event.id === params.eventId);
+		return found
+			? HttpResponse.json(found)
+			: HttpResponse.json(
+					{ code: "SECURITY_EVENT_NOT_FOUND", message: "보안 이벤트를 찾을 수 없습니다.", traceId: "mock" },
+					{ status: 404 },
+				);
+	}),
 
 	http.get(`${BASE}/dashboard/summary`, () => HttpResponse.json(fixtures.dashboardSummary)),
 ];
