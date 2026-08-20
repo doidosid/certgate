@@ -280,34 +280,26 @@ jobs:
       # postgres는 Compose가 빌드하지 않고 pull하는 공식 Image라 여기 대상이 아니다.
       - name: build images
         run: docker compose -f infra/compose.yaml --env-file .env.example build
-      - name: trivy (gateway)
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          image-ref: certgate-gateway:latest
-          severity: HIGH,CRITICAL
-          exit-code: "1"
-          ignore-unfixed: true
-      - name: trivy (management-api)
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          image-ref: certgate-management-api:latest
-          severity: HIGH,CRITICAL
-          exit-code: "1"
-          ignore-unfixed: true
-      - name: trivy (admin-console)
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          image-ref: certgate-admin-console:latest
-          severity: HIGH,CRITICAL
-          exit-code: "1"
-          ignore-unfixed: true
-      - name: trivy (backend-service)
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          image-ref: certgate-backend-service:latest
-          severity: HIGH,CRITICAL
-          exit-code: "1"
-          ignore-unfixed: true
+      # trivy-action 대신 공식 Image를 직접 돌린다. 외부 action의 입력 이름이
+      # 버전마다 바뀌는 것에 CI가 끌려다니지 않고, 로컬에서 검증한 명령과 정확히
+      # 같은 것을 실행한다.
+      - name: trivy
+        run: |
+          set -euo pipefail
+          for service in gateway management-api admin-console backend-service; do
+            echo "::group::trivy certgate-$service"
+            docker run --rm \
+              -v /var/run/docker.sock:/var/run/docker.sock \
+              -v "$HOME/.cache/trivy:/root/.cache/trivy" \
+              aquasec/trivy:0.74.0 image \
+                --scanners vuln \
+                --severity HIGH,CRITICAL \
+                --ignore-unfixed \
+                --exit-code 1 \
+                --quiet \
+                "certgate-$service:latest"
+            echo "::endgroup::"
+          done
 
   secret-scan:
     runs-on: ubuntu-latest
