@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Box from "@mui/material/Box";
 import Link from "@mui/material/Link";
 import MenuItem from "@mui/material/MenuItem";
@@ -29,13 +29,21 @@ export default function DeviceFilters({ query, status, roleName, onChange }: Pro
 		setSearchText(query);
 	}, [query]);
 
+	// 호출자가 onChange를 inline 화살표 함수로 넘기면 매 render마다 identity가
+	// 바뀐다. 그걸 의존성에 두면 관계없는 re-render(목록 응답 도착 등)마다 타이머가
+	// 처음부터 다시 시작해 요청이 계속 밀린다. 최신 함수는 ref로 읽는다.
+	const onChangeRef = useRef(onChange);
+	useEffect(() => {
+		onChangeRef.current = onChange;
+	}, [onChange]);
+
 	useEffect(() => {
 		if (searchText === query) {
 			return;
 		}
-		const timer = setTimeout(() => onChange("query", searchText), SEARCH_DEBOUNCE_MS);
+		const timer = setTimeout(() => onChangeRef.current("query", searchText), SEARCH_DEBOUNCE_MS);
 		return () => clearTimeout(timer);
-	}, [searchText, query, onChange]);
+	}, [searchText, query]);
 
 	// URL에서 읽은 roleName이 아직 목록에 없으면(로딩 중이거나 조회 실패) select가
 	// 값을 표시하지 못하고 out-of-range 상태가 된다. 현재 값을 임시 option으로

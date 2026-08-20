@@ -25,21 +25,23 @@ export default function SecurityEventFilters({ values, onChange }: Props) {
 	const devices = useDeviceOptions();
 
 	const loaded = devices.data?.content ?? [];
-	// URL에 있던 deviceId가 아직(또는 끝내) 목록에 없으면 select가 값을 표시하지
-	// 못하고 out-of-range가 된다. 현재 값을 임시 선택지로 남겨 URL 상태와 화면이
-	// 어긋나지 않게 한다(DeviceFilters의 roleName과 같은 판단).
-	const deviceOptions = loaded.some((device) => device.id === values.deviceId)
-		? loaded.map((device) => ({ id: device.id, label: device.name }))
-		: [
-				...(values.deviceId ? [{ id: values.deviceId, label: values.deviceId }] : []),
-				...loaded.map((device) => ({ id: device.id, label: device.name })),
-			];
+	const loadedOptions = loaded.map((device) => ({ id: device.id, label: device.name }));
+
+	// URL에 있던 값이 아직(또는 끝내) 목록에 없으면 select가 값을 표시하지 못하고
+	// out-of-range가 된다. 현재 값을 임시 선택지로 남겨 URL 상태와 화면이 어긋나지
+	// 않게 한다(DeviceFilters의 roleName과 같은 판단).
+	const deviceOptions =
+		values.deviceId && !loaded.some((device) => device.id === values.deviceId)
+			? [{ id: values.deviceId, label: values.deviceId }, ...loadedOptions]
+			: loadedOptions;
+
+	const knownReasonCodes: readonly string[] = SECURITY_EVENT_REASON_CODES;
+	const reasonCodeOptions =
+		values.reasonCode && !knownReasonCodes.includes(values.reasonCode)
+			? [values.reasonCode, ...knownReasonCodes]
+			: knownReasonCodes;
 
 	const truncated = (devices.data?.totalElements ?? 0) > loaded.length;
-	const reasonCodeOptions: readonly string[] =
-		values.reasonCode && !SECURITY_EVENT_REASON_CODES.includes(values.reasonCode as never)
-			? [values.reasonCode, ...SECURITY_EVENT_REASON_CODES]
-			: SECURITY_EVENT_REASON_CODES;
 
 	let deviceHelperText: ReactNode = undefined;
 	if (devices.isError) {
