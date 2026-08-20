@@ -4258,11 +4258,13 @@ Task 3의 Commit에 이 문서 변경을 함께 포함한다 — 코드 결정�
 
 ---
 
-## 다른 기기에서 이어서 작업하기 (2026-08-19 기준)
+## 다른 기기에서 이어서 작업하기 (2026-08-20 저녁 기준)
 
-이 계획은 Windows PC에서 착수했고 이후 macOS에서 이어간다. 저장소에 없는 것(gitignore 대상)이 있어서 새 기기에서는 아래 준비가 필요하다.
+이 계획은 Windows PC에서 착수했고 이후 macOS·Windows를 오가며 이어간다. 저장소에 없는 것(gitignore 대상)이 있어서 새 기기에서는 아래 준비가 필요하다.
 
 > **이 절이 계획 본문보다 우선한다.** 계획 본문(특히 "서버 API 현황", 각 Task의 PR 묶음, Compose·SSE 관련 서술)은 2026-08-19 착수 시점 기준이라 이후 진행과 어긋난 곳이 있다. 예를 들어 본문은 `GET /roles`·`GET /dashboard/summary`를 미구현으로, Task 2와 12를 하나의 "PR 2"로 적지만 실제로는 각각 PR #38·#40으로 나뉘어 merge됐다. 본문과 이 절이 다르면 **이 절과 실제 코드**를 믿는다.
+
+> **2026-08-20 저녁 인수인계 — Codex 사용량 문제로 이 시점에 작업을 중단했다.** 아래 "지금 당장 이어서 할 일"부터 시작한다.
 
 ### 1. 진행 상황 — 어디까지 됐나
 
@@ -4281,15 +4283,23 @@ Task 3의 Commit에 이 문서 변경을 함께 포함한다 — 코드 결정�
 | Task 8 Security Events 목록·상세 | **merge 완료** (PR #46) |
 | Task 18 Console 디자인 톤 | **merge 완료** (PR #46) — 이후 레퍼런스 기준(다크 사이드바 + 라이트 콘텐츠)으로 재정렬 |
 | Task 9 Certificate Requests 목록·상세·승인·거절 | **merge 완료** (PR #46) |
-| Task 10 Certificates 목록·상세·폐기·다운로드 | **구현 완료** (2026-08-20) |
-| Task 11 Device 등록·상태·Role·Token 재발급 | **구현 완료** (2026-08-20) |
-| Task 13 Dashboard 화면 | **구현 완료** (2026-08-20) |
+| Task 10 Certificates 목록·상세·폐기·다운로드 | **merge 완료** (PR #47) |
+| Task 11 Device 등록·상태·Role·Token 재발급 | **merge 완료** (PR #47) |
+| Task 13 Dashboard 화면 | **구현 완료, PR 미생성** (`feature/console` 커밋 `1900981`) |
+| Mock 목록 필터링 결함 수정 | **구현 완료, PR 미생성** (`feature/console` 커밋 `1f3bb69`, 아래 "지금 당장" 절 참고) |
 | Task 14 SSE 전역 Toast | **다음 착수 지점** |
-| Task 15 README 실제 화면 | 미착수 |
+| Task 15 README 실제 화면 | 미착수(Prometheus/Grafana 후속 계획 한 줄을 이때 같이 적기로 함 — Task 15 본문 Step 4 참고) |
 
 부수적으로 등록된 Issue: **#36** (Gateway `/healthz`가 Management API readiness를 반영하지 않음), **#39** (매핑되지 않은 경로가 404 대신 500), **#42** (Gateway가 handshake에서 Intermediate를 보내지 않음). 모두 이 계획 범위 밖이다.
 
-**다음 작업은 Task 14(SSE 전역 CRITICAL Toast)다.** PR #46·#47로 Task 8·9·10·11·18이 merge됐고, Task 13은 구현을 마쳤다.
+### 지금 당장 이어서 할 일 (2026-08-20 저녁 중단 지점)
+
+1. **`feature/console`에 미merge 커밋 2개가 있다** — `1900981`(Task 13 Dashboard), `1f3bb69`(Mock 목록 filter 결함 수정). 둘 다 `main`에는 아직 없다. `git log --oneline origin/main..feature/console`로 확인.
+2. **PR을 아직 열지 않았다.** 새 규칙(2026-08-20, CLAUDE.md)대로 구현·테스트·자체 검증을 마치고 merge 직전 Codex를 한 번만 돌린다 — 지금까지는 안 돌렸다. Task 14까지 마친 뒤 하나의 PR로 묶는 것이 Codex 사용량 절약에 유리하다(사용자가 24일까지 8%만 남았다고 알려온 뒤로는 PR을 크게 묶는 편이 낫다).
+3. **하던 일: `CertificateRequestsPage.test.tsx`의 "sends the status filter to the server" 테스트(약 279번째 줄)를 실제 필터링 결과까지 검증하는 회귀 테스트로 확장하려던 중 중단됐다.** 지금 상태로도 테스트는 안전(176건 통과)하지만, 이 확장은 완료되지 않았다 — 급하지 않으면 건너뛰어도 된다.
+4. **사용자가 직접 발견한 버그(2026-08-20)를 고쳤다** — Certificate Requests 화면에서 상태 필터를 바꿔도 목록이 안 바뀌는 것처럼 보였다. 원인은 화면 코드가 아니라 MSW Mock이었다: `/devices`, `/certificate-requests`, `/certificates`, `/security-events` 목록 handler가 쿼리 파라미터를 무시하고 고정된 fixture만 돌려주고 있었다. `mocks/filterPage.ts`를 만들어 네 handler에 실제 필터링을 붙였고, fixture도 상태별로 늘렸다(`certificateRequestPage`에 APPROVED·REJECTED 추가, `certificatePage`에 EXPIRING_SOON·EXPIRED·REVOKED 추가). **이 커밋(`1f3bb69`) 이후로 브라우저에서 Mock 모드로 필터를 확인할 때 다른 목록도 실제로 바뀌는지 한 번 훑어보면 좋다** — 아직 브라우저로 직접 확인하지는 못했다.
+
+**Task 14 착수 시 참고할 것.** PR #46·#47로 Task 8·9·10·11·18이 merge됐고, Task 13은 구현을 마쳤다(PR 미생성).
 
 Task 8을 구현하며 계획 본문의 Task 8 스케치와 다르게 결정한 3가지 — 다시 뒤집지 말 것:
 
