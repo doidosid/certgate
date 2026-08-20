@@ -6,7 +6,8 @@
 # Usage: issue-gateway-cert.sh [ca-dir]
 #   ca-dir defaults to pki/runtime (git-ignored) and must already contain
 #   root-ca.crt, intermediate-ca.crt and intermediate-ca.key. Outputs
-#   gateway.crt and gateway.key into the same directory.
+#   gateway.crt (leaf + Intermediate chain) and gateway.key into the same
+#   directory.
 #
 # Validity: GATEWAY_CERT_DAYS (default 365), clamped so the certificate never
 # outlives the Intermediate CA. docs/adr/003-certificate-validity.md fixes
@@ -100,8 +101,20 @@ if [ "$cert_pub" != "$key_pub" ]; then
   exit 1
 fi
 
+# TLS 관례상 서버는 Root를 제외한 전체 Chain을 보낸다. Client가 Intermediate를 미리
+# 갖고 있으리라 기대할 수 없기 때문이다. leaf만 두면 Root CA만 신뢰하도록 구성된
+# 정상적인 Client가 Chain을 만들지 못해 "unable to verify the first certificate"로
+# 끊긴다(Issue #42). Go의 tls.LoadX509KeyPair는 이어 붙인 PEM을 그대로 Chain으로
+# 싣는다 — Gateway 쪽 코드 변경은 필요 없다.
+cat "$STAGE_DIR/gateway.crt" "$CA_DIR/intermediate-ca.crt" > "$STAGE_DIR/gateway-chain.crt"
+
+# 발행 전에 "Root만 신뢰하는 Client가 이 파일만으로 Chain을 만들 수 있는가"를 확인한다.
+# -untrusted에 같은 파일을 주는 것이 곧 서버가 handshake에서 보내는 것과 같은 조건이다.
+openssl verify -CAfile "$CA_DIR/root-ca.crt" -untrusted "$STAGE_DIR/gateway-chain.crt" \
+  "$STAGE_DIR/gateway-chain.crt" >/dev/null
+
 mv "$STAGE_DIR/gateway.key" "$CA_DIR/gateway.key"
-mv "$STAGE_DIR/gateway.crt" "$CA_DIR/gateway.crt"
+mv "$STAGE_DIR/gateway-chain.crt" "$CA_DIR/gateway.crt"
 chmod 600 "$CA_DIR/gateway.key"
 chmod 644 "$CA_DIR/gateway.crt"
 
