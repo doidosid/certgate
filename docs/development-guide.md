@@ -46,7 +46,13 @@ Foundation 이후 CI에서 다음을 실행한다.
 - React: typecheck, test, build
 - Docker Compose Config 검증
 - Private Key, <code>.env</code>, Secret Pattern 검사
+- 의존성 취약점: Go <code>govulncheck</code>, Node <code>npm audit --audit-level=high</code>
+- 실행 Image 취약점: Trivy HIGH·CRITICAL (<code>ignore-unfixed</code>)
 - E2E는 안정화 후 CI에 포함
+
+취약점 스캔은 **HIGH·CRITICAL만** 실패로 본다. MEDIUM 이하로 임계 경로를 막지 않는다. 아직 패치가 없는 것(<code>unfixed</code>)도 제외한다 — 우리가 할 수 있는 일이 없는데 merge만 멈춘다.
+
+<code>govulncheck</code>는 호출 그래프를 분석해 실제로 도달하는 취약점만 보고하므로, 의존성 목록만 보는 스캐너보다 잡음이 적다. Image 스캔은 그것들이 보지 못하는 base image와 OS 패키지를 본다 — 둘은 대체 관계가 아니다.
 
 ## Definition of Done
 

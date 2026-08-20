@@ -48,6 +48,14 @@ jobs:
       - name: go test (race detector)
         working-directory: ${{ matrix.module }}
         run: go test -race ./...
+      # 호출 그래프를 분석해 실제로 도달하는 취약점만 보고하므로, 의존성 목록만 보는
+      # 스캐너보다 잡음이 적다. 인증서·Key·Token을 다루는 서비스라 알려진 취약점을
+      # 여기서 막는다.
+      - name: govulncheck
+        working-directory: ${{ matrix.module }}
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          "$(go env GOPATH)/bin/govulncheck" ./...
 
   management-api:
     runs-on: ubuntu-latest
@@ -74,6 +82,9 @@ jobs:
           cache: npm
           cache-dependency-path: admin-console/package-lock.json
       - run: npm ci
+      # high 이상만 실패시킨다. moderate 이하로 임계 경로를 막지 않는다.
+      - name: npm audit
+        run: npm audit --audit-level=high
       - name: typecheck
         run: npm run typecheck
       - name: test
@@ -254,6 +265,49 @@ jobs:
       - name: tear down stack
         if: always()
         run: docker compose -f infra/compose.yaml --env-file .env.example down -v
+
+  # 소스가 아니라 실제로 배포되는 Image의 알려진 취약점을 본다. base image와 OS
+  # 패키지에서 오는 것은 govulncheck·npm audit이 보지 못한다.
+  #
+  # HIGH·CRITICAL만 실패시킨다 — MEDIUM 이하로 임계 경로를 막지 않는다.
+  # ignore-unfixed: true — 고칠 패치가 아직 없는 것으로 CI를 막으면 우리가 할 수
+  # 있는 일이 없는데도 merge가 멈춘다.
+  image-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # compose.yaml의 `name: certgate`가 Image 이름을 certgate-<service>로 고정한다.
+      # postgres는 Compose가 빌드하지 않고 pull하는 공식 Image라 여기 대상이 아니다.
+      - name: build images
+        run: docker compose -f infra/compose.yaml --env-file .env.example build
+      - name: trivy (gateway)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: certgate-gateway:latest
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+      - name: trivy (management-api)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: certgate-management-api:latest
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+      - name: trivy (admin-console)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: certgate-admin-console:latest
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+      - name: trivy (backend-service)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: certgate-backend-service:latest
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
 
   secret-scan:
     runs-on: ubuntu-latest
