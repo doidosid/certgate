@@ -4258,7 +4258,7 @@ Task 3의 Commit에 이 문서 변경을 함께 포함한다 — 코드 결정�
 
 ---
 
-## 다른 기기에서 이어서 작업하기 (2026-08-21 기준)
+## 다른 기기에서 이어서 작업하기 (2026-08-21 기준, Issue #7 구현 완료)
 
 이 계획은 Windows PC에서 착수했고 이후 macOS·Windows를 오가며 이어간다. 저장소에 없는 것(gitignore 대상)이 있어서 새 기기에서는 아래 준비가 필요하다.
 
@@ -4288,18 +4288,28 @@ Task 3의 Commit에 이 문서 변경을 함께 포함한다 — 코드 결정�
 | Task 13 Dashboard 화면 | **구현 완료, PR 미생성** (`feature/console` 커밋 `1900981`) |
 | Mock 목록 필터링 결함 수정 | **구현 완료, PR 미생성** (`feature/console` 커밋 `1f3bb69`) |
 | Task 14 SSE 전역 CRITICAL Toast | **구현 완료, PR 미생성** (`feature/console` 커밋 `dd07ffe`) |
-| Task 15 README 실제 화면 | **다음 착수 지점**(Prometheus/Grafana 후속 계획 한 줄을 이때 같이 적는다 — Task 15 본문 Step 4 참고) |
+| Task 15 README 실제 화면 | **구현 완료, PR 미생성** (`feature/console` 커밋 `855cbc8`) — Prometheus/Grafana 후속 계획 한 줄 포함 |
+| Compose `GATEWAY_SERVICE_TOKEN` 누락 수정 | **PR #48** (`infra-compose-service-token`) — Task 15 중 발견, 아래 참고 |
 
 부수적으로 등록된 Issue: **#36** (Gateway `/healthz`가 Management API readiness를 반영하지 않음), **#39** (매핑되지 않은 경로가 404 대신 500), **#42** (Gateway가 handshake에서 Intermediate를 보내지 않음). 모두 이 계획 범위 밖이다.
 
 ### 지금 당장 이어서 할 일 (2026-08-21 기준)
 
-1. **`feature/console`에 미merge 커밋 3개가 있다** — `1900981`(Task 13 Dashboard), `1f3bb69`(Mock 목록 filter 결함 수정), `dd07ffe`(Task 14 SSE 전역 CRITICAL Toast). 셋 다 `main`에는 아직 없다. `git log --oneline origin/main..feature/console`로 확인.
-2. **다음 착수는 Task 15(README 와이어프레임을 실제 화면으로 교체)다.** 이걸로 Issue #7의 구현 항목이 끝난다.
-3. **PR을 아직 열지 않았다.** 새 규칙(2026-08-20, CLAUDE.md)대로 구현·테스트·자체 검증을 마치고 merge 직전 Codex를 한 번만 돌린다 — 지금까지는 안 돌렸다. Task 15까지 마친 뒤 Task 13·Mock 수정·Task 14·Task 15를 하나의 PR로 묶는 것이 Codex 사용량 절약에 유리하다(사용자가 24일까지 8%만 남았다고 알려왔다).
+**Issue #7의 구현 항목은 Task 1~16·18까지 전부 끝났다.** 완료 기준 네 가지(별도 Alert 화면·상태 관리 없음, Mock과 실제 API Type 일치, 미구현 동작 비활성·숨김, README를 실제 화면으로 교체)를 모두 만족한다. 남은 것은 PR과 Merge다.
+
+1. **`feature/console`에 미merge 커밋 4개가 있다** — `1900981`(Task 13 Dashboard), `1f3bb69`(Mock 목록 filter 결함 수정), `dd07ffe`(Task 14 SSE 전역 CRITICAL Toast), `855cbc8`(Task 15 실제 화면 캡처·README). `git log --oneline origin/main..feature/console`로 확인.
+2. **PR을 열고 Codex 리뷰를 한 번 돌린 뒤 Merge한다.** 계획대로 Task 13+Mock 수정+14+15를 하나로 묶는다(Codex 사용량 절약).
+3. **PR #48을 먼저 Merge하는 편이 낫다.** `feature/console`의 README가 문서화하는 Compose 실행 흐름은 그 수정 없이는 동작하지 않는다.
 4. **테스트 기준선은 19 files / 184 tests다**(`npm test`). typecheck·build도 통과 상태다.
-5. **하던 일 중 남은 것:** `CertificateRequestsPage.test.tsx`의 "sends the status filter to the server" 테스트(약 279번째 줄)를 실제 필터링 결과까지 검증하는 회귀 테스트로 확장하려다 중단했다. 급하지 않으면 건너뛰어도 된다 — Mock 필터링 자체는 브라우저에서 확인했다(아래 6번).
-6. **사용자가 발견한 Mock 필터 버그는 브라우저에서 확인 완료(2026-08-21).** Mock 모드로 띄워 Certificate Requests 상태 필터(3건 → 발급 완료 1건), Certificates 상태 필터(4건 → 폐기 1건), Security Events `reasonCode` 필터(1건)가 실제로 다른 결과를 보여주는 것을 직접 확인했다. `1f3bb69`의 "브라우저 미확인" 메모는 해소됐다.
+5. **남은 것:** Task 17(CI 의존성·이미지 취약점 스캔, `infra`)은 Issue #7 완료 기준이 아니라 별도 개선 항목이다. 그 다음은 Issue #4(E2E·장애 복구)와 Issue #8(제출 패키지)다.
+
+#### Task 15에서 실제로 한 것과 알게 된 것 (2026-08-21)
+
+- **캡처는 Mock이 아니라 실제 스택이다.** Compose로 5개 서비스를 띄우고 가상 Device 7대를 등록해 CSR 승인 4건·거절 1건·승인 대기 1건을 만들고, Gateway mTLS로 정상 요청·`ACCESS_DENIED`·인증서 폐기 후 차단·Device 비활성화 후 차단까지 실제로 수행한 뒤 5개 화면을 찍었다. 다시 만들려면 같은 순서를 반복하면 된다(Device 등록 → agent 실행 → CSR 승인 → mTLS 요청).
+- **Compose에 실제 버그가 있었다 — PR #48.** `compose.yaml`이 management-api에 `GATEWAY_SERVICE_TOKEN`을 전달하지 않아 Gateway의 Access Context 조회와 Security Event Batch가 전부 `SERVICE_TOKEN_INVALID`로 실패했고, Gateway는 설계대로 Fail Closed 해서 **모든 Device 요청이 503**이었다. Compose 스택 위에서 Device→Gateway→Backend를 끝까지 도는 자동 테스트가 없어 드러나지 않았다(Issue #4 범위).
+- **Device는 Leaf만 보내면 안 된다.** Gateway의 Client CA Pool에는 `root-ca.crt`만 들어간다(`compose.yaml`, security-design.md §5 "Root CA 기준 Chain 검증"). Device 인증서 뒤에 `intermediate-ca.crt`를 이어 붙여 제시해야 handshake가 통과한다. 붙이지 않으면 Gateway 로그에 `x509: certificate signed by unknown authority`가 남는다. `device-agent`의 mTLS Client는 아직 미구현이라 이번에는 `curl --cert fullchain.crt`로 대신했다 — 구현할 때 이 점을 반영해야 한다.
+- **Device 상태 변경은 Cache 무효화를 부르지 않는다.** 인증서 폐기만 Commit 후 무효화를 호출한다(api-spec.md §5). 비활성화한 Device는 Access Context Cache TTL(30초)이 지나야 차단되므로, 검증할 때 30초 이상 기다려야 한다. 설계대로이고 버그가 아니다.
+- **macOS curl로 Gateway 서버 인증서를 검증하려면 `--cacert pki/runtime/ca-chain.crt`를 쓴다.** Gateway가 handshake에서 Intermediate를 보내지 않아 root만으로는 실패한다(Issue #42, 아직 미해결).
 
 #### Task 14에서 계획 본문과 다르게 결정한 것 — 다시 뒤집지 말 것
 
