@@ -145,4 +145,50 @@ describe("DevicesPage", () => {
 		expect(seen[0]).toContain("page=1");
 		expect(seen[0]).toContain("size=50");
 	});
+
+	/**
+	 * 검색어를 keystroke마다 URL에 반영하면 글자 수만큼 요청이 나간다
+	 * (Codex 리뷰 PR #44 Low). 입력이 멈춘 뒤 한 번만 보내야 한다.
+	 */
+	it("sends one search request after typing stops, not one per keystroke", async () => {
+		const seen: string[] = [];
+		mockServer.use(
+			http.get("/api/v1/devices", ({ request }) => {
+				seen.push(new URL(request.url).search);
+				return HttpResponse.json({ content: [], page: 0, size: 20, totalElements: 0, totalPages: 0 });
+			}),
+		);
+
+		renderAt("/devices");
+		await screen.findByText("조건에 맞는 디바이스가 없습니다.");
+
+		await userEvent.type(screen.getByLabelText("이름 또는 Device Key"), "sen");
+
+		// 입력값은 즉시 보이고, 중간 글자로는 요청이 나가지 않는다.
+		expect(screen.getByLabelText("이름 또는 Device Key")).toHaveValue("sen");
+		await expect.poll(() => seen.some((search) => search.includes("query=sen"))).toBe(true);
+		expect(seen.some((search) => /query=s(&|$)/.test(search))).toBe(false);
+		expect(seen.some((search) => /query=se(&|$)/.test(search))).toBe(false);
+	});
+
+	/** 실패를 알리는 것만으로는 부족하다 — 새로고침 없이 되돌릴 수 있어야 한다. */
+	it("lets the user retry a failed Role lookup in place", async () => {
+		let attempts = 0;
+		mockServer.use(
+			http.get("/api/v1/roles", () => {
+				attempts += 1;
+				return HttpResponse.json(
+					{ code: "INTERNAL_ERROR", message: "실패", traceId: "t", fieldErrors: [] },
+					{ status: 500 },
+				);
+			}),
+		);
+		renderAt("/devices");
+		await screen.findByText("Role 목록을 불러오지 못했습니다.");
+
+		const before = attempts;
+		await userEvent.click(screen.getByRole("button", { name: "Role 목록 다시 불러오기" }));
+
+		await expect.poll(() => attempts > before).toBe(true);
+	});
 });

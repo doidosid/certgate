@@ -11,6 +11,13 @@ export const handlers = [
 	http.get(`${BASE}/certificate-requests/:requestId`, () =>
 		HttpResponse.json(fixtures.certificateRequestDetail),
 	),
+	// 승인·거절은 서버가 바뀐 항목을 돌려준다(CertificateRequestResponse).
+	http.post(`${BASE}/certificate-requests/:requestId/approve`, () =>
+		HttpResponse.json({ ...fixtures.certificateRequestPage.content[0], status: "APPROVED" }),
+	),
+	http.post(`${BASE}/certificate-requests/:requestId/reject`, () =>
+		HttpResponse.json({ ...fixtures.certificateRequestPage.content[0], status: "REJECTED" }),
+	),
 	http.get(`${BASE}/certificates`, () => HttpResponse.json(fixtures.certificatePage)),
 	http.get(`${BASE}/certificates/:certificateId`, () =>
 		HttpResponse.json(fixtures.certificatePage.content[0]),

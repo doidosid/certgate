@@ -1,9 +1,7 @@
-import type { ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Grid from "@mui/material/Grid";
-import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { useDevice } from "../features/device/queries";
 import {
@@ -12,23 +10,13 @@ import {
 	deviceStatusColor,
 	deviceStatusLabel,
 } from "../features/device/labels";
+import { severityLabel } from "../features/securityEvent/labels";
 import DateTimeText from "../shared/ui/DateTimeText";
+import Field from "../shared/ui/Field";
+import Mono from "../shared/ui/Mono";
 import PageHeader from "../shared/ui/PageHeader";
 import QueryState from "../shared/ui/QueryState";
 import StatusChip from "../shared/ui/StatusChip";
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-	return (
-		<Stack direction="row" spacing={2} sx={{ py: 0.5 }}>
-			<Typography variant="body2" color="text.secondary" sx={{ minWidth: 120 }}>
-				{label}
-			</Typography>
-			<Typography variant="body2" component="div">
-				{children}
-			</Typography>
-		</Stack>
-	);
-}
 
 /**
  * ui-design.md §4 상세: 기본 정보, 인증서, 적용 정책, 최근 보안 이벤트.
@@ -55,11 +43,11 @@ export default function DeviceDetailPage() {
 						<Grid size={{ xs: 12, md: 6 }}>
 							<Card>
 								<CardContent>
-									<Typography variant="h6" gutterBottom>
+									<Typography variant="h6" component="h2" gutterBottom>
 										기본 정보
 									</Typography>
 									<Field label="이름">{device.data.name}</Field>
-									<Field label="Device Key">{device.data.deviceKey}</Field>
+									<Field label="Device Key"><Mono>{device.data.deviceKey}</Mono></Field>
 									<Field label="Role">{device.data.roleName}</Field>
 									<Field label="상태">
 										<StatusChip
@@ -80,12 +68,12 @@ export default function DeviceDetailPage() {
 						<Grid size={{ xs: 12, md: 6 }}>
 							<Card>
 								<CardContent>
-									<Typography variant="h6" gutterBottom>
+									<Typography variant="h6" component="h2" gutterBottom>
 										인증서
 									</Typography>
 									{device.data.certificate ? (
 										<>
-											<Field label="Serial">{device.data.certificate.serialNumber}</Field>
+											<Field label="Serial"><Mono>{device.data.certificate.serialNumber}</Mono></Field>
 											<Field label="상태">
 												<StatusChip
 													label={certificateStatusLabel(device.data.certificate.status)}
@@ -106,7 +94,7 @@ export default function DeviceDetailPage() {
 						<Grid size={{ xs: 12, md: 6 }}>
 							<Card>
 								<CardContent>
-									<Typography variant="h6" gutterBottom>
+									<Typography variant="h6" component="h2" gutterBottom>
 										적용 정책
 									</Typography>
 									{device.data.policyRules.length === 0 ? (
@@ -125,14 +113,14 @@ export default function DeviceDetailPage() {
 						<Grid size={{ xs: 12, md: 6 }}>
 							<Card>
 								<CardContent>
-									<Typography variant="h6" gutterBottom>
+									<Typography variant="h6" component="h2" gutterBottom>
 										최근 보안 이벤트
 									</Typography>
 									{device.data.recentEvents.length === 0 ? (
 										<Typography color="text.secondary">최근 이벤트가 없습니다.</Typography>
 									) : (
 										device.data.recentEvents.map((event) => (
-											<Field key={event.id} label={event.severity}>
+											<Field key={event.id} label={severityLabel(event.severity)}>
 												<DateTimeText value={event.occurredAt} /> · {event.httpMethod ?? "—"}{" "}
 												{event.requestPath ?? ""} · {event.reasonCode}
 											</Field>
