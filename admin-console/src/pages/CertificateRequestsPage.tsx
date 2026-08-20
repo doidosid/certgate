@@ -16,7 +16,7 @@ import {
 	useDecideRequest,
 } from "../features/certificateRequest/queries";
 import type { DecisionAction } from "../features/certificateRequest/api";
-import type { CertificateRequestItem } from "../shared/api/types";
+import type { CertificateRequestItem, CertificateRequestStatus } from "../shared/api/types";
 import { usePageParams } from "../shared/api/usePageParams";
 import DataTable, { type Column } from "../shared/ui/DataTable";
 import DateTimeText from "../shared/ui/DateTimeText";
@@ -54,7 +54,17 @@ export default function CertificateRequestsPage() {
 	const [selectedId, setSelectedId] = useState("");
 	const [action, setAction] = useState<DecisionAction | null>(null);
 	const [decisionNote, setDecisionNote] = useState("");
-	const [decided, setDecided] = useState<DecisionAction | null>(null);
+	/**
+	 * 서버가 결정을 확정해 준 사실. `status`는 추측이 아니라 응답에 담겨 온 값이다.
+	 *
+	 * 이것을 들고 있는 이유 — 상세를 다시 읽는 데는 시간이 걸리고, 낡은 replica가 아직
+	 * PENDING을 줄 수도 있고, 재조회가 실패할 수도 있다. 그동안 status만 보면 화면은
+	 * "승인 대기"로 남고 결정 버튼이 되살아나, 되돌릴 수 없는 동작을 성공 직후 다시
+	 * 누를 수 있다(Codex 리뷰 PR #46 Task 9 Medium).
+	 */
+	const [decided, setDecided] = useState<{ action: DecisionAction; status: CertificateRequestStatus } | null>(
+		null,
+	);
 
 	const requests = useCertificateRequests({
 		status: status || undefined,
@@ -91,16 +101,18 @@ export default function CertificateRequestsPage() {
 		decide.mutate(
 			{ requestId: selectedId, action, decisionNote },
 			{
-				onSuccess: () => {
+				onSuccess: (updated) => {
 					// Drawer는 열어 둔다 — 결정 결과와 바뀐 상태를 같은 자리에서 확인한다.
-					setDecided(action);
+					setDecided({ action, status: updated.status });
 					setAction(null);
 				},
 			},
 		);
 	}
 
-	const isPending = detail.data?.status === "PENDING";
+	// 서버가 확정해 준 상태가 있으면 그것을 보여준다. 재조회가 따라오면 같은 값으로 수렴한다.
+	const shownStatus = decided?.status ?? detail.data?.status;
+	const canDecide = shownStatus === "PENDING";
 
 	return (
 		<>
@@ -167,8 +179,8 @@ export default function CertificateRequestsPage() {
 							</Field>
 							<Field label="상태">
 								<StatusChip
-									label={requestStatusLabel(detail.data.status)}
-									color={requestStatusColor(detail.data.status)}
+									label={requestStatusLabel(shownStatus ?? detail.data.status)}
+									color={requestStatusColor(shownStatus ?? detail.data.status)}
 								/>
 							</Field>
 							<Field label="Subject">
@@ -198,7 +210,7 @@ export default function CertificateRequestsPage() {
 
 							{decided && (
 								<Alert severity="success" sx={{ mt: 2 }}>
-									{decided === "approve"
+									{decided.action === "approve"
 										? "인증서 요청을 승인했습니다."
 										: "인증서 요청을 거절했습니다."}
 								</Alert>
@@ -208,7 +220,7 @@ export default function CertificateRequestsPage() {
 							 * PENDING이 아니면 결정 버튼을 아예 렌더링하지 않는다. 눌러도 서버가
 							 * 409로 거절하는 버튼을 남겨 두지 않는다(Issue #7 완료 기준).
 							 */}
-							{isPending && (
+							{canDecide && (
 								<Box sx={{ mt: 3 }}>
 									<Stack direction="row" spacing={1}>
 										<Button
