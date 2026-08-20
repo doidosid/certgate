@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import Autocomplete from "@mui/material/Autocomplete";
 import Link from "@mui/material/Link";
 import TextField from "@mui/material/TextField";
-import { DEVICE_OPTION_LIMIT, useDevice, useDevices } from "./queries";
+import { DEVICE_OPTION_LIMIT, useDevice, useDeviceOptions } from "./queries";
 
 interface Option {
 	id: string;
@@ -19,8 +20,8 @@ interface Props {
 /** 입력이 멈춘 뒤 서버 검색을 보낼 때까지 기다리는 시간. */
 const SEARCH_DEBOUNCE_MS = 300;
 
-function toOption(device: { id: string; name: string; deviceKey: string }): Option {
-	return { id: device.id, label: `${device.name} (${device.deviceKey})` };
+function labelOf(device: { name: string; deviceKey: string }): string {
+	return `${device.name} (${device.deviceKey})`;
 }
 
 /**
@@ -49,30 +50,41 @@ export default function DeviceSelect({ value, onChange, label = "디바이스" }
 		return () => clearTimeout(timer);
 	}, [text, search]);
 
-	const devices = useDevices({ query: search, page: 0, size: DEVICE_OPTION_LIMIT });
+	const devices = useDeviceOptions(search);
 	const selectedDevice = useDevice(value);
 
-	const options = (devices.data?.content ?? []).map(toOption);
+	const content = devices.data?.content;
+	const options = useMemo(() => (content ?? []).map((device) => ({ id: device.id, label: labelOf(device) })), [content]);
+
 	// 선택값이 현재 검색 결과에 없어도 라벨을 잃지 않게 한다. 상세 조회도 아직
 	// 못 했으면 UUID를 그대로 드러낸다 — 무엇이 걸려 있는지는 알 수 있어야 한다.
-	const selectedOption: Option | null =
-		value === ""
-			? null
-			: (options.find((option) => option.id === value) ??
-				(selectedDevice.data ? toOption(selectedDevice.data) : { id: value, label: value }));
+	const resolvedLabel =
+		options.find((option) => option.id === value)?.label ??
+		(selectedDevice.data ? labelOf(selectedDevice.data) : value);
+
+	/*
+	 * value prop의 참조가 바뀌면 MUI는 그것을 "선택이 바뀌었다"로 보고 입력창을
+	 * getOptionLabel(value)로 되돌린다. render마다 새 객체를 만들면 글자를 입력하는
+	 * 순간 입력창이 기존 Device 이름으로 덮여 다른 Device를 검색할 수 없다
+	 * (Codex 리뷰 PR #46 Medium). 그래서 실제 값이 바뀔 때만 새 객체를 만든다.
+	 */
+	const selectedOption = useMemo<Option | null>(
+		() => (value === "" ? null : { id: value, label: resolvedLabel }),
+		[value, resolvedLabel],
+	);
 
 	const matched = devices.data?.totalElements ?? 0;
-	const hasMoreMatches = matched > (devices.data?.content.length ?? 0);
+	const hasMoreMatches = matched > options.length;
 
-	// 목록이 실패해도 Autocomplete를 잠그지 않는다 — URL로 들어온 필터를 "전체"로
-	// 되돌릴 방법이 없어지기 때문이다(Codex 리뷰 PR #44 Low).
 	const onChangeRef = useRef(onChange);
 	useEffect(() => {
 		onChangeRef.current = onChange;
 	}, [onChange]);
 
-	let helperText: React.ReactNode = undefined;
+	let helperText: ReactNode = undefined;
 	if (devices.isError) {
+		// 목록이 실패해도 Autocomplete를 잠그지 않는다 — URL로 들어온 필터를 "전체"로
+		// 되돌릴 방법이 없어지기 때문이다(Codex 리뷰 PR #44 Low).
 		helperText = (
 			<>
 				Device 목록을 불러오지 못했습니다.{" "}

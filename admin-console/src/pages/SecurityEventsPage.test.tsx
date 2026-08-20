@@ -272,6 +272,24 @@ describe("SecurityEventsPage", () => {
 			.toBe(true);
 	});
 
+	/**
+	 * 목록의 이름 표시와 필터가 같은 `GET /devices?page=0&size=100`을 쓴다. Query Key가
+	 * 다르면 같은 요청이 두 번 나간다(Codex 리뷰 PR #46 Low).
+	 */
+	it("asks for the device list only once on first entry", async () => {
+		let calls = 0;
+		mockServer.use(
+			http.get("/api/v1/devices", () => {
+				calls += 1;
+				return HttpResponse.json(devicePage);
+			}),
+		);
+		renderAt("/security-events");
+		await screen.findByRole("link", { name: "1층 온도 센서" });
+
+		expect(calls).toBe(1);
+	});
+
 	/** 셀 안의 Device 링크는 이동만 해야 한다 — 행 클릭의 Drawer까지 같이 열리면 안 된다. */
 	it("navigates to the device detail without opening the event drawer", async () => {
 		renderAt("/security-events");

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Box from "@mui/material/Box";
 import Drawer from "@mui/material/Drawer";
+import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
 import DeviceNameLink from "../features/device/DeviceNameLink";
 import SecurityEventFilters from "../features/securityEvent/SecurityEventFilters";
@@ -107,6 +108,12 @@ export default function SecurityEventsPage() {
 			</QueryState>
 
 			<Drawer anchor="right" open={selected !== null} onClose={() => setSelected(null)}>
+				{/*
+				 * AppLayout의 AppBar는 zIndex를 drawer + 1로 올려 항상 위에 있다. spacer가
+				 * 없으면 이 Drawer의 첫 줄(제목)이 AppBar에 가려 보이지 않는다 — 브라우저로
+				 * 확인해서 찾았고, DOM만 보는 테스트로는 잡히지 않는다.
+				 */}
+				<Toolbar />
 				<Box sx={{ width: 440, p: 3 }}>
 					{/* h1(PageHeader) 다음 단계를 건너뛰지 않게 h2로 둔다(Codex 리뷰 PR #44 Low). */}
 					<Typography variant="h6" component="h2" gutterBottom>

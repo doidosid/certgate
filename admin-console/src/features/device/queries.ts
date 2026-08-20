@@ -5,7 +5,6 @@ export const deviceKeys = {
 	all: ["devices"] as const,
 	list: (params: DeviceListParams) => [...deviceKeys.all, "list", params] as const,
 	detail: (deviceId: string) => [...deviceKeys.all, "detail", deviceId] as const,
-	options: ["devices", "options"] as const,
 	roles: ["roles"] as const,
 };
 
@@ -35,10 +34,14 @@ export function useDevice(deviceId: string) {
  * content.length보다 크면 잘린 것이고, 그 사실은 화면이 드러내야 한다 — 조용히 자르면
  * 사용자는 특정 Device를 필터에서 찾지 못하는 이유를 알 수 없다.
  */
-export function useDeviceOptions() {
+export function useDeviceOptions(query = "") {
+	// list()와 같은 key를 쓴다. 별도 key를 두면 검색어 없는 첫 조회가 같은 요청인데도
+	// 두 번 나간다 — 목록의 이름 표시와 필터가 동시에 열리는 화면에서 실제로 그랬다
+	// (Codex 리뷰 PR #46 Low).
+	const params = { query, page: 0, size: DEVICE_OPTION_LIMIT };
 	return useQuery({
-		queryKey: deviceKeys.options,
-		queryFn: () => fetchDevices({ page: 0, size: DEVICE_OPTION_LIMIT }),
+		queryKey: deviceKeys.list(params),
+		queryFn: () => fetchDevices(params),
 		staleTime: 60 * 1000,
 	});
 }
