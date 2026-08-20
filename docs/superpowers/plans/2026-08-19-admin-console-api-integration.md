@@ -4278,15 +4278,16 @@ Task 3의 Commit에 이 문서 변경을 함께 포함한다 — 코드 결정�
 | Task 6 Devices 목록·검색·필터 | **merge 완료** (PR #44, 2026-08-20) |
 | Task 7 Device 상세 화면 | **merge 완료** (PR #44) |
 | Task 8 Security Events 목록·상세 | **merge 완료** (PR #46) |
-| Task 18 Console 디자인 톤 (다크) | **merge 완료** (PR #46) |
+| Task 18 Console 디자인 톤 | **merge 완료** (PR #46) — 이후 레퍼런스 기준(다크 사이드바 + 라이트 콘텐츠)으로 재정렬 |
 | Task 9 Certificate Requests 목록·상세·승인·거절 | **merge 완료** (PR #46) |
 | Task 10 Certificates 목록·상세·폐기·다운로드 | **구현 완료** (2026-08-20) |
-| Task 11 Device 등록·상태·Role·Token 재발급 | **다음 착수 지점** |
-| Task 13~15 | 미착수 |
+| Task 11 Device 등록·상태·Role·Token 재발급 | **구현 완료** (2026-08-20) |
+| Task 13 Dashboard 화면 | **다음 착수 지점** |
+| Task 14·15 | 미착수 |
 
 부수적으로 등록된 Issue: **#36** (Gateway `/healthz`가 Management API readiness를 반영하지 않음), **#39** (매핑되지 않은 경로가 404 대신 500), **#42** (Gateway가 handshake에서 Intermediate를 보내지 않음). 모두 이 계획 범위 밖이다.
 
-**다음 작업은 Task 11(Device 등록·상태 변경·Role 변경·Token 재발급)이다.** PR #46으로 Task 8·9·18이 merge됐고, Task 10은 구현을 마쳤다.
+**다음 작업은 Task 13(Dashboard 화면)이다.** PR #46으로 Task 8·9·18이 merge됐고, Task 10·11은 구현을 마쳤다. 계획의 PR 4 묶음(Task 9~11)이 끝났다.
 
 Task 8을 구현하며 계획 본문의 Task 8 스케치와 다르게 결정한 3가지 — 다시 뒤집지 말 것:
 

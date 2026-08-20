@@ -6,6 +6,13 @@ const BASE = "/api/v1";
 export const handlers = [
 	http.get(`${BASE}/roles`, () => HttpResponse.json(fixtures.roles)),
 	http.get(`${BASE}/devices`, () => HttpResponse.json(fixtures.devicePage)),
+	/* 평문 Token은 등록·재발급 응답에만 한 번 온다(security-design.md §2). */
+	http.post(`${BASE}/devices`, () => HttpResponse.json(fixtures.deviceRegistered, { status: 201 })),
+	http.patch(`${BASE}/devices/:deviceId/status`, () => HttpResponse.json(fixtures.deviceSummary)),
+	http.put(`${BASE}/devices/:deviceId/role`, () => HttpResponse.json(fixtures.deviceSummary)),
+	http.post(`${BASE}/devices/:deviceId/enrollment-token`, () =>
+		HttpResponse.json(fixtures.enrollmentTokenIssued),
+	),
 	http.get(`${BASE}/devices/:deviceId`, () => HttpResponse.json(fixtures.deviceDetail)),
 	http.get(`${BASE}/certificate-requests`, () => HttpResponse.json(fixtures.certificateRequestPage)),
 	http.get(`${BASE}/certificate-requests/:requestId`, () =>

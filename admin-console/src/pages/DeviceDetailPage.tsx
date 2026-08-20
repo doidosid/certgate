@@ -3,6 +3,7 @@ import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Grid from "@mui/material/Grid";
 import Typography from "@mui/material/Typography";
+import DeviceActions from "../features/device/DeviceActions";
 import { useDevice } from "../features/device/queries";
 import {
 	certificateStatusColor,
@@ -30,7 +31,10 @@ export default function DeviceDetailPage() {
 
 	return (
 		<>
-			<PageHeader title="Device 상세" />
+			<PageHeader
+				title="Device 상세"
+				actions={device.data ? <DeviceActions device={device.data} /> : undefined}
+			/>
 			<QueryState
 				isLoading={device.isPending}
 				isError={device.isError}

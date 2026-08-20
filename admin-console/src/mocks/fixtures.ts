@@ -5,6 +5,9 @@ import type {
 	DashboardSummary,
 	DeviceDetail,
 	DeviceListItem,
+	DeviceRegistered,
+	DeviceSummary,
+	EnrollmentTokenIssued,
 	PageResponse,
 	RoleResponse,
 	SecurityEvent,
@@ -68,6 +71,38 @@ export const deviceDetail = {
 		},
 	],
 } satisfies DeviceDetail;
+
+/**
+ * POST /devices 응답. `enrollmentToken`은 이 응답에만 한 번 담긴다 — 실제 Token이 아니라
+ * 모양만 흉내낸 값이다.
+ */
+export const deviceRegistered = {
+	id: "9a9b9c9d-0000-4000-8000-000000000009",
+	deviceKey: "sensor-floor-09",
+	name: "9층 센서",
+	status: "ACTIVE",
+	roleName: "SENSOR",
+	createdAt: "2026-08-19T05:32:18Z",
+	enrollmentToken: "cg_enroll_MOCK_TEST_ONLY_0123456789",
+	enrollmentExpiresAt: "2026-08-20T05:32:18Z",
+} satisfies DeviceRegistered;
+
+/** PATCH /devices/{id}/status, PUT /devices/{id}/role 응답. */
+export const deviceSummary = {
+	id: "0d6515ae-d560-4777-b102-054e71f98ef9",
+	deviceKey: "sensor-floor-01",
+	name: "1층 온도 센서",
+	status: "DISABLED",
+	roleName: "OPERATOR",
+	createdAt: "2026-08-13T05:32:18Z",
+	lastSeenAt: "2026-08-13T05:31:54Z",
+} satisfies DeviceSummary;
+
+/** POST /devices/{id}/enrollment-token 응답. 재발급하면 기존 활성 Token은 폐기된다. */
+export const enrollmentTokenIssued = {
+	enrollmentToken: "cg_enroll_MOCK_REISSUED_9876543210",
+	enrollmentExpiresAt: "2026-08-20T06:00:00Z",
+} satisfies EnrollmentTokenIssued;
 
 export const certificateRequestPage = page<CertificateRequestItem>([
 	{
