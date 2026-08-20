@@ -280,14 +280,18 @@ jobs:
       # postgres는 Compose가 빌드하지 않고 pull하는 공식 Image라 여기 대상이 아니다.
       - name: build images
         run: docker compose -f infra/compose.yaml --env-file .env.example build
-      # trivy-action 대신 공식 Image를 직접 돌린다. 외부 action의 입력 이름이
-      # 버전마다 바뀌는 것에 CI가 끌려다니지 않고, 로컬에서 검증한 명령과 정확히
-      # 같은 것을 실행한다.
+      # trivy-action 대신 공식 Image를 직접 돌린다. 외부 action의 태그·입력 이름
+      # 변경에 CI가 끌려다니지 않고, 로컬에서 검증한 명령과 정확히 같은 것을 실행한다.
+      #
+      # 실패를 status에 모아 마지막에 exit한다. `set -e`에만 기대면 셸에 따라
+      # 반복문 안의 실패가 그냥 지나가 스캔이 조용히 no-op이 될 수 있다(실제로
+      # zsh에서 그렇게 되는 것을 확인했다). 네 Image를 모두 스캔하고 결과를 다
+      # 보여준 뒤 하나라도 실패하면 job을 실패시킨다.
       - name: trivy
         run: |
-          set -euo pipefail
+          status=0
           for service in gateway management-api admin-console backend-service; do
-            echo "::group::trivy certgate-$service"
+            echo "::group::trivy certgate-${service}"
             docker run --rm \
               -v /var/run/docker.sock:/var/run/docker.sock \
               -v "$HOME/.cache/trivy:/root/.cache/trivy" \
@@ -297,9 +301,10 @@ jobs:
                 --ignore-unfixed \
                 --exit-code 1 \
                 --quiet \
-                "certgate-$service:latest"
+                "certgate-${service}:latest" || status=1
             echo "::endgroup::"
           done
+          exit "$status"
 
   secret-scan:
     runs-on: ubuntu-latest
