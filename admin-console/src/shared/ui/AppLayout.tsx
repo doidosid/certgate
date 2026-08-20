@@ -6,6 +6,7 @@ import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import Typography from "@mui/material/Typography";
 import { NavLink, Outlet } from "react-router-dom";
+import CriticalEventProvider from "../../app/CriticalEventProvider";
 import { sidebar } from "../../app/theme";
 import NavIcon, { type NavIconName } from "./NavIcon";
 
@@ -30,66 +31,70 @@ const DRAWER_WIDTH = 236;
  * 인증이 없다(api-spec.md: 배포 제한으로만 보호). 없는 기능을 화면에 두지 않는다.
  */
 export default function AppLayout() {
+	// CRITICAL Toast는 Router 안쪽에 있어야 한다 — 알림에서 Security Events 목록으로
+	// 가는 링크가 Router Context를 쓴다.
 	return (
-		<Box sx={{ display: "flex", minHeight: "100vh" }}>
-			<Drawer
-				variant="permanent"
-				sx={{
-					width: DRAWER_WIDTH,
-					flexShrink: 0,
-					[`& .MuiDrawer-paper`]: {
+		<CriticalEventProvider>
+			<Box sx={{ display: "flex", minHeight: "100vh" }}>
+				<Drawer
+					variant="permanent"
+					sx={{
 						width: DRAWER_WIDTH,
-						boxSizing: "border-box",
-						backgroundColor: sidebar.background,
-						borderRight: `1px solid ${sidebar.border}`,
-					},
-				}}
-			>
-				<Box sx={{ px: 2.5, py: 3, display: "flex", alignItems: "center", gap: 1.25 }}>
-					{/* 인증서의 봉인 자리 — 브랜드 표시를 강조색으로 한 번만 쓴다. */}
-					<Box
-						sx={{ width: 10, height: 10, borderRadius: "2px", backgroundColor: sidebar.mark, flexShrink: 0 }}
-					/>
-					<Typography sx={{ color: sidebar.brand, fontSize: "1.0625rem", fontWeight: 700, letterSpacing: "-0.01em" }}>
-						CertGate
-					</Typography>
+						flexShrink: 0,
+						[`& .MuiDrawer-paper`]: {
+							width: DRAWER_WIDTH,
+							boxSizing: "border-box",
+							backgroundColor: sidebar.background,
+							borderRight: `1px solid ${sidebar.border}`,
+						},
+					}}
+				>
+					<Box sx={{ px: 2.5, py: 3, display: "flex", alignItems: "center", gap: 1.25 }}>
+						{/* 인증서의 봉인 자리 — 브랜드 표시를 강조색으로 한 번만 쓴다. */}
+						<Box
+							sx={{ width: 10, height: 10, borderRadius: "2px", backgroundColor: sidebar.mark, flexShrink: 0 }}
+						/>
+						<Typography sx={{ color: sidebar.brand, fontSize: "1.0625rem", fontWeight: 700, letterSpacing: "-0.01em" }}>
+							CertGate
+						</Typography>
+					</Box>
+
+					<List sx={{ px: 1.5, py: 0 }}>
+						{NAV_ITEMS.map((item) => (
+							<ListItemButton
+								key={item.to}
+								component={NavLink}
+								to={item.to}
+								end={item.to === "/"}
+								// 활성 항목은 강조색으로 꽉 찬 블록이다(레퍼런스). 흰 글자 대비 4.9:1.
+								sx={{
+									mb: 0.5,
+									py: 1,
+									px: 1.5,
+									borderRadius: 1.5,
+									color: sidebar.text,
+									"&:hover": { backgroundColor: "rgba(255, 255, 255, 0.06)" },
+									"&.active": {
+										backgroundColor: sidebar.activeFill,
+										color: sidebar.textActive,
+										"&:hover": { backgroundColor: sidebar.activeFill },
+										"& .MuiListItemText-primary": { fontWeight: 700 },
+									},
+								}}
+							>
+								<ListItemIcon sx={{ minWidth: 32, color: "inherit" }}>
+									<NavIcon name={item.icon} />
+								</ListItemIcon>
+								<ListItemText primary={item.label} />
+							</ListItemButton>
+						))}
+					</List>
+				</Drawer>
+
+				<Box component="main" sx={{ flexGrow: 1, minWidth: 0, px: 3, pb: 6 }}>
+					<Outlet />
 				</Box>
-
-				<List sx={{ px: 1.5, py: 0 }}>
-					{NAV_ITEMS.map((item) => (
-						<ListItemButton
-							key={item.to}
-							component={NavLink}
-							to={item.to}
-							end={item.to === "/"}
-							// 활성 항목은 강조색으로 꽉 찬 블록이다(레퍼런스). 흰 글자 대비 4.9:1.
-							sx={{
-								mb: 0.5,
-								py: 1,
-								px: 1.5,
-								borderRadius: 1.5,
-								color: sidebar.text,
-								"&:hover": { backgroundColor: "rgba(255, 255, 255, 0.06)" },
-								"&.active": {
-									backgroundColor: sidebar.activeFill,
-									color: sidebar.textActive,
-									"&:hover": { backgroundColor: sidebar.activeFill },
-									"& .MuiListItemText-primary": { fontWeight: 700 },
-								},
-							}}
-						>
-							<ListItemIcon sx={{ minWidth: 32, color: "inherit" }}>
-								<NavIcon name={item.icon} />
-							</ListItemIcon>
-							<ListItemText primary={item.label} />
-						</ListItemButton>
-					))}
-				</List>
-			</Drawer>
-
-			<Box component="main" sx={{ flexGrow: 1, minWidth: 0, px: 3, pb: 6 }}>
-				<Outlet />
 			</Box>
-		</Box>
+		</CriticalEventProvider>
 	);
 }

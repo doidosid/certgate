@@ -2,6 +2,7 @@ import type {
 	CertificateItem,
 	CertificateRequestDetail,
 	CertificateRequestItem,
+	CriticalEventPayload,
 	DashboardSummary,
 	DeviceDetail,
 	DeviceListItem,
@@ -261,3 +262,18 @@ export const dashboardSummary = {
 	outbox: { pendingCount: 12, oldestAgeSeconds: 24 },
 	recentCriticalEvents: [securityEventPage.content[1]],
 } satisfies DashboardSummary;
+
+/**
+ * Mock 모드에서 CRITICAL Toast를 실제로 띄워 보기 위한 SSE payload
+ * (docs/api-spec.md §9 "SSE 형식"). message는 서버가 Reason Code로 만들어 보내는
+ * 사용자용 문구다(CriticalEventMessages).
+ */
+export const criticalEventPayload = {
+	// 목록 fixture에 실제로 있는 CRITICAL Event를 가리킨다 — 알림을 눌러 이동한 목록이
+	// 비어 있으면 화면이 고장난 것처럼 보인다.
+	eventId: securityEventPage.content[1].id,
+	occurredAt: securityEventPage.content[1].occurredAt,
+	deviceKey: null,
+	reasonCode: securityEventPage.content[1].reasonCode,
+	message: "Gateway Security Event Outbox가 적체되었습니다.",
+} satisfies CriticalEventPayload;

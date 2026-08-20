@@ -106,6 +106,25 @@ export const handlers = [
 			),
 		);
 	}),
+	/*
+	 * Mock 모드에서도 CRITICAL Toast를 눈으로 확인할 수 있게 SSE를 흉내낸다. 이게 없으면
+	 * EventSource가 연결에 실패해 3초마다 무한 재시도한다. 실제 서버는 CRITICAL Event가
+	 * 저장될 때만 보내므로 시점을 재현할 수 없다 — 연결 3초 뒤 한 번 보내는 것으로 대신한다.
+	 * 이 경로는 :eventId 상세보다 먼저 와야 한다(msw는 먼저 맞는 handler를 쓴다).
+	 */
+	http.get(`${BASE}/security-events/stream`, () => {
+		const encoder = new TextEncoder();
+		const stream = new ReadableStream({
+			start(controller) {
+				controller.enqueue(encoder.encode(": connected\n\n"));
+				setTimeout(() => {
+					const data = JSON.stringify(fixtures.criticalEventPayload);
+					controller.enqueue(encoder.encode(`event: critical-security-event\ndata: ${data}\n\n`));
+				}, 3_000);
+			},
+		});
+		return new HttpResponse(stream, { headers: { "Content-Type": "text/event-stream" } });
+	}),
 	http.get(`${BASE}/security-events/:eventId`, () =>
 		HttpResponse.json(fixtures.securityEventPage.content[0]),
 	),
