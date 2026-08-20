@@ -1,5 +1,167 @@
+import { useState } from "react";
+import Box from "@mui/material/Box";
+import Drawer from "@mui/material/Drawer";
 import Typography from "@mui/material/Typography";
+import DeviceNameLink from "../features/device/DeviceNameLink";
+import SecurityEventFilters from "../features/securityEvent/SecurityEventFilters";
+import {
+	decisionColor,
+	decisionLabel,
+	eventTypeLabel,
+	severityColor,
+	severityLabel,
+} from "../features/securityEvent/labels";
+import { useSecurityEvents } from "../features/securityEvent/queries";
+import type { SecurityEvent } from "../shared/api/types";
+import { usePageParams } from "../shared/api/usePageParams";
+import DataTable, { type Column } from "../shared/ui/DataTable";
+import DateTimeText from "../shared/ui/DateTimeText";
+import Field from "../shared/ui/Field";
+import PageHeader from "../shared/ui/PageHeader";
+import QueryState from "../shared/ui/QueryState";
+import StatusChip from "../shared/ui/StatusChip";
 
+/**
+ * ui-design.md §7 목록 컬럼: 발생 시각, 디바이스, 요청 경로, 결과, 사유, 접속 IP,
+ * 응답 시간. 심각도를 함께 두는 이유는 CRITICAL을 목록에서 바로 골라내야 하기
+ * 때문이다(Issue #6에서 넘어온 CRITICAL 확인 흐름).
+ */
+const COLUMNS: Column<SecurityEvent>[] = [
+	{ key: "occurredAt", header: "발생 시각", render: (row) => <DateTimeText value={row.occurredAt} /> },
+	{
+		key: "severity",
+		header: "심각도",
+		render: (row) => <StatusChip label={severityLabel(row.severity)} color={severityColor(row.severity)} />,
+	},
+	{ key: "deviceId", header: "디바이스", render: (row) => <DeviceNameLink deviceId={row.deviceId} /> },
+	{ key: "requestPath", header: "요청 경로", render: (row) => row.requestPath ?? "—" },
+	{
+		key: "decision",
+		header: "결과",
+		render: (row) => <StatusChip label={decisionLabel(row.decision)} color={decisionColor(row.decision)} />,
+	},
+	{ key: "reasonCode", header: "사유", render: (row) => row.reasonCode },
+	{ key: "clientIp", header: "접속 IP", render: (row) => row.clientIp ?? "—" },
+	{ key: "latencyMs", header: "응답(ms)", render: (row) => row.latencyMs ?? "—" },
+];
+
+/**
+ * datetime-local 값은 사용자의 로컬 시간이고 서버는 ISO 8601 Instant를 받는다.
+ * 날짜로 해석되지 않는 값(사용자가 URL을 직접 고친 경우)은 서버로 보내지 않는다 —
+ * 400을 만들어 목록 전체를 오류 화면으로 바꿀 이유가 없다.
+ */
+function toInstant(localValue: string): string | undefined {
+	if (!localValue) {
+		return undefined;
+	}
+	const parsed = new Date(localValue);
+	return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
+}
+
+/**
+ * 보안 기록은 수정·삭제할 수 없다(ui-design.md §7). 이 화면에는 조회 외의 어떤
+ * 변경 동작도 두지 않는다.
+ */
 export default function SecurityEventsPage() {
-	return <Typography variant="h4">Security Events</Typography>;
+	const { page, size, setPage, setSize, setParam, get } = usePageParams();
+	const [selected, setSelected] = useState<SecurityEvent | null>(null);
+
+	const values = {
+		from: get("from") ?? "",
+		to: get("to") ?? "",
+		deviceId: get("deviceId") ?? "",
+		decision: get("decision") ?? "",
+		severity: get("severity") ?? "",
+		reasonCode: get("reasonCode") ?? "",
+	};
+
+	const events = useSecurityEvents({
+		from: toInstant(values.from),
+		to: toInstant(values.to),
+		deviceId: values.deviceId || undefined,
+		decision: values.decision || undefined,
+		severity: values.severity || undefined,
+		reasonCode: values.reasonCode || undefined,
+		page,
+		size,
+	});
+
+	return (
+		<>
+			<PageHeader title="Security Events" />
+			<SecurityEventFilters values={values} onChange={(key, value) => setParam(key, value)} />
+			{/*
+			 * 결과가 정말 0건일 때만 빈 상태로 둔다. content.length로 판단하면 범위를
+			 * 벗어난 page에서 pagination까지 사라져 첫 페이지로 돌아올 수 없다
+			 * (Codex 리뷰 PR #44 Medium).
+			 */}
+			<QueryState
+				isLoading={events.isPending}
+				isError={events.isError}
+				error={events.error}
+				isEmpty={events.data?.totalElements === 0}
+				emptyMessage="조건에 맞는 보안 이벤트가 없습니다."
+				onRetry={() => events.refetch()}
+			>
+				<DataTable
+					columns={COLUMNS}
+					rows={events.data?.content ?? []}
+					getRowId={(row) => row.id}
+					page={page}
+					size={size}
+					totalElements={events.data?.totalElements ?? 0}
+					onPageChange={setPage}
+					onSizeChange={setSize}
+					// 상세는 별도 화면이 아니라 Drawer다 — 목록의 필터·페이지를 잃지 않고
+					// 여러 Event를 이어서 확인하는 흐름이다.
+					onRowClick={setSelected}
+				/>
+			</QueryState>
+
+			<Drawer anchor="right" open={selected !== null} onClose={() => setSelected(null)}>
+				<Box sx={{ width: 440, p: 3 }}>
+					{/* h1(PageHeader) 다음 단계를 건너뛰지 않게 h2로 둔다(Codex 리뷰 PR #44 Low). */}
+					<Typography variant="h6" component="h2" gutterBottom>
+						보안 이벤트 상세
+					</Typography>
+					{selected && (
+						<>
+							<Field label="발생 시각">
+								<DateTimeText value={selected.occurredAt} />
+							</Field>
+							<Field label="유형">{eventTypeLabel(selected.type)}</Field>
+							<Field label="심각도">
+								<StatusChip
+									label={severityLabel(selected.severity)}
+									color={severityColor(selected.severity)}
+								/>
+							</Field>
+							<Field label="결과">
+								<StatusChip
+									label={decisionLabel(selected.decision)}
+									color={decisionColor(selected.decision)}
+								/>
+							</Field>
+							<Field label="사유">{selected.reasonCode}</Field>
+							<Field label="디바이스">
+								<DeviceNameLink deviceId={selected.deviceId} />
+							</Field>
+							<Field label="인증서 Serial">{selected.certificateSerial ?? "—"}</Field>
+							<Field label="HTTP">
+								{selected.httpMethod === null && selected.requestPath === null
+									? "—"
+									: `${selected.httpMethod ?? "—"} ${selected.requestPath ?? ""}`.trim()}
+							</Field>
+							<Field label="접속 IP">{selected.clientIp ?? "—"}</Field>
+							<Field label="응답 시간">
+								{selected.latencyMs === null ? "—" : `${selected.latencyMs} ms`}
+							</Field>
+							{/* 같은 Trace ID로 Gateway·Management API 로그까지 따라갈 수 있다(ui-design.md §7). */}
+							<Field label="Trace ID">{selected.traceId}</Field>
+						</>
+					)}
+				</Box>
+			</Drawer>
+		</>
+	);
 }
