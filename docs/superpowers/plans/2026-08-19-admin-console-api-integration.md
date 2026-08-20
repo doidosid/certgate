@@ -4258,13 +4258,13 @@ Task 3의 Commit에 이 문서 변경을 함께 포함한다 — 코드 결정�
 
 ---
 
-## 다른 기기에서 이어서 작업하기 (2026-08-20 저녁 기준)
+## 다른 기기에서 이어서 작업하기 (2026-08-21 기준)
 
 이 계획은 Windows PC에서 착수했고 이후 macOS·Windows를 오가며 이어간다. 저장소에 없는 것(gitignore 대상)이 있어서 새 기기에서는 아래 준비가 필요하다.
 
 > **이 절이 계획 본문보다 우선한다.** 계획 본문(특히 "서버 API 현황", 각 Task의 PR 묶음, Compose·SSE 관련 서술)은 2026-08-19 착수 시점 기준이라 이후 진행과 어긋난 곳이 있다. 예를 들어 본문은 `GET /roles`·`GET /dashboard/summary`를 미구현으로, Task 2와 12를 하나의 "PR 2"로 적지만 실제로는 각각 PR #38·#40으로 나뉘어 merge됐다. 본문과 이 절이 다르면 **이 절과 실제 코드**를 믿는다.
 
-> **2026-08-20 저녁 인수인계 — Codex 사용량 문제로 이 시점에 작업을 중단했다.** 아래 "지금 당장 이어서 할 일"부터 시작한다.
+> **2026-08-21 인수인계.** 아래 "지금 당장 이어서 할 일"부터 시작한다.
 
 ### 1. 진행 상황 — 어디까지 됐나
 
@@ -4286,20 +4286,31 @@ Task 3의 Commit에 이 문서 변경을 함께 포함한다 — 코드 결정�
 | Task 10 Certificates 목록·상세·폐기·다운로드 | **merge 완료** (PR #47) |
 | Task 11 Device 등록·상태·Role·Token 재발급 | **merge 완료** (PR #47) |
 | Task 13 Dashboard 화면 | **구현 완료, PR 미생성** (`feature/console` 커밋 `1900981`) |
-| Mock 목록 필터링 결함 수정 | **구현 완료, PR 미생성** (`feature/console` 커밋 `1f3bb69`, 아래 "지금 당장" 절 참고) |
-| Task 14 SSE 전역 Toast | **다음 착수 지점** |
-| Task 15 README 실제 화면 | 미착수(Prometheus/Grafana 후속 계획 한 줄을 이때 같이 적기로 함 — Task 15 본문 Step 4 참고) |
+| Mock 목록 필터링 결함 수정 | **구현 완료, PR 미생성** (`feature/console` 커밋 `1f3bb69`) |
+| Task 14 SSE 전역 CRITICAL Toast | **구현 완료, PR 미생성** (`feature/console` 커밋 `dd07ffe`) |
+| Task 15 README 실제 화면 | **다음 착수 지점**(Prometheus/Grafana 후속 계획 한 줄을 이때 같이 적는다 — Task 15 본문 Step 4 참고) |
 
 부수적으로 등록된 Issue: **#36** (Gateway `/healthz`가 Management API readiness를 반영하지 않음), **#39** (매핑되지 않은 경로가 404 대신 500), **#42** (Gateway가 handshake에서 Intermediate를 보내지 않음). 모두 이 계획 범위 밖이다.
 
-### 지금 당장 이어서 할 일 (2026-08-20 저녁 중단 지점)
+### 지금 당장 이어서 할 일 (2026-08-21 기준)
 
-1. **`feature/console`에 미merge 커밋 2개가 있다** — `1900981`(Task 13 Dashboard), `1f3bb69`(Mock 목록 filter 결함 수정). 둘 다 `main`에는 아직 없다. `git log --oneline origin/main..feature/console`로 확인.
-2. **PR을 아직 열지 않았다.** 새 규칙(2026-08-20, CLAUDE.md)대로 구현·테스트·자체 검증을 마치고 merge 직전 Codex를 한 번만 돌린다 — 지금까지는 안 돌렸다. Task 14까지 마친 뒤 하나의 PR로 묶는 것이 Codex 사용량 절약에 유리하다(사용자가 24일까지 8%만 남았다고 알려온 뒤로는 PR을 크게 묶는 편이 낫다).
-3. **하던 일: `CertificateRequestsPage.test.tsx`의 "sends the status filter to the server" 테스트(약 279번째 줄)를 실제 필터링 결과까지 검증하는 회귀 테스트로 확장하려던 중 중단됐다.** 지금 상태로도 테스트는 안전(176건 통과)하지만, 이 확장은 완료되지 않았다 — 급하지 않으면 건너뛰어도 된다.
-4. **사용자가 직접 발견한 버그(2026-08-20)를 고쳤다** — Certificate Requests 화면에서 상태 필터를 바꿔도 목록이 안 바뀌는 것처럼 보였다. 원인은 화면 코드가 아니라 MSW Mock이었다: `/devices`, `/certificate-requests`, `/certificates`, `/security-events` 목록 handler가 쿼리 파라미터를 무시하고 고정된 fixture만 돌려주고 있었다. `mocks/filterPage.ts`를 만들어 네 handler에 실제 필터링을 붙였고, fixture도 상태별로 늘렸다(`certificateRequestPage`에 APPROVED·REJECTED 추가, `certificatePage`에 EXPIRING_SOON·EXPIRED·REVOKED 추가). **이 커밋(`1f3bb69`) 이후로 브라우저에서 Mock 모드로 필터를 확인할 때 다른 목록도 실제로 바뀌는지 한 번 훑어보면 좋다** — 아직 브라우저로 직접 확인하지는 못했다.
+1. **`feature/console`에 미merge 커밋 3개가 있다** — `1900981`(Task 13 Dashboard), `1f3bb69`(Mock 목록 filter 결함 수정), `dd07ffe`(Task 14 SSE 전역 CRITICAL Toast). 셋 다 `main`에는 아직 없다. `git log --oneline origin/main..feature/console`로 확인.
+2. **다음 착수는 Task 15(README 와이어프레임을 실제 화면으로 교체)다.** 이걸로 Issue #7의 구현 항목이 끝난다.
+3. **PR을 아직 열지 않았다.** 새 규칙(2026-08-20, CLAUDE.md)대로 구현·테스트·자체 검증을 마치고 merge 직전 Codex를 한 번만 돌린다 — 지금까지는 안 돌렸다. Task 15까지 마친 뒤 Task 13·Mock 수정·Task 14·Task 15를 하나의 PR로 묶는 것이 Codex 사용량 절약에 유리하다(사용자가 24일까지 8%만 남았다고 알려왔다).
+4. **테스트 기준선은 19 files / 184 tests다**(`npm test`). typecheck·build도 통과 상태다.
+5. **하던 일 중 남은 것:** `CertificateRequestsPage.test.tsx`의 "sends the status filter to the server" 테스트(약 279번째 줄)를 실제 필터링 결과까지 검증하는 회귀 테스트로 확장하려다 중단했다. 급하지 않으면 건너뛰어도 된다 — Mock 필터링 자체는 브라우저에서 확인했다(아래 6번).
+6. **사용자가 발견한 Mock 필터 버그는 브라우저에서 확인 완료(2026-08-21).** Mock 모드로 띄워 Certificate Requests 상태 필터(3건 → 발급 완료 1건), Certificates 상태 필터(4건 → 폐기 1건), Security Events `reasonCode` 필터(1건)가 실제로 다른 결과를 보여주는 것을 직접 확인했다. `1f3bb69`의 "브라우저 미확인" 메모는 해소됐다.
 
-**Task 14 착수 시 참고할 것.** PR #46·#47로 Task 8·9·10·11·18이 merge됐고, Task 13은 구현을 마쳤다(PR 미생성).
+#### Task 14에서 계획 본문과 다르게 결정한 것 — 다시 뒤집지 말 것
+
+1. **Toast 제목은 `navigate()` 호출이 아니라 실제 anchor(`Link component={RouterLink}`)다.** 새 탭·가운데 클릭이 동작하고, Toast 전체를 클릭 영역으로 만들었을 때 닫기 버튼과 클릭이 겹치는 문제도 없다(Dashboard Critical 패널과 같은 판단).
+2. **서버의 한국어 message 표(`CriticalEventMessages`)를 Console에 복제하지 않는다.** 재연결 보완 조회 응답(`SecurityEvent`)에는 `message`가 없고 `deviceKey`도 없다(`deviceId`만 있다). 그 항목은 화면 다른 곳과 같이 `reasonCode`를 그대로 보여주고 Device는 `DeviceNameLink`로 이름을 찾는다. 표를 복제하면 두 곳이 조용히 어긋난다.
+3. **동시 표시·보완 조회 개수를 5로 제한한다**(`MAX_TOASTS`). 긴 단절 뒤 Toast가 화면을 덮으면 안 되고, 원본은 Security Events 목록에 남아 있다(api-spec.md §9).
+4. **jsdom에 `EventSource`가 없다.** `AppLayout`이 Provider를 감싸면서 모든 화면 테스트가 하나를 만들게 되므로 `setupTests.ts`에 아무 일도 하지 않는 껍데기를 stub으로 넣었다. 실제 SSE 동작은 `CriticalEventProvider.test.tsx`가 자체 가짜(`FakeEventSource`)로 검증한다.
+5. **MSW에 SSE handler를 추가했다**(`handlers.ts`의 `/security-events/stream`). 없으면 Mock 모드에서 `EventSource`가 3초마다 무한 재연결하고, Toast를 눈으로 확인할 방법이 아예 없다. 연결 3초 뒤 `criticalEventPayload`를 한 번 보낸다. 이 payload는 **목록 fixture에 실제로 있는 CRITICAL Event**(`EVENT_OUTBOX_BACKLOG`)를 가리킨다 — 없는 Event를 가리키면 알림을 눌러 이동한 목록이 비어 화면이 고장난 것처럼 보인다.
+6. **보완 조회 시작점은 마운트 시각이고 앞으로만 움직인다.** 조회가 실패하면 시작점을 앞당기지 않으므로 다음 재연결이 같은 구간을 다시 조회한다. `from` 경계에 걸린 Event는 `eventId` Set으로 걸러 중복 Toast가 되지 않는다 — SSE의 `eventId`는 `SecurityEvent`의 id와 같다(`CriticalEventListener`가 `event.getId()`를 그대로 싣는다).
+
+**Task 15 착수 시 참고할 것.** PR #46·#47로 Task 8·9·10·11·18이 merge됐고, Task 13·14와 Mock 필터 수정은 구현을 마쳤다(PR 미생성).
 
 Task 8을 구현하며 계획 본문의 Task 8 스케치와 다르게 결정한 3가지 — 다시 뒤집지 말 것:
 
