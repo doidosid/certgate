@@ -106,6 +106,13 @@ export const certificatePage = page<CertificateItem>([
 	},
 ]) satisfies PageResponse<CertificateItem>;
 
+/**
+ * `GET /certificates/{id}/download`의 응답 모양만 흉내낸 가짜 값이다. 실제 인증서가
+ * 아니며 저장소에 인증서·Key 파일을 두지 않는다는 규칙(.gitignore, CI secret-scan)과도
+ * 어긋나지 않는다.
+ */
+export const certificatePem = "-----BEGIN CERTIFICATE-----\nMOCK-CERTGATE-TEST-ONLY\n-----END CERTIFICATE-----\n";
+
 export const securityEventPage = page<SecurityEvent>([
 	{
 		id: "c8c78370-174f-4f88-b230-784e2d9115be",

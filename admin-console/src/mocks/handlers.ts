@@ -22,6 +22,19 @@ export const handlers = [
 	http.get(`${BASE}/certificates/:certificateId`, () =>
 		HttpResponse.json(fixtures.certificatePage.content[0]),
 	),
+	/* 원문은 이 endpoint만 준다. JSON이 아니라 PEM 문자열이다(CertificateController). */
+	http.get(`${BASE}/certificates/:certificateId/download`, () =>
+		HttpResponse.text(fixtures.certificatePem, { headers: { "Content-Type": "application/x-pem-file" } }),
+	),
+	http.post(`${BASE}/certificates/:certificateId/revoke`, () =>
+		HttpResponse.json({
+			...fixtures.certificatePage.content[0],
+			status: "REVOKED",
+			revokedAt: "2026-08-14T02:10:00Z",
+			revocationReason: "KEY_COMPROMISE",
+			revocationNote: null,
+		}),
+	),
 	http.get(`${BASE}/security-events`, () => HttpResponse.json(fixtures.securityEventPage)),
 	http.get(`${BASE}/security-events/:eventId`, () =>
 		HttpResponse.json(fixtures.securityEventPage.content[0]),
