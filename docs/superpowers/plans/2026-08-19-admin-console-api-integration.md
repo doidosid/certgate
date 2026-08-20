@@ -4288,8 +4288,9 @@ Task 3의 Commit에 이 문서 변경을 함께 포함한다 — 코드 결정�
 | Task 13 Dashboard 화면 | **구현 완료, PR 미생성** (`feature/console` 커밋 `1900981`) |
 | Mock 목록 필터링 결함 수정 | **구현 완료, PR 미생성** (`feature/console` 커밋 `1f3bb69`) |
 | Task 14 SSE 전역 CRITICAL Toast | **구현 완료, PR 미생성** (`feature/console` 커밋 `dd07ffe`) |
-| Task 15 README 실제 화면 | **구현 완료, PR 미생성** (`feature/console` 커밋 `855cbc8`) — Prometheus/Grafana 후속 계획 한 줄 포함 |
-| Compose `GATEWAY_SERVICE_TOKEN` 누락 수정 | **PR #48** (`infra-compose-service-token`) — Task 15 중 발견, 아래 참고 |
+| Task 15 README 실제 화면 | **구현 완료** (`feature/console` 커밋 `855cbc8`) — Prometheus/Grafana 후속 계획 한 줄 포함 |
+| Codex 리뷰 반영 (High 1·Medium 6) | **구현 완료** (`feature/console` 커밋 `8fbc1c4`) — 아래 참고 |
+| Compose 설정 누락 수정 | **merge 완료** (PR #48) — Task 15 중 발견 |
 
 부수적으로 등록된 Issue: **#36** (Gateway `/healthz`가 Management API readiness를 반영하지 않음), **#39** (매핑되지 않은 경로가 404 대신 500), **#42** (Gateway가 handshake에서 Intermediate를 보내지 않음). 모두 이 계획 범위 밖이다.
 
@@ -4297,11 +4298,21 @@ Task 3의 Commit에 이 문서 변경을 함께 포함한다 — 코드 결정�
 
 **Issue #7의 구현 항목은 Task 1~16·18까지 전부 끝났다.** 완료 기준 네 가지(별도 Alert 화면·상태 관리 없음, Mock과 실제 API Type 일치, 미구현 동작 비활성·숨김, README를 실제 화면으로 교체)를 모두 만족한다. 남은 것은 PR과 Merge다.
 
-1. **`feature/console`에 미merge 커밋 4개가 있다** — `1900981`(Task 13 Dashboard), `1f3bb69`(Mock 목록 filter 결함 수정), `dd07ffe`(Task 14 SSE 전역 CRITICAL Toast), `855cbc8`(Task 15 실제 화면 캡처·README). `git log --oneline origin/main..feature/console`로 확인.
-2. **PR을 열고 Codex 리뷰를 한 번 돌린 뒤 Merge한다.** 계획대로 Task 13+Mock 수정+14+15를 하나로 묶는다(Codex 사용량 절약).
-3. **PR #48을 먼저 Merge하는 편이 낫다.** `feature/console`의 README가 문서화하는 Compose 실행 흐름은 그 수정 없이는 동작하지 않는다.
-4. **테스트 기준선은 19 files / 184 tests다**(`npm test`). typecheck·build도 통과 상태다.
-5. **남은 것:** Task 17(CI 의존성·이미지 취약점 스캔, `infra`)은 Issue #7 완료 기준이 아니라 별도 개선 항목이다. 그 다음은 Issue #4(E2E·장애 복구)와 Issue #8(제출 패키지)다.
+1. **PR #49(`feature/console`)가 열려 있고 Codex 리뷰를 한 번 받아 반영을 마쳤다.** 리뷰 결과는 `codexReview/PR-49.md`(PR #48과 통합 리뷰)다. CI 통과를 확인하고 Merge하면 Issue #7이 끝난다.
+2. **PR #48은 merge 완료다.** Compose가 management-api에 `GATEWAY_SERVICE_TOKEN`·`ENROLLMENT_TOKEN_TTL_HOURS`·`DEVICE_CERTIFICATE_VALIDITY_DAYS`를 전달하지 않던 문제였다.
+3. **테스트 기준선은 20 files / 202 tests다**(`npm test`). typecheck·build도 통과 상태다.
+4. **Codex 사용량을 다 쓰지 않았다.** 사용자 방침(2026-08-21)은 "Issue #4에 한 번 더". 그 뒤로는 쓰지 않는다.
+5. **남은 것:** Issue #42(Gateway가 handshake에서 Intermediate를 보내지 않음), Task 17(CI 취약점 스캔, `infra`), Issue #50(인증서 화면의 미구현 계약 항목), 그리고 Issue #4(E2E·장애 복구)·#8(제출 패키지).
+
+#### Codex 리뷰(PR #49) 반영 결과 — 다시 뒤집지 말 것
+
+**High 1건: SSE 보완 조회가 CRITICAL을 놓치던 두 경로.** 커서를 `new Date()`로 시작해 브라우저 시계가 서버보다 앞선 기기에서는 커서가 영영 앞으로 가지 않았고(이후 모든 보완 조회가 미래에서 시작), 첫 `onopen`에서 보완을 건너뛰어 마운트와 서버 emitter 등록 사이의 Event가 어느 경로로도 오지 않았다. 지금은 **커서에 서버가 준 `occurredAt`만** 넣고(마운트 시 최신 CRITICAL 한 페이지로 커서를 세우되 그것들은 Toast로 띄우지 않는다), **첫 연결을 포함한 모든 open에서** 보완한다. 브라우저 시계를 커서로 되돌리지 마라 — 테스트가 잡는다.
+
+**Medium 6건.** ① 5건 초과 알림을 버리지 않고 큐에 두었다가 이어서 보여준다. 보완 조회도 최대 4페이지(50건씩)를 훑고 중간에 실패하면 커서를 옮기지 않는다. ② payload의 `message`·`deviceKey` 타입을 검사한다(객체가 오면 화면 전체가 내려갔다). ③ Toast·Dashboard 패널이 `?reasonCode=`가 아니라 `?eventId=`로 그 Event의 Drawer를 연다. ④ 전역 EventSource stub이 연결을 기록하도록 바꾸고 `routes.test.tsx`가 배선을 확인한다(빈 껍데기였을 때는 `AppLayout`에서 Provider를 지워도 전부 통과했다). ⑤ Mock의 `to` 경계를 서버(`<=`)와 맞추고 `filterPage`가 실제로 page를 자른다. ⑥ README에 "알려진 화면 계약 차이"를 명시했다.
+
+**반영하지 않은 것.** `seenEventIds` 무제한 증가(Low)는 Codex도 "일반 MVP 트래픽에서는 무시할 수준"이라 했고, LRU/TTL을 넣으면 "언제 잊어도 안전한가"라는 판단이 새로 생겨 얻는 것보다 위험이 크다. `ui-design.md` §5·§6 계약 자체의 변경은 문서 계약 변경이라 사용자 확인이 필요하다 — **Issue #50**으로 분리했다.
+
+**검출력 확인.** Provider 테스트에 mutation 5종(첫 open 보완 생략·브라우저 시계 커서·한 페이지만 보완·5건 초과 폐기·payload 검증 완화)을 넣어 전부 실패하는 것을 확인했다. 이 테스트들을 약화시키지 마라.
 
 #### Task 15에서 실제로 한 것과 알게 된 것 (2026-08-21)
 
