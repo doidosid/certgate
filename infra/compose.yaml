@@ -52,6 +52,11 @@ services:
       # 그러면 Gateway는 Fail Closed로 모든 요청을 503으로 막는다 — Compose로 띄운
       # 스택에서 E2E 경로 전체가 죽는다.
       GATEWAY_SERVICE_TOKEN: ${GATEWAY_SERVICE_TOKEN}
+      # 아래 둘도 application.yml이 읽지만 전달되지 않고 있었다. 코드 기본값
+      # (24시간·30일)이 .env.example 값과 같아 조용히 통과했을 뿐이라, .env에서
+      # 값을 바꿔도 컨테이너에는 반영되지 않았다(Codex 리뷰 PR #49 Medium).
+      ENROLLMENT_TOKEN_TTL_HOURS: ${ENROLLMENT_TOKEN_TTL_HOURS}
+      DEVICE_CERTIFICATE_VALIDITY_DAYS: ${DEVICE_CERTIFICATE_VALIDITY_DAYS}
       ROOT_CA_CERT_PATH: ${ROOT_CA_CERT_PATH}
       INTERMEDIATE_CA_CERT_PATH: ${INTERMEDIATE_CA_CERT_PATH}
       INTERMEDIATE_CA_KEY_PATH: ${INTERMEDIATE_CA_KEY_PATH}
