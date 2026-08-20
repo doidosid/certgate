@@ -3,53 +3,57 @@ import { createTheme } from "@mui/material/styles";
 /**
  * CertGate 관리 콘솔의 디자인 톤 (Issue #7 Task 18).
  *
- * 이 화면들이 하는 일은 "이 Device를 신뢰할 수 있는가"를 판정한 기록을 읽는 것이다.
- * 그래서 대시보드가 아니라 발급 대장처럼 보이게 한다 — 표가 주인공이고, 판정은
- * 도장처럼 단단하고, 장식은 없다. 어두운 관제실에서 계기판을 읽는 상황을 기준으로
- * 삼는다: 바닥은 조용하고, 값과 판정만 빛난다.
+ * 사용자가 준 레퍼런스(FINEbank.IO 계열 대시보드)를 기준으로 잡았다: 어두운 사이드바 +
+ * 밝은 콘텐츠, teal 강조, 흰 카드에 옅은 그림자, 회색 섹션 헤딩. 그 위에 이 도메인에
+ * 맞는 판단을 얹었다 — 표가 주인공이고, 판정은 도장처럼 단단하고, 장식은 없다.
  *
  * 제약(계획 문서 Task 18):
  * - 외부 폰트를 새로 끌어오지 않는다. 시스템 폰트 스택만 쓴다.
  * - 채도 높은 색은 상태 표시에만 쓴다.
- * - 단일 테마다. 전환 토글은 만들지 않는다(별도 상태 관리를 두지 않는다는 Issue #7
- *   완료 기준과 같은 이유).
+ * - 단일 테마다. 전환 토글은 만들지 않는다.
  */
 
-/*
- * 어둠에도 층이 있어야 면이 구분된다. 그림자를 쓰지 않으므로 명도 차이와 hairline이
- * 그 일을 한다. 순수 검정을 쓰지 않는 이유는 두 가지다 — 텍스트 후광(halation)이
- * 심해지고, 흔한 "터미널 화면"처럼 읽힌다.
- */
-const CHROME = "#0A0E15"; // AppBar. 밝은 테마에서 잉크가 맡던 "권위" 자리를 그대로 잇는다
-const GROUND = "#10141C"; // 페이지 바닥, 좌측 메뉴
-const PANEL = "#171D28"; // 카드, 표 본문, 활성 메뉴
-const RAISED = "#1D2531"; // 표 머리, 입력 필드
-const HAIRLINE = "#2A3342"; // 모든 경계선
-const RULE = "#3D485C"; // 표 머리를 못 박는 굵은 선
-const TEXT = "#E4E9F2"; // 순백이 아니다 — 어두운 바닥에서 순백은 번진다
-const MUTED = "#98A3B7"; // 보조 텍스트, 열 이름
-const VERDIGRIS = "#3FB3A6"; // 단 하나의 브랜드 색: 링크, 활성 상태, focus
+const INK = "#1D2129"; // 본문·제목
+const MUTED = "#79818D"; // 보조 텍스트, 열 이름, 섹션 헤딩
+const CANVAS = "#F7F8FA"; // 콘텐츠 바닥
+const SURFACE = "#FFFFFF"; // 카드, 표, 상단 헤더
+const HAIRLINE = "#E8EBF0"; // 경계선
 
 /*
- * 상태 4색은 서로 다른 색상 계열에 두고, 어두운 글자와의 명암비를 모두 5:1 이상으로
- * 맞춘다.
- *
- * 상태의 의미를 색이 단독으로 전달하지는 않는다 — StatusChip은 항상 한국어 라벨을
- * 함께 표시하고, 색은 훑어볼 때의 보조 단서다. 네 색은 색상(hue)으로는 뚜렷이 다르지만
- * 명도는 서로 가까워서(상호 대비 1.0~1.4:1) 색상을 인지하지 못하면 구분되지 않는다.
- * 그래서 "색만으로 구분"을 기준으로 삼지 않는다(Codex 리뷰 PR #46 Medium — 색각 이상
- * 시뮬레이션에서 success/error가 같은 황갈색으로 수렴한다). 색 없이도 읽히는 것은
- * 라벨이고, EXPIRED처럼 사건이 아닌 상태는 outlined 형태로 한 번 더 구분한다.
- *
- * 어두운 바닥에서는 밝은 칩에 어두운 글자를 얹는 쪽이 읽기 쉽고, 도장처럼 찍힌
- * 느낌도 살아난다. INFO를 채도 낮은 청회색으로 둔 것은 의도다 — 가장 급하지 않은
- * 심각도가 가장 조용해야 하고, 브랜드 색과도 혼동되지 않는다.
+ * 레퍼런스의 teal은 #2E9E8F인데 흰 배경 대비가 3.0:1로 본문 기준(4.5:1)에 못 미친다.
+ * 그래서 글자·채움에는 한 단계 어두운 값을 쓰고, 밝은 쪽은 차트 라인이나 hover 틴트처럼
+ * 의미를 혼자 전달하지 않는 자리에만 쓴다.
  */
-const SUCCESS = "#35C07C";
-const WARNING = "#DDA02B";
-const ERROR = "#F0685C";
-const INFO = "#8CA6C9";
-const ON_STATUS = "#0E1219";
+const TEAL = "#15756A"; // 링크, 활성 메뉴 채움, 주요 버튼 (흰 글자 대비 5.55:1)
+const TEAL_BRIGHT = "#2E9E8F"; // 장식 전용
+const TEAL_TINT = "rgba(46, 158, 143, 0.08)"; // 행 hover
+
+/** 사이드바는 밝은 테마 팔레트를 쓰지 않는다. AppLayout이 이 값들을 직접 쓴다. */
+export const sidebar = {
+	background: "#1E2024",
+	border: "#2A2D33",
+	text: "#A8B0BA", // #1E2024 대비 7.6:1
+	textActive: "#FFFFFF",
+	brand: "#FFFFFF",
+	activeFill: TEAL,
+	mark: TEAL_BRIGHT,
+};
+
+/*
+ * 상태 4색은 서로 다른 색상 계열에 두고, 흰 글자와의 명암비를 모두 4.5:1 이상으로 맞춘다.
+ *
+ * 상태의 의미를 색이 단독으로 전달하지는 않는다 — StatusChip은 항상 한국어 라벨을 함께
+ * 표시하고, 색은 훑어볼 때의 보조 단서다. 색상으로는 뚜렷이 다르지만 명도는 서로 가까워
+ * 색상을 인지하지 못하면 구분되지 않는다(Codex 리뷰 PR #46 Medium). 색 없이도 읽히는
+ * 것은 라벨이고, EXPIRED처럼 사건이 아닌 상태는 outlined 형태로 한 번 더 구분한다.
+ *
+ * INFO를 채도 낮은 강철색으로 둔 것은 의도다 — 가장 급하지 않은 심각도가 가장 조용해야
+ * 하고, 강조색(teal)과도 혼동되지 않는다.
+ */
+const SUCCESS = "#1E7F3C";
+const WARNING = "#A25700";
+const ERROR = "#B3261E";
+const INFO = "#4A5B7A";
 
 /** 한글 자폭이 깨지지 않도록 Windows·macOS 한글 face를 스택에 함께 둔다. */
 const SANS = [
@@ -65,7 +69,7 @@ const SANS = [
 ].join(",");
 
 /**
- * ASCII 식별자 전용이다. 한글에는 쓰지 않는다 — Consolas·Menlo에 한글이 없어
+ * ASCII 식별자 전용이다. 화면 문구에는 쓰지 않는다 — 등폭 face에 한글 글리프가 없어
  * 한글 face로 떨어지면서 등폭이 아니게 되고 자폭만 어긋난다.
  */
 export const MONO = [
@@ -80,29 +84,30 @@ export const MONO = [
 
 export const theme = createTheme({
 	palette: {
-		mode: "dark",
-		primary: { main: VERDIGRIS, dark: "#2A8F85", light: "#6FCBC0", contrastText: ON_STATUS },
-		secondary: { main: TEXT, contrastText: ON_STATUS },
-		success: { main: SUCCESS, contrastText: ON_STATUS },
-		warning: { main: WARNING, contrastText: ON_STATUS },
-		error: { main: ERROR, contrastText: ON_STATUS },
-		info: { main: INFO, contrastText: ON_STATUS },
-		background: { default: GROUND, paper: PANEL },
-		text: { primary: TEXT, secondary: MUTED },
+		mode: "light",
+		primary: { main: TEAL, dark: "#0F5B53", light: TEAL_BRIGHT, contrastText: "#FFFFFF" },
+		secondary: { main: INK, contrastText: "#FFFFFF" },
+		success: { main: SUCCESS, contrastText: "#FFFFFF" },
+		warning: { main: WARNING, contrastText: "#FFFFFF" },
+		error: { main: ERROR, contrastText: "#FFFFFF" },
+		info: { main: INFO, contrastText: "#FFFFFF" },
+		background: { default: CANVAS, paper: SURFACE },
+		text: { primary: INK, secondary: MUTED },
 		divider: HAIRLINE,
 	},
 
-	shape: { borderRadius: 3 },
+	// 레퍼런스의 카드 모서리에 맞춘다.
+	shape: { borderRadius: 8 },
 
 	typography: {
 		fontFamily: SANS,
 		fontSize: 14,
-		// 페이지 제목. 한글이 섞이므로 tracking을 과하게 조이지 않는다.
-		h4: { fontSize: "1.625rem", fontWeight: 700, letterSpacing: "-0.015em", lineHeight: 1.2 },
+		h4: { fontSize: "1.5rem", fontWeight: 700, letterSpacing: "-0.015em", lineHeight: 1.2 },
 		// 카드·Drawer 제목. 데이터가 주인공이라 제목은 작고 단단하게 둔다.
 		h6: { fontSize: "0.9375rem", fontWeight: 700, letterSpacing: "-0.005em" },
+		// 카드 묶음 위의 섹션 헤딩 — 레퍼런스의 "Goals", "Total Balance" 자리.
+		subtitle1: { fontSize: "1rem", fontWeight: 600, color: MUTED },
 		body2: { fontSize: "0.8125rem", lineHeight: 1.55 },
-		// ASCII 보조 정보(코드·traceId 조각)에 쓰는 자리.
 		caption: { fontFamily: MONO, fontSize: "0.75rem", letterSpacing: 0 },
 		button: { textTransform: "none", fontWeight: 600 },
 	},
@@ -111,11 +116,12 @@ export const theme = createTheme({
 		MuiCssBaseline: {
 			styleOverrides: {
 				/*
-				 * 브라우저가 그리는 UI(datetime-local 달력, select 목록, 스크롤바)까지
-				 * 어둡게 만든다. 이걸 빼면 기간 필터의 달력만 흰 창으로 튀어나온다.
+				 * 브라우저가 직접 그리는 UI(datetime-local 달력, 체크박스, 스크롤바)는 CSS로
+				 * 색을 지정할 수 없고 기본 파란색으로 나온다. 기간 필터의 달력이 화면에서
+				 * 유일하게 파란 요소가 되는데, accent-color 하나로 강조색에 맞출 수 있다.
 				 */
-				html: { colorScheme: "dark" },
-				body: { backgroundColor: GROUND, color: TEXT },
+				"html, body": { accentColor: TEAL },
+				body: { backgroundColor: CANVAS, color: INK },
 				// 움직임을 줄이도록 설정한 사용자에게는 전환을 사실상 끈다.
 				"@media (prefers-reduced-motion: reduce)": {
 					"*": { animationDuration: "0.01ms !important", transitionDuration: "0.01ms !important" },
@@ -123,29 +129,23 @@ export const theme = createTheme({
 			},
 		},
 
-		// 그림자 대신 hairline과 명도 한 단계로 면을 구분한다.
+		/*
+		 * 레퍼런스의 카드 — 흰 면, 옅은 테두리, 아주 약한 그림자 하나. 그림자를 깊게 주지
+		 * 않는다. 운영 도구에서 떠 있는 느낌은 정보를 읽는 데 도움이 되지 않는다.
+		 */
 		MuiPaper: {
 			defaultProps: { elevation: 0 },
 			styleOverrides: {
-				root: { backgroundImage: "none", border: `1px solid ${HAIRLINE}` },
+				root: {
+					backgroundImage: "none",
+					border: `1px solid ${HAIRLINE}`,
+					boxShadow: "0 1px 2px rgba(16, 24, 40, 0.04)",
+				},
 			},
-		},
-
-		MuiAppBar: {
-			defaultProps: { elevation: 0 },
-			styleOverrides: {
-				root: { backgroundColor: CHROME, border: 0, borderBottom: `1px solid ${HAIRLINE}` },
-			},
-		},
-
-		MuiToolbar: {
-			styleOverrides: { root: { minHeight: 56, "@media (min-width:600px)": { minHeight: 56 } } },
 		},
 
 		MuiDrawer: {
-			styleOverrides: {
-				paper: { backgroundColor: GROUND, border: 0, borderRight: `1px solid ${HAIRLINE}` },
-			},
+			styleOverrides: { paper: { backgroundColor: SURFACE, border: 0, boxShadow: "none" } },
 		},
 
 		// 표가 주인공이므로 기본을 밀도 높은 쪽에 둔다.
@@ -153,21 +153,21 @@ export const theme = createTheme({
 
 		MuiTableCell: {
 			styleOverrides: {
-				root: { padding: "6px 12px", borderBottom: `1px solid ${HAIRLINE}` },
+				root: { padding: "10px 16px", borderBottom: `1px solid ${HAIRLINE}` },
 				/*
 				 * 열 이름은 대장의 항목명처럼 읽히게 한다. 한글이라 등폭은 쓰지 않고,
-				 * 작은 크기·굵은 두께·넓은 자간과 굵은 밑줄로 표의 머리를 못 박는다.
+				 * 작은 크기·굵은 두께·넓은 자간으로 표의 머리를 눌러 준다.
 				 */
 				head: {
-					padding: "9px 12px",
-					backgroundColor: RAISED,
+					padding: "11px 16px",
+					backgroundColor: CANVAS,
 					color: MUTED,
 					fontSize: "0.6875rem",
 					fontWeight: 700,
 					letterSpacing: "0.045em",
 					lineHeight: 1.4,
 					whiteSpace: "nowrap",
-					borderBottom: `2px solid ${RULE}`,
+					borderBottom: `1px solid ${HAIRLINE}`,
 				},
 			},
 		},
@@ -176,8 +176,7 @@ export const theme = createTheme({
 			styleOverrides: {
 				root: {
 					"&:last-of-type td": { borderBottom: 0 },
-					// 브랜드 색을 아주 얇게 얹어 짚고 있는 행을 표시한다.
-					"&.MuiTableRow-hover:hover": { backgroundColor: "rgba(63, 179, 166, 0.07)" },
+					"&.MuiTableRow-hover:hover": { backgroundColor: TEAL_TINT },
 				},
 			},
 		},
@@ -193,41 +192,44 @@ export const theme = createTheme({
 		},
 
 		/*
-		 * 시그니처 1 — 판정은 도장이다. mTLS 판정에 "아마도"는 없으므로 알약 모양을
-		 * 쓰지 않는다. 각을 세우고 두께를 올려 찍힌 것처럼 보이게 한다.
+		 * 시그니처 — 판정은 도장이다. mTLS 판정에 "아마도"는 없으므로 알약 모양을 쓰지
+		 * 않는다. 카드 모서리가 둥근 화면에서 각진 칩이 오히려 눈에 걸려 판정을 찾게 한다.
 		 */
 		MuiChip: {
 			styleOverrides: {
 				root: {
-					borderRadius: 2,
+					borderRadius: 3,
 					height: 22,
 					fontSize: "0.75rem",
 					fontWeight: 700,
 					letterSpacing: "0.01em",
 				},
 				label: { paddingLeft: 8, paddingRight: 8 },
-				// "발급 없음"·"만료"처럼 사건이 아닌 상태는 조용해야 한다.
-				outlined: { borderColor: HAIRLINE, color: MUTED, backgroundColor: PANEL },
+				outlined: { borderColor: HAIRLINE, color: MUTED, backgroundColor: SURFACE },
 			},
 		},
 
 		MuiLink: {
 			defaultProps: { underline: "hover" },
-			styleOverrides: { root: { color: VERDIGRIS, fontWeight: 500 } },
+			styleOverrides: { root: { color: TEAL, fontWeight: 500 } },
+		},
+
+		// 레퍼런스의 "Adjust ✎"처럼 옅은 테두리 + 강조색 글자.
+		MuiButton: {
+			defaultProps: { disableElevation: true },
+			styleOverrides: { root: { borderRadius: 6 } },
 		},
 
 		MuiButtonBase: {
 			styleOverrides: {
-				root: {
-					"&.Mui-focusVisible": { outline: `2px solid ${VERDIGRIS}`, outlineOffset: 2 },
-				},
+				root: { "&.Mui-focusVisible": { outline: `2px solid ${TEAL}`, outlineOffset: 2 } },
 			},
 		},
 
 		MuiOutlinedInput: {
 			styleOverrides: {
 				notchedOutline: { borderColor: HAIRLINE },
-				root: { backgroundColor: RAISED },
+				root: { backgroundColor: SURFACE, borderRadius: 6 },
 			},
 		},
 
@@ -235,10 +237,6 @@ export const theme = createTheme({
 
 		MuiFormHelperText: { styleOverrides: { root: { marginLeft: 2, fontSize: "0.6875rem" } } },
 
-		MuiAlert: { styleOverrides: { root: { borderRadius: 3 } } },
-
-		MuiListItemText: {
-			styleOverrides: { primary: { fontSize: "0.875rem", fontWeight: 500 } },
-		},
+		MuiListItemText: { styleOverrides: { primary: { fontSize: "0.875rem", fontWeight: 500 } } },
 	},
 });

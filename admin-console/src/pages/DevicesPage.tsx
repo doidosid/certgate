@@ -1,4 +1,7 @@
+import { useState } from "react";
+import Button from "@mui/material/Button";
 import DeviceFilters from "../features/device/DeviceFilters";
+import DeviceRegisterDialog from "../features/device/DeviceRegisterDialog";
 import { useDevices } from "../features/device/queries";
 import {
 	certificateStatusColor,
@@ -41,6 +44,7 @@ const COLUMNS: Column<DeviceListItem>[] = [
 
 export default function DevicesPage() {
 	const { page, size, setPage, setSize, setParam, get } = usePageParams();
+	const [registerOpen, setRegisterOpen] = useState(false);
 	const query = get("query") ?? "";
 	const status = get("status") ?? "";
 	const roleName = get("roleName") ?? "";
@@ -49,7 +53,14 @@ export default function DevicesPage() {
 
 	return (
 		<>
-			<PageHeader title="Devices" />
+			<PageHeader
+				title="Devices"
+				actions={
+					<Button variant="contained" onClick={() => setRegisterOpen(true)}>
+						디바이스 등록
+					</Button>
+				}
+			/>
 			<DeviceFilters
 				query={query}
 				status={status}
@@ -82,6 +93,8 @@ export default function DevicesPage() {
 					getRowHref={(row) => `/devices/${row.id}`}
 				/>
 			</QueryState>
+
+			<DeviceRegisterDialog open={registerOpen} onClose={() => setRegisterOpen(false)} />
 		</>
 	);
 }
