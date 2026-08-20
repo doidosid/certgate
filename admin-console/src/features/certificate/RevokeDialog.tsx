@@ -1,3 +1,4 @@
+import Alert from "@mui/material/Alert";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import ConfirmDialog from "../../shared/ui/ConfirmDialog";
@@ -9,6 +10,8 @@ export const MAX_NOTE_LENGTH = 500;
 interface Props {
 	open: boolean;
 	serialNumber: string;
+	/** 재조회 결과 이미 폐기된 것으로 확인된 경우. 다시 보낼 수 없다. */
+	alreadyRevoked: boolean;
 	reason: string;
 	note: string;
 	isPending: boolean;
@@ -32,6 +35,7 @@ interface Props {
 export default function RevokeDialog({
 	open,
 	serialNumber,
+	alreadyRevoked,
 	reason,
 	note,
 	isPending,
@@ -55,14 +59,25 @@ export default function RevokeDialog({
 			error={error}
 			onConfirm={onConfirm}
 			onClose={onClose}
-			confirmDisabled={reason.trim() === "" || reasonTooLong || noteTooLong}
+			confirmDisabled={alreadyRevoked || reason.trim() === "" || reasonTooLong || noteTooLong}
 		>
 			<Stack spacing={2}>
+				{/*
+				 * 409 뒤 재조회가 REVOKED를 확인했으면 같은 요청을 다시 보낼 수 없다. 오류만
+				 * 띄우고 확인 버튼을 열어 두면 성공할 수 없는 POST를 반복하게 된다
+				 * (Codex 리뷰 PR #47 Medium).
+				 */}
+				{alreadyRevoked && (
+					<Alert severity="info">
+						이 인증서는 이미 폐기되어 있습니다. 창을 닫고 상태를 확인하세요.
+					</Alert>
+				)}
 				{/* 사유는 감사 기록으로 남는다. 서버도 필수로 검증한다(REVOCATION_REASON_REQUIRED). */}
 				<TextField
 					label={`폐기 사유 (필수, ${MAX_REASON_LENGTH}자 이내)`}
 					fullWidth
 					required
+					disabled={alreadyRevoked}
 					value={reason}
 					error={reasonTooLong}
 					helperText={`${reason.length}/${MAX_REASON_LENGTH}`}
@@ -73,6 +88,7 @@ export default function RevokeDialog({
 					fullWidth
 					multiline
 					minRows={2}
+					disabled={alreadyRevoked}
 					value={note}
 					error={noteTooLong}
 					helperText={`${note.length}/${MAX_NOTE_LENGTH}`}

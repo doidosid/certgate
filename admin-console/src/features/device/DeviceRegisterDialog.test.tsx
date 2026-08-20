@@ -16,7 +16,15 @@ function renderDialog(onClose = vi.fn()) {
 			<DeviceRegisterDialog open onClose={onClose} />
 		</QueryClientProvider>,
 	);
-	return { ...rendered, onClose };
+	return { ...rendered, onClose, queryClient };
+}
+
+/** Mutation Cache 어디에도 평문이 없는지 본다 — variables·data 전부 훑는다. */
+function mutationCacheContains(queryClient: QueryClient, secret: string): boolean {
+	return queryClient
+		.getMutationCache()
+		.getAll()
+		.some((mutation) => JSON.stringify(mutation.state).includes(secret));
 }
 
 /** 등록 폼을 채우고 제출한다. Role은 서버 목록(SENSOR·OPERATOR)에서 고른다. */
@@ -94,6 +102,46 @@ describe("DeviceRegisterDialog", () => {
 		expect(screen.getByText(/다시 조회할 수 없고/)).toBeInTheDocument();
 		// 발급 후에는 등록을 다시 누를 수 없다 — 폼이 사라진다.
 		expect(screen.queryByRole("button", { name: "등록" })).not.toBeInTheDocument();
+	});
+
+	/**
+	 * 평문이 mutation의 data가 되면 화면에서 지워도 Mutation Cache에 남는다. `reset()`은
+	 * observer만 떼고 gc를 예약할 뿐이어서 기본 5분 동안 `getMutationCache()`로 꺼낼 수
+	 * 있다(query-core mutation.js의 removeObserver). 그래서 응답을 mutation data로 만들지
+	 * 않는다(Codex 리뷰 PR #47 Critical).
+	 */
+	it("never puts the plaintext token in the mutation cache", async () => {
+		const { queryClient } = renderDialog();
+		await fillAndSubmit();
+		await screen.findByText(deviceRegistered.enrollmentToken);
+
+		expect(mutationCacheContains(queryClient, deviceRegistered.enrollmentToken)).toBe(false);
+
+		await userEvent.click(screen.getByRole("button", { name: "닫기" }));
+
+		expect(mutationCacheContains(queryClient, deviceRegistered.enrollmentToken)).toBe(false);
+	});
+
+	/**
+	 * Token은 서버가 한 번만 준다. 목록 재조회가 느리다고 표시를 미루면 그 사이의 새로고침·
+	 * 이탈로 사용자가 발급된 값을 영구히 놓친다(Codex 리뷰 PR #47 High).
+	 */
+	it("shows the token without waiting for the device list to refetch", async () => {
+		let listCalls = 0;
+		mockServer.use(
+			http.get("/api/v1/devices", async () => {
+				listCalls += 1;
+				// 등록 후 재조회는 아주 느리다.
+				if (listCalls > 1) {
+					await new Promise((resolve) => setTimeout(resolve, 3000));
+				}
+				return HttpResponse.json({ content: [], page: 0, size: 20, totalElements: 0, totalPages: 0 });
+			}),
+		);
+		renderDialog();
+		await fillAndSubmit();
+
+		expect(await screen.findByText(deviceRegistered.enrollmentToken, undefined, { timeout: 2000 })).toBeInTheDocument();
 	});
 
 	it("copies the token to the clipboard", async () => {

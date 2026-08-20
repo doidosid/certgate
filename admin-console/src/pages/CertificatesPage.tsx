@@ -262,6 +262,7 @@ export default function CertificatesPage() {
 			<RevokeDialog
 				open={revokeOpen}
 				serialNumber={detail.data?.serialNumber ?? ""}
+				alreadyRevoked={shownStatus === "REVOKED"}
 				reason={reason}
 				note={note}
 				isPending={revoke.isPending}

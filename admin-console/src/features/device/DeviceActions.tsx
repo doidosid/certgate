@@ -9,7 +9,13 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import ConfirmDialog from "../../shared/ui/ConfirmDialog";
 import EnrollmentTokenPanel from "./EnrollmentTokenPanel";
-import { useReissueToken, useRoles, useUpdateDeviceRole, useUpdateDeviceStatus } from "./queries";
+import {
+	useReissueToken,
+	useRoles,
+	useUpdateDeviceRole,
+	useUpdateDeviceStatus,
+	type IssuedEnrollmentToken,
+} from "./queries";
 import type { DeviceDetail } from "../../shared/api/types";
 
 interface Props {
@@ -28,12 +34,13 @@ type OpenDialog = "status" | "role" | "token" | null;
 export default function DeviceActions({ device }: Props) {
 	const [open, setOpen] = useState<OpenDialog>(null);
 	const [roleName, setRoleName] = useState(device.roleName);
-	const [issued, setIssued] = useState<{ token: string; expiresAt: string } | null>(null);
+	const [issued, setIssued] = useState<IssuedEnrollmentToken | null>(null);
 
 	const roles = useRoles();
 	const updateStatus = useUpdateDeviceStatus();
 	const updateRole = useUpdateDeviceRole();
-	const reissue = useReissueToken();
+	// 평문은 mutation의 data를 거치지 않고 여기로 바로 들어온다(queries.ts 주석 참고).
+	const reissue = useReissueToken(setIssued);
 
 	const willDisable = device.status === "ACTIVE";
 	const busy = updateStatus.isPending || updateRole.isPending || reissue.isPending;
@@ -50,7 +57,15 @@ export default function DeviceActions({ device }: Props) {
 	return (
 		<>
 			<Stack direction="row" spacing={1}>
-				<Button variant="outlined" disabled={busy} onClick={() => setOpen("role")}>
+				<Button
+					variant="outlined"
+					disabled={busy}
+					// 열 때마다 최신 Role로 초기화한다. mount 이후 다른 관리자가 바꿨을 수 있다.
+					onClick={() => {
+						setRoleName(device.roleName);
+						setOpen("role");
+					}}
+				>
 					Role 변경
 				</Button>
 				<Button variant="outlined" disabled={busy} onClick={() => setOpen("token")}>
@@ -132,18 +147,7 @@ export default function DeviceActions({ device }: Props) {
 					confirmLabel="재발급"
 					isPending={reissue.isPending}
 					error={reissue.error}
-					onConfirm={() =>
-						reissue.mutate(
-							{ deviceId: device.id },
-							{
-								onSuccess: (token) => {
-									setIssued({ token: token.enrollmentToken, expiresAt: token.enrollmentExpiresAt });
-									// 평문이 mutation 상태에 남지 않게 지운다.
-									reissue.reset();
-								},
-							},
-						)
-					}
+					onConfirm={() => reissue.mutate({ deviceId: device.id })}
 					onClose={close}
 				/>
 			) : (

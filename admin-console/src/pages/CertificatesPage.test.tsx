@@ -294,6 +294,42 @@ describe("CertificatesPage", () => {
 		expect(screen.getByText(/trace-5/)).toBeInTheDocument();
 	});
 
+	/**
+	 * 409 뒤 재조회가 REVOKED를 확인했으면 같은 요청을 다시 보낼 수 없어야 한다. 오류만
+	 * 띄우고 확인 버튼을 열어 두면 성공할 수 없는 POST를 반복하게 된다
+	 * (Codex 리뷰 PR #47 Medium).
+	 */
+	it("stops resubmission once the conflict is confirmed by the refetched detail", async () => {
+		let detailCalls = 0;
+		let revokeCalls = 0;
+		mockServer.use(
+			http.get("/api/v1/certificates/:certificateId", () => {
+				detailCalls += 1;
+				// 첫 조회는 VALID, 재조회부터는 다른 관리자가 이미 폐기한 실제 상태다.
+				return HttpResponse.json(detailCalls === 1 ? CERTIFICATE : { ...CERTIFICATE, status: "REVOKED" });
+			}),
+			http.post("/api/v1/certificates/:certificateId/revoke", () => {
+				revokeCalls += 1;
+				return HttpResponse.json(
+					{ code: "CONFLICT", message: "이미 폐기된 인증서입니다.", traceId: "trace-7", fieldErrors: [] },
+					{ status: 409 },
+				);
+			}),
+		);
+		renderAt("/certificates");
+		const drawer = await openFirstCertificate();
+
+		await userEvent.click(within(drawer).getByRole("button", { name: "폐기" }));
+		await userEvent.type(screen.getByLabelText(/폐기 사유/), "KEY_COMPROMISE");
+		await userEvent.click(await screen.findByRole("button", { name: "폐기하기" }));
+
+		expect(await screen.findByText("이미 폐기된 인증서입니다.")).toBeInTheDocument();
+		// 재조회가 확정한 뒤에는 같은 Dialog에서 다시 보낼 수 없다.
+		expect(await screen.findByText(/이미 폐기되어 있습니다/)).toBeInTheDocument();
+		await waitFor(() => expect(screen.getByRole("button", { name: "폐기하기" })).toBeDisabled());
+		expect(revokeCalls).toBe(1);
+	});
+
 	it("sends the status and expiry filters to the server", async () => {
 		const seen: string[] = [];
 		mockServer.use(

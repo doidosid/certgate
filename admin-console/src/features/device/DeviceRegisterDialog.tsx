@@ -12,16 +12,11 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { ApiError } from "../../shared/api/ApiError";
 import EnrollmentTokenPanel from "./EnrollmentTokenPanel";
-import { useRegisterDevice, useRoles } from "./queries";
+import { useRegisterDevice, useRoles, type IssuedEnrollmentToken } from "./queries";
 
 interface Props {
 	open: boolean;
 	onClose: () => void;
-}
-
-interface IssuedToken {
-	token: string;
-	expiresAt: string;
 }
 
 /**
@@ -35,25 +30,17 @@ export default function DeviceRegisterDialog({ open, onClose }: Props) {
 	const [deviceKey, setDeviceKey] = useState("");
 	const [name, setName] = useState("");
 	const [roleName, setRoleName] = useState("");
-	const [issued, setIssued] = useState<IssuedToken | null>(null);
+	const [issued, setIssued] = useState<IssuedEnrollmentToken | null>(null);
 
 	const roles = useRoles();
-	const register = useRegisterDevice();
+	// 평문은 mutation의 data를 거치지 않고 여기로 바로 들어온다(queries.ts 주석 참고).
+	const register = useRegisterDevice(setIssued);
 
 	const canSubmit =
 		deviceKey.trim() !== "" && name.trim() !== "" && roleName !== "" && !register.isPending;
 
 	function submit() {
-		register.mutate(
-			{ deviceKey: deviceKey.trim(), name: name.trim(), roleName },
-			{
-				onSuccess: (device) => {
-					setIssued({ token: device.enrollmentToken, expiresAt: device.enrollmentExpiresAt });
-					// 평문이 mutation 상태에 남지 않게 지운다. 표시는 지역 상태가 담당한다.
-					register.reset();
-				},
-			},
-		);
+		register.mutate({ deviceKey: deviceKey.trim(), name: name.trim(), roleName });
 	}
 
 	function close() {

@@ -6,7 +6,7 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { http, HttpResponse } from "msw";
 import { routes } from "../app/routes";
 import { mockServer } from "../mocks/server";
-import { deviceSummary, enrollmentTokenIssued } from "../mocks/fixtures";
+import { deviceDetail as deviceDetailFixture, deviceSummary, enrollmentTokenIssued } from "../mocks/fixtures";
 
 function renderAt(path: string) {
 	const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -19,6 +19,17 @@ function renderAt(path: string) {
 }
 
 const DEVICE_ID = "0d6515ae-d560-4777-b102-054e71f98ef9";
+
+/**
+ * Dialog가 완전히 사라질 때까지 기다린다. MUI Dialog는 닫히는 transition 동안에도 DOM에
+ * 남아 있고, modal이 열려 있으면 나머지 화면에 `aria-hidden`이 걸려 `*ByRole`이 페이지의
+ * 버튼을 보지 못한다.
+ */
+async function closedDialog() {
+	await waitFor(() => {
+		expect(screen.queryByRole("button", { name: "취소" })).not.toBeInTheDocument();
+	});
+}
 
 describe("DeviceDetailPage", () => {
 	it("shows basic info, certificate, policy rules and recent events", async () => {
@@ -118,6 +129,44 @@ describe("DeviceDetailPage", () => {
 			await userEvent.click(screen.getByRole("button", { name: "비활성화", hidden: false }));
 
 			await waitFor(() => expect(bodies).toEqual([{ status: "DISABLED" }]));
+		});
+
+		/**
+		 * Dialog를 열 때마다 최신 Role로 초기화해야 한다. mount 시점 값을 계속 들고 있으면,
+		 * 다른 관리자가 Role을 바꾼 뒤 이 화면이 재조회된 상태에서 Dialog를 열면 확인 버튼이
+		 * 곧바로 활성화되고 사용자가 고르지도 않은 이전 Role로 되돌리는 요청이 나간다
+		 * (Codex 리뷰 PR #47 Medium).
+		 */
+		it("initialises the role draft from the latest device data each time it opens", async () => {
+			let detailCalls = 0;
+			mockServer.use(
+				http.get("/api/v1/devices/:deviceId", () => {
+					detailCalls += 1;
+					// 두 번째 조회부터는 다른 관리자가 Role을 OPERATOR로 바꿔 둔 상태다.
+					return HttpResponse.json({
+						...deviceDetailFixture,
+						roleName: detailCalls === 1 ? "SENSOR" : "OPERATOR",
+					});
+				}),
+			);
+			renderAt(`/devices/${DEVICE_ID}`);
+
+			// 첫 렌더에서 한 번 열고 닫아 mount 시점 값(SENSOR)을 draft에 담아 둔다.
+			await userEvent.click(await screen.findByRole("button", { name: "Role 변경" }));
+			await userEvent.click(await screen.findByRole("button", { name: "취소" }));
+			await closedDialog();
+
+			// 상태 변경으로 상세를 다시 읽게 만든다 → roleName이 OPERATOR가 된다.
+			await userEvent.click(screen.getByRole("button", { name: "비활성화" }));
+			await userEvent.click(await screen.findByRole("button", { name: "비활성화" }));
+			await waitFor(() => expect(detailCalls).toBeGreaterThan(1));
+			await closedDialog();
+
+			await userEvent.click(await screen.findByRole("button", { name: "Role 변경" }));
+
+			// 고르지 않았으므로 보낼 것이 없다.
+			expect(await screen.findByRole("button", { name: "변경" })).toBeDisabled();
+			expect(screen.getByDisplayValue("OPERATOR")).toBeInTheDocument();
 		});
 
 		/** 같은 Role로 바꾸는 것은 동작이 아니다. 서버에 보내지 않는다. */
