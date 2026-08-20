@@ -5,32 +5,44 @@ import { createTheme } from "@mui/material/styles";
  *
  * 이 화면들이 하는 일은 "이 Device를 신뢰할 수 있는가"를 판정한 기록을 읽는 것이다.
  * 그래서 대시보드가 아니라 발급 대장처럼 보이게 한다 — 표가 주인공이고, 판정은
- * 도장처럼 단단하고, 장식은 없다.
+ * 도장처럼 단단하고, 장식은 없다. 어두운 관제실에서 계기판을 읽는 상황을 기준으로
+ * 삼는다: 바닥은 조용하고, 값과 판정만 빛난다.
  *
  * 제약(계획 문서 Task 18):
  * - 외부 폰트를 새로 끌어오지 않는다. 시스템 폰트 스택만 쓴다.
- * - 다크 모드는 만들지 않는다.
  * - 채도 높은 색은 상태 표시에만 쓴다.
+ * - 단일 테마다. 전환 토글은 만들지 않는다(별도 상태 관리를 두지 않는다는 Issue #7
+ *   완료 기준과 같은 이유).
  */
-
-const INK = "#161B2E"; // 권위: AppBar, 제목, 본문
-const SLATE = "#5A6478"; // 보조 텍스트, 열 이름
-const CANVAS = "#F5F6F8"; // 페이지 바닥, 표 머리
-const SURFACE = "#FFFFFF"; // 카드, 표 본문
-const VERDIGRIS = "#0B6E6E"; // 단 하나의 브랜드 색: 링크, 활성 상태, focus
-const HAIRLINE = "#E3E6EB"; // 모든 경계선
 
 /*
- * 상태 4색은 서로 다른 색상 계열에 두고, 흰 글자와의 명암비를 모두 4.5:1 이상으로
+ * 어둠에도 층이 있어야 면이 구분된다. 그림자를 쓰지 않으므로 명도 차이와 hairline이
+ * 그 일을 한다. 순수 검정을 쓰지 않는 이유는 두 가지다 — 텍스트 후광(halation)이
+ * 심해지고, 흔한 "터미널 화면"처럼 읽힌다.
+ */
+const CHROME = "#0A0E15"; // AppBar. 밝은 테마에서 잉크가 맡던 "권위" 자리를 그대로 잇는다
+const GROUND = "#10141C"; // 페이지 바닥, 좌측 메뉴
+const PANEL = "#171D28"; // 카드, 표 본문, 활성 메뉴
+const RAISED = "#1D2531"; // 표 머리, 입력 필드
+const HAIRLINE = "#2A3342"; // 모든 경계선
+const RULE = "#3D485C"; // 표 머리를 못 박는 굵은 선
+const TEXT = "#E4E9F2"; // 순백이 아니다 — 어두운 바닥에서 순백은 번진다
+const MUTED = "#98A3B7"; // 보조 텍스트, 열 이름
+const VERDIGRIS = "#3FB3A6"; // 단 하나의 브랜드 색: 링크, 활성 상태, focus
+
+/*
+ * 상태 4색은 서로 다른 색상 계열에 두고, 어두운 글자와의 명암비를 모두 5:1 이상으로
  * 맞춘다. 인증서 상태(유효·만료 임박·만료·폐기)를 색만으로 구분해야 한다.
  *
- * INFO를 채도 낮은 강철색으로 둔 것은 의도다 — 가장 급하지 않은 심각도가 가장 조용해야
- * 하고, 동시에 브랜드 색(녹청)과 혼동되지 않는다.
+ * 어두운 바닥에서는 밝은 칩에 어두운 글자를 얹는 쪽이 읽기 쉽고, 도장처럼 찍힌
+ * 느낌도 살아난다. INFO를 채도 낮은 청회색으로 둔 것은 의도다 — 가장 급하지 않은
+ * 심각도가 가장 조용해야 하고, 브랜드 색과도 혼동되지 않는다.
  */
-const SUCCESS = "#1E7F3C";
-const WARNING = "#A25700";
-const ERROR = "#B3261E";
-const INFO = "#4A5B7A";
+const SUCCESS = "#35C07C";
+const WARNING = "#DDA02B";
+const ERROR = "#F0685C";
+const INFO = "#8CA6C9";
+const ON_STATUS = "#0E1219";
 
 /** 한글 자폭이 깨지지 않도록 Windows·macOS 한글 face를 스택에 함께 둔다. */
 const SANS = [
@@ -61,15 +73,15 @@ export const MONO = [
 
 export const theme = createTheme({
 	palette: {
-		mode: "light",
-		primary: { main: VERDIGRIS, dark: "#075252", light: "#3B8E8E", contrastText: "#FFFFFF" },
-		secondary: { main: INK, contrastText: "#FFFFFF" },
-		success: { main: SUCCESS, contrastText: "#FFFFFF" },
-		warning: { main: WARNING, contrastText: "#FFFFFF" },
-		error: { main: ERROR, contrastText: "#FFFFFF" },
-		info: { main: INFO, contrastText: "#FFFFFF" },
-		background: { default: CANVAS, paper: SURFACE },
-		text: { primary: INK, secondary: SLATE },
+		mode: "dark",
+		primary: { main: VERDIGRIS, dark: "#2A8F85", light: "#6FCBC0", contrastText: ON_STATUS },
+		secondary: { main: TEXT, contrastText: ON_STATUS },
+		success: { main: SUCCESS, contrastText: ON_STATUS },
+		warning: { main: WARNING, contrastText: ON_STATUS },
+		error: { main: ERROR, contrastText: ON_STATUS },
+		info: { main: INFO, contrastText: ON_STATUS },
+		background: { default: GROUND, paper: PANEL },
+		text: { primary: TEXT, secondary: MUTED },
 		divider: HAIRLINE,
 	},
 
@@ -91,7 +103,12 @@ export const theme = createTheme({
 	components: {
 		MuiCssBaseline: {
 			styleOverrides: {
-				body: { backgroundColor: CANVAS, color: INK },
+				/*
+				 * 브라우저가 그리는 UI(datetime-local 달력, select 목록, 스크롤바)까지
+				 * 어둡게 만든다. 이걸 빼면 기간 필터의 달력만 흰 창으로 튀어나온다.
+				 */
+				html: { colorScheme: "dark" },
+				body: { backgroundColor: GROUND, color: TEXT },
 				// 움직임을 줄이도록 설정한 사용자에게는 전환을 사실상 끈다.
 				"@media (prefers-reduced-motion: reduce)": {
 					"*": { animationDuration: "0.01ms !important", transitionDuration: "0.01ms !important" },
@@ -99,7 +116,7 @@ export const theme = createTheme({
 			},
 		},
 
-		// 그림자 대신 hairline 하나로 면을 구분한다. 운영 도구에 깊이감은 필요 없다.
+		// 그림자 대신 hairline과 명도 한 단계로 면을 구분한다.
 		MuiPaper: {
 			defaultProps: { elevation: 0 },
 			styleOverrides: {
@@ -110,7 +127,7 @@ export const theme = createTheme({
 		MuiAppBar: {
 			defaultProps: { elevation: 0 },
 			styleOverrides: {
-				root: { backgroundColor: INK, border: 0, borderBottom: `1px solid ${INK}` },
+				root: { backgroundColor: CHROME, border: 0, borderBottom: `1px solid ${HAIRLINE}` },
 			},
 		},
 
@@ -120,7 +137,7 @@ export const theme = createTheme({
 
 		MuiDrawer: {
 			styleOverrides: {
-				paper: { backgroundColor: CANVAS, border: 0, borderRight: `1px solid ${HAIRLINE}` },
+				paper: { backgroundColor: GROUND, border: 0, borderRight: `1px solid ${HAIRLINE}` },
 			},
 		},
 
@@ -132,18 +149,18 @@ export const theme = createTheme({
 				root: { padding: "6px 12px", borderBottom: `1px solid ${HAIRLINE}` },
 				/*
 				 * 열 이름은 대장의 항목명처럼 읽히게 한다. 한글이라 등폭은 쓰지 않고,
-				 * 작은 크기·굵은 두께·넓은 자간과 잉크색 밑줄로 표의 머리를 못 박는다.
+				 * 작은 크기·굵은 두께·넓은 자간과 굵은 밑줄로 표의 머리를 못 박는다.
 				 */
 				head: {
 					padding: "9px 12px",
-					backgroundColor: CANVAS,
-					color: SLATE,
+					backgroundColor: RAISED,
+					color: MUTED,
 					fontSize: "0.6875rem",
 					fontWeight: 700,
 					letterSpacing: "0.045em",
 					lineHeight: 1.4,
 					whiteSpace: "nowrap",
-					borderBottom: `2px solid ${INK}`,
+					borderBottom: `2px solid ${RULE}`,
 				},
 			},
 		},
@@ -152,7 +169,8 @@ export const theme = createTheme({
 			styleOverrides: {
 				root: {
 					"&:last-of-type td": { borderBottom: 0 },
-					"&.MuiTableRow-hover:hover": { backgroundColor: "#EFF3F3" },
+					// 브랜드 색을 아주 얇게 얹어 짚고 있는 행을 표시한다.
+					"&.MuiTableRow-hover:hover": { backgroundColor: "rgba(63, 179, 166, 0.07)" },
 				},
 			},
 		},
@@ -161,8 +179,8 @@ export const theme = createTheme({
 			styleOverrides: {
 				root: { borderTop: `1px solid ${HAIRLINE}` },
 				// 쪽수·건수는 숫자라 등폭이 실제로 읽기 쉽다.
-				displayedRows: { fontFamily: MONO, fontSize: "0.75rem", color: SLATE },
-				selectLabel: { fontSize: "0.75rem", color: SLATE },
+				displayedRows: { fontFamily: MONO, fontSize: "0.75rem", color: MUTED },
+				selectLabel: { fontSize: "0.75rem", color: MUTED },
 				select: { fontFamily: MONO, fontSize: "0.75rem" },
 			},
 		},
@@ -181,7 +199,8 @@ export const theme = createTheme({
 					letterSpacing: "0.01em",
 				},
 				label: { paddingLeft: 8, paddingRight: 8 },
-				outlined: { borderColor: HAIRLINE, color: SLATE, backgroundColor: SURFACE },
+				// "발급 없음"·"만료"처럼 사건이 아닌 상태는 조용해야 한다.
+				outlined: { borderColor: HAIRLINE, color: MUTED, backgroundColor: PANEL },
 			},
 		},
 
@@ -201,7 +220,7 @@ export const theme = createTheme({
 		MuiOutlinedInput: {
 			styleOverrides: {
 				notchedOutline: { borderColor: HAIRLINE },
-				root: { backgroundColor: SURFACE },
+				root: { backgroundColor: RAISED },
 			},
 		},
 

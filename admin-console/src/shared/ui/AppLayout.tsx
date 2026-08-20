@@ -23,7 +23,7 @@ export default function AppLayout() {
 		<Box sx={{ display: "flex", minHeight: "100vh" }}>
 			<AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
 				<Toolbar>
-					<Typography variant="h6" noWrap sx={{ color: "common.white" }}>
+					<Typography variant="h6" noWrap sx={{ color: "text.primary" }}>
 						CertGate
 					</Typography>
 					{/*

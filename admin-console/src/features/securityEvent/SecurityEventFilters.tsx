@@ -48,7 +48,7 @@ export default function SecurityEventFilters({ values, onChange }: Props) {
 				label="시작"
 				type="datetime-local"
 				size="small"
-				sx={{ width: 190 }}
+				sx={{ width: 205 }}
 				value={values.from}
 				slotProps={{ inputLabel: { shrink: true } }}
 				onChange={(event) => onChange("from", event.target.value)}
@@ -59,7 +59,7 @@ export default function SecurityEventFilters({ values, onChange }: Props) {
 				label="종료"
 				type="datetime-local"
 				size="small"
-				sx={{ width: 190 }}
+				sx={{ width: 205 }}
 				value={values.to}
 				slotProps={{ inputLabel: { shrink: true } }}
 				onChange={(event) => onChange("to", event.target.value)}
