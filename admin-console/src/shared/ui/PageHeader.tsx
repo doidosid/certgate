@@ -8,20 +8,31 @@ interface Props {
 }
 
 /**
- * routes.test.tsx가 getByRole("heading", { name })으로 화면을 찾으므로, 모든
- * 페이지는 이 컴포넌트를 쓰고 제목 문자열을 유지해야 한다.
+ * 콘텐츠 영역의 흰 헤더 띠. 사이드바가 최상단부터 내려오므로 상단바는 이 영역에만 걸린다
+ * (레퍼런스 구조). 페이지 본문은 이 아래 회색 바닥 위에 놓인다.
  *
- * 제목 왼쪽의 3px 세로선은 활성 메뉴의 선과 같은 것이다 — 인증서 체인이 권한을
- * 물려주는 모양을 화면에서 두 번만 말하고 그 외에는 쓰지 않는다.
+ * routes.test.tsx가 getByRole("heading", { name })으로 화면을 찾으므로, 모든 페이지는 이
+ * 컴포넌트를 쓰고 제목 문자열을 유지해야 한다.
  */
 export default function PageHeader({ title, actions }: Props) {
 	return (
-		<Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2.5 }}>
-			<Typography
-				variant="h4"
-				component="h1"
-				sx={{ borderLeft: 3, borderColor: "primary.main", pl: 1.75, lineHeight: 1.1 }}
-			>
+		<Box
+			sx={{
+				display: "flex",
+				alignItems: "center",
+				justifyContent: "space-between",
+				gap: 2,
+				// main의 좌우 여백을 상쇄해 헤더만 콘텐츠 영역 전체 폭으로 흘려보낸다.
+				mx: -3,
+				px: 3,
+				py: 2.25,
+				mb: 3,
+				backgroundColor: "background.paper",
+				borderBottom: 1,
+				borderColor: "divider",
+			}}
+		>
+			<Typography variant="h4" component="h1">
 				{title}
 			</Typography>
 			{actions}

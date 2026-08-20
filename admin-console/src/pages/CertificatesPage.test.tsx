@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -164,7 +164,9 @@ describe("CertificatesPage", () => {
 		await userEvent.click(within(drawer).getByRole("button", { name: "폐기" }));
 		const confirm = await screen.findByRole("button", { name: "폐기하기" });
 
-		await userEvent.type(screen.getByLabelText(/폐기 사유/), "가".repeat(65));
+		// 65글자를 한 글자씩 입력하면 keystroke마다 re-render가 일어나 느리다. 긴 값
+		// 하나를 넣는 것이 목적이므로 change 이벤트로 한 번에 넣는다.
+		fireEvent.change(screen.getByLabelText(/폐기 사유/), { target: { value: "가".repeat(65) } });
 
 		expect(screen.getByText("65/64")).toBeInTheDocument();
 		expect(confirm).toBeDisabled();
