@@ -76,6 +76,17 @@ func (c *Client) GetAccessContext(ctx context.Context, serialNumber string) (Acc
 	return resp, nil
 }
 
+// Ping is a lightweight reachability check against the Management API's own
+// Spring Actuator health Endpoint, used for Gateway Readiness (Issue #36).
+// It is unauthenticated and doesn't touch Access Context, Certificate, or
+// Device state.
+func (c *Client) Ping(ctx context.Context) error {
+	var resp struct {
+		Status string `json:"status"`
+	}
+	return c.do(ctx, http.MethodGet, "/actuator/health", nil, http.StatusOK, &resp)
+}
+
 // PostSecurityEvents submits a Security Event batch. The Management API
 // accepts or rejects the whole batch atomically (docs/api-spec.md §7).
 func (c *Client) PostSecurityEvents(ctx context.Context, events []event.Event) (BatchResult, error) {
