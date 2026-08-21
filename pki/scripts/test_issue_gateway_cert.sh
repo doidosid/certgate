@@ -60,9 +60,14 @@ cert_count="$(grep -c "BEGIN CERTIFICATE" "$WORK_DIR/ca-a/gateway.crt")"
   || fail "gateway.crt has $cert_count certificate(s); expected leaf + intermediate"
 
 # 두 번째 인증서가 실제로 이 CA의 Intermediate인지 확인한다. 아무거나 붙였는지
-# 개수만으로는 알 수 없다.
-second_cert="$(awk '/BEGIN CERTIFICATE/{n++} n==2' "$WORK_DIR/ca-a/gateway.crt")"
-[ "$second_cert" = "$(cat "$WORK_DIR/ca-a/intermediate-ca.crt")" ] \
+# 개수만으로는 알 수 없다. 텍스트를 그대로 비교하지 않고 지문으로 비교한다 —
+# Windows에서 gawk가 일부 텍스트를 CRLF -> LF로 정규화해서 원본 파일과의 순수
+# 바이트 비교가 우연히 깨지는 것을 봤다. 지문 비교는 그 표현 방식과 무관하게
+# 실제로 같은 인증서인지만 본다.
+second_cert_fingerprint="$(awk '/BEGIN CERTIFICATE/{n++} n==2' "$WORK_DIR/ca-a/gateway.crt" \
+  | openssl x509 -noout -fingerprint -sha256)"
+intermediate_fingerprint="$(openssl x509 -in "$WORK_DIR/ca-a/intermediate-ca.crt" -noout -fingerprint -sha256)"
+[ "$second_cert_fingerprint" = "$intermediate_fingerprint" ] \
   || fail "the second certificate in gateway.crt is not this CA's intermediate"
 
 # 핵심 회귀 방지: Root만 신뢰하는 Client가 서버가 보내는 것(=이 파일)만으로 Chain을
@@ -86,14 +91,17 @@ echo "$cert_text" | grep -q "CA:FALSE" || fail "gateway certificate is not CA:FA
 # EKU and Key Usage are compared as exact sets, not just "contains". An extra
 # clientAuth would let this certificate impersonate a Device against the Gateway
 # itself, and keyEncipherment is meaningless for an EC key
-# (Codex 리뷰 PR #35 Low).
+# (Codex 리뷰 PR #35 Low). `tr -d ' \r\n'` strips \r too, not just \n -- on
+# Windows this openssl build's `-ext` output ends each line with \r\n, and a
+# stray trailing \r otherwise makes an exact-match comparison fail even though
+# the value looks identical when printed.
 eku="$(openssl x509 -in "$WORK_DIR/ca-a/gateway.crt" -noout -ext extendedKeyUsage \
-  | tail -n +2 | tr -d ' \n')"
+  | tail -n +2 | tr -d ' \r\n')"
 [ "$eku" = "TLSWebServerAuthentication" ] || fail "extendedKeyUsage = '$eku', want exactly TLS Web Server Authentication"
 echo "$cert_text" | grep -q "TLS Web Client Authentication" && fail "gateway certificate must not carry clientAuth"
 
 key_usage="$(openssl x509 -in "$WORK_DIR/ca-a/gateway.crt" -noout -ext keyUsage \
-  | tail -n +2 | tr -d ' \n')"
+  | tail -n +2 | tr -d ' \r\n')"
 [ "$key_usage" = "DigitalSignature" ] || fail "keyUsage = '$key_usage', want exactly Digital Signature"
 openssl x509 -in "$WORK_DIR/ca-a/gateway.crt" -noout -ext keyUsage | grep -q "critical" \
   || fail "keyUsage is not marked critical"
@@ -101,7 +109,7 @@ openssl x509 -in "$WORK_DIR/ca-a/gateway.crt" -noout -ext keyUsage | grep -q "cr
 # SAN must be exactly the three names the Gateway is reached by -- an extra name
 # would widen who this certificate can speak for.
 san="$(openssl x509 -in "$WORK_DIR/ca-a/gateway.crt" -noout -ext subjectAltName \
-  | tail -n +2 | tr -d ' \n')"
+  | tail -n +2 | tr -d ' \r\n')"
 [ "$san" = "DNS:gateway,DNS:localhost,IPAddress:127.0.0.1" ] \
   || fail "subjectAltName = '$san', want exactly DNS:gateway, DNS:localhost, IP Address:127.0.0.1"
 
