@@ -102,7 +102,7 @@ Critical 등급 Event는 접속 중인 콘솔에 SSE Toast로 즉시 뜹니다. 
 | E2E·장애 복구 (Issue #4) | 완료 — 아래 "E2E 검증"의 11개 시나리오·50개 단언이 실제 스택에서 통과 |
 | 제출 패키지 (Issue #8) | 진행 중 — 이 문서 갱신이 그 일부 |
 
-부수적으로 발견·해결된 것: Gateway가 handshake에서 Intermediate CA를 보내지 않던 문제(Issue #42). 남은 것: [Issue #50](https://github.com/doidosid/certgate/issues/50)(위 "알려진 화면 계약 차이"), [Issue #55](https://github.com/doidosid/certgate/issues/55)(E2E가 아직 검증하지 않는 SSE 재연결 재조회·Cache 무효화 실패 시 TTL 수렴 경로), [Issue #36](https://github.com/doidosid/certgate/issues/36)(Gateway Readiness Endpoint), [Issue #39](https://github.com/doidosid/certgate/issues/39)(Management API 미매핑 경로 500) — 둘 다 PR을 열어 CI 확인 중이다.
+부수적으로 발견·해결된 것: Gateway가 handshake에서 Intermediate CA를 보내지 않던 문제(Issue #42), Gateway Readiness Endpoint 부재(Issue #36), Management API 미매핑 경로가 500을 반환하던 문제(Issue #39), Low 등급 테스트 검출력 3건(Issue #25·#27·#30). 남은 것: [Issue #50](https://github.com/doidosid/certgate/issues/50)(위 "알려진 화면 계약 차이"), [Issue #55](https://github.com/doidosid/certgate/issues/55)(E2E가 아직 검증하지 않는 SSE 재연결 재조회·Cache 무효화 실패 시 TTL 수렴 경로).
 
 세부 순서는 [`docs/implementation-plan.md`](docs/implementation-plan.md)를 따릅니다.
 
