@@ -124,6 +124,18 @@ Gateway는 Client 인증서 검증에 Root CA만 신뢰하므로, Device는 자�
 
 Backend 없이 콘솔 화면만 보려면 `admin-console`에서 `VITE_USE_MOCK=true npm run dev`로 MSW Mock 모드를 씁니다. 서비스별 실행·테스트 명령은 각 서비스 README를 참고합니다.
 
+## E2E 검증
+
+~~~bash
+./tests/e2e/run.sh
+~~~
+
+핵심 보안 흐름을 실제 스택에서 한 번에 검증합니다. Mock이나 Stub을 쓰지 않고, Compose로 5개 서비스를 띄운 뒤 실제 Device Agent가 만든 Key·CSR로 인증서를 발급받아 실제 mTLS로 Gateway에 요청합니다.
+
+검증하는 것: Enrollment(Token·CSR·승인·수령), Token 오류와 SAN 불일치 거절, 정상 요청 허용, 다른 CA·만료·폐기 인증서 차단, Role 정책, 외부 Identity Header 제거와 재생성, Management API 장애 중 Outbox 보관, Gateway 재시작 후 보존, 복구 후 재전송과 중복 방지, 폐기 후 Cache 무효화, CRITICAL SSE 알림, 그리고 로그와 작업 트리에 Key·인증서·Token이 남지 않았는지.
+
+**DB Volume을 지우고 시작하며** 5분 안팎 걸립니다. 자세한 내용은 [테스트 전략](docs/testing.md#e2e-실행)을 참고하십시오.
+
 ## 관측 (Observability)
 
 현재는 Management API의 구조화 로그와 Gateway의 보안 판단 로그(JSON), 그리고 `GET /dashboard/summary`(서비스 상태·요청 추이·Outbox 적체)로 운영 상태를 확인합니다. Device Agent와 Backend Service의 로그, 그리고 각 서비스의 기동 로그는 아직 평문입니다. Gateway는 판단마다 Trace ID를 남기고 그 값을 Security Event에 함께 저장하므로, 콘솔에서 본 차단 기록을 Gateway 로그에서 바로 찾을 수 있습니다. 콘솔과 Management API 사이도 같은 `X-Trace-Id` 규약을 씁니다.
