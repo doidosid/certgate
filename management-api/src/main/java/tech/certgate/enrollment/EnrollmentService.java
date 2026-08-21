@@ -133,7 +133,7 @@ public class EnrollmentService {
 					// losing it behind a secondary failure to record the audit trail
 					// would hide why the approval actually failed (Codex 리뷰 PR #29
 					// Medium). Log it and keep it as a suppressed cause instead.
-					log.warn("Failed to record CRITICAL Security Event for CA_SIGNING_FAILED: {}", recordingFailure.getMessage());
+					log.warn("Failed to record CRITICAL Security Event for CA_SIGNING_FAILED", recordingFailure);
 					e.addSuppressed(recordingFailure);
 				}
 			}
