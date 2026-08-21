@@ -296,7 +296,7 @@ class DeviceIntegrationTests {
 		Instant sameInstant = Instant.parse("2026-01-01T00:00:00Z");
 		jdbcTemplate.update(
 				"UPDATE device SET created_at = ? WHERE id IN (" + String.join(",", ids.stream().map(id -> "?").toList()) + ")",
-				Stream.concat(Stream.of(java.sql.Timestamp.from(sameInstant)), ids.stream())
+				Stream.concat(Stream.of(java.sql.Timestamp.from(sameInstant)), ids.stream().map(java.util.UUID::fromString))
 						.toArray());
 
 		Set<String> seenAcrossPages = new HashSet<>();
