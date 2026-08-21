@@ -38,9 +38,12 @@ check_contains() {
 }
 
 # check_not_contains <설명> <문자열> <부분문자열>
+# 실패 메시지에 검사 대상 문자열($2) 전체를 그대로 싣지 않는다 — 이 함수 자체가
+# Private Key·Token 같은 Secret이 새지 않았는지 확인하는 용도라, 실패했을 때 그
+# Secret을 다시 화면·로그에 찍으면 검사가 스스로 유출 경로가 된다.
 check_not_contains() {
 	case "$2" in
-	*"$3"*) ng "$1 — '$3' 가 남아 있다: '$2'" ;;
+	*"$3"*) ng "$1 — '$3' 패턴이 발견됐다" ;;
 	*) ok "$1" ;;
 	esac
 }

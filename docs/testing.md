@@ -65,3 +65,10 @@
 - 스택을 남겨 두고 직접 들여다보려면 `E2E_KEEP_STACK=1 ./tests/e2e/run.sh`.
 
 아직 CI에 넣지 않았다(development-guide.md "E2E는 안정화 후 CI에 포함"). 실행 시간이 길고 Docker·Go·OpenSSL 3.2 이상을 요구하며, 만료 인증서 시나리오는 OpenSSL이 낮으면 SKIP된다.
+
+**알려진 커버리지 차이(2026-08-21).** 위 11개 시나리오는 필수 시나리오 1~13을 검증하지만 두 곳은 정상 경로만 확인한다.
+
+- **필수 시나리오 14(SSE 재연결 후 최근 Event 재조회)는 아직 검증하지 않는다.** `s11_sse_critical`은 연결된 SSE로 실시간 전달만 확인하고, 연결을 끊었다가 다시 연 뒤 `severity=CRITICAL`로 놓친 구간을 재조회하는 흐름(admin-console `CriticalEventProvider`가 실제로 하는 동작)은 스크립트가 재현하지 않는다.
+- **시나리오 12(폐기 후 Cache 무효화)는 무효화가 성공하는 경로만 본다.** Gateway Cache 무효화 호출 자체가 실패했을 때 30초 TTL로 최종 수렴하는지(security-design.md·CLAUDE.md 보안 필수 규칙)는 정상적으로는 무효화 실패를 스크립트에서 인위적으로 만들기 어려워 검증하지 않는다.
+
+두 항목은 후속 Issue로 분리했다(#55).

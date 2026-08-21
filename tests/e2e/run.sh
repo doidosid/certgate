@@ -10,8 +10,12 @@
 # 이 스크립트는 **DB Volume을 지우고 시작한다**(`down -v`). 개발 중인 데이터가 있으면
 # 먼저 백업한다.
 #
-# 만들어지는 Key·Certificate·Token은 전부 임시 디렉터리 안에만 있고 종료 시 지운다.
-# 저장소에 남기지 않는다(docs/testing.md "Test Key·Certificate·Token은 Git과 로그에 없음").
+# 이번 실행에서 새로 만든 Device Key·Certificate·Enrollment Token은 전부 임시
+# 디렉터리 안에만 있고 종료 시 지운다. 저장소에 남기지 않는다(docs/testing.md
+# "Test Key·Certificate·Token은 Git과 로그에 없음"). 단, Root/Intermediate CA와
+# Gateway 서버 인증서(pki/runtime/)는 예외다 — 여러 번 실행에 걸쳐 재사용하도록
+# 그대로 두고 지우지 않는다. 이 디렉터리는 gitignore 대상이라 저장소에는 남지
+# 않는다.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -214,10 +218,11 @@ s2_enrollment_rejections() {
 	# secret-scan(gitleaks)이 잡고, 무엇보다 우연히 실재하는 값과 겹칠 수 없어야 한다.
 	local bogus_token status
 	bogus_token="cg_enroll_$(openssl rand -hex 16)"
-	status="$(curl -s -o /dev/null -w '%{http_code}' -X POST "$V1/enrollments/certificate-requests" \
+	status="$(curl -s -o "$WORK_DIR/last-body" -w '%{http_code}' -X POST "$V1/enrollments/certificate-requests" \
 		-H "Authorization: Bearer $bogus_token" -H 'Content-Type: application/json' \
 		-d "{\"csrPem\":$rogue_csr}")"
 	check "존재하지 않는 Enrollment Token 거절" "$status" "401"
+	check_contains "거절 Reason Code" "$(cat "$WORK_DIR/last-body")" "ENROLLMENT_TOKEN_INVALID"
 
 	# 유효한 Token인데 CSR의 SAN이 그 Token의 Device가 아니다.
 	local out tok_x
@@ -308,9 +313,17 @@ s4_rejected_certificates() {
 	ok "인증서 폐기"
 
 	# 폐기 Commit 후 Gateway Cache 무효화가 호출되므로 TTL(30초)을 기다리지 않아도 된다.
-	# 이것이 시나리오 10(폐기 후 Cache 무효화)의 실질적 검증이다.
-	local code
+	# 이것이 docs/testing.md 필수 시나리오 12(Certificate 폐기 후 Cache 무효화)의 검증이다.
+	# 무효화 호출은 비동기(2~3초 Timeout)라 요청 바로 다음 순간에는 아직 반영 전일
+	# 수 있어 최대 5초까지 짧게 재시도한다 — TTL(30초)과는 자릿수가 다르므로, 그래도
+	# 403이 안 나오면 우연한 flake가 아니라 진짜 회귀다.
+	local code deadline
+	deadline=$(( $(date +%s) + 5 ))
 	code="$(gw e2e-sensor-02 POST /telemetry)"
+	while [ "$code" != "403" ] && [ "$(date +%s)" -lt "$deadline" ]; do
+		sleep 1
+		code="$(gw e2e-sensor-02 POST /telemetry)"
+	done
 	check "폐기 직후 차단 (Cache 무효화가 TTL을 기다리지 않는다)" "$code" "403"
 	check_contains "차단 Reason Code" "$(cat "$WORK_DIR/last-body")" "CERTIFICATE_REVOKED"
 
@@ -369,6 +382,7 @@ s7_outbox_during_outage() {
 	local code
 	code="$(gw e2e-sensor-01 POST /telemetry)"
 	check "Access Context를 못 얻으면 Fail Closed로 차단" "$code" "503"
+	check_contains "Fail Closed Reason Code" "$(cat "$WORK_DIR/last-body")" "INTERNAL_ERROR"
 
 	local pending
 	pending="$(outbox_pending)"
@@ -427,10 +441,21 @@ s9_recovery_resend() {
 	fi
 
 	# 같은 Event ID가 두 번 들어가지 않는다(재전송은 멱등해야 한다).
-	local ids uniq
-	ids="$(curl -sf "$V1/security-events?size=100" | json 'len(d["content"])')"
-	uniq="$(curl -sf "$V1/security-events?size=100" | json 'len({e["id"] for e in d["content"]})')"
-	check "재전송에 중복 Event가 없다" "$uniq" "$ids"
+	# curl·json 파싱이 실패하면 두 변수 모두 빈 문자열이 되어 "" = "" 로 조용히
+	# 통과할 수 있다 — 조회 자체가 됐는지(정수인지)를 먼저 확인해 그 함정을 막는다.
+	local content ids uniq
+	content="$(curl -sf "$V1/security-events?size=100")"
+	if [ -z "$content" ]; then
+		ng "재전송에 중복 Event가 없다 — Security Event 목록 조회 자체가 실패했다"
+	else
+		ids="$(json 'len(d["content"])' <<<"$content")"
+		uniq="$(json 'len({e["id"] for e in d["content"]})' <<<"$content")"
+		if [ -z "$ids" ] || [ -z "$uniq" ]; then
+			ng "재전송에 중복 Event가 없다 — 응답을 파싱할 수 없었다"
+		else
+			check "재전송에 중복 Event가 없다" "$uniq" "$ids"
+		fi
+	fi
 }
 
 s11_sse_critical() {
@@ -466,16 +491,37 @@ s12_no_secrets() {
 	scenario "11. Secret 노출 확인"
 
 	local logs="$WORK_DIR/all.log"
-	"${COMPOSE[@]}" logs --no-color >"$logs" 2>&1
+	if ! "${COMPOSE[@]}" logs --no-color >"$logs" 2>&1 || [ ! -s "$logs" ]; then
+		# 로그 수집 자체가 비어 있으면 아래 check_not_contains는 전부 우연히
+		# 통과한다 — 이 시나리오의 존재 이유를 무력화하므로 그 자체를 실패로 본다.
+		ng "컨테이너 로그를 수집하지 못했다 (아래 항목은 검증되지 않는다)"
+	else
+		ok "컨테이너 로그 수집"
+	fi
 
 	# needle을 조립한다. 소스에 그 문자열을 그대로 쓰면 CI의 "reject embedded private
 	# key material" 검사가 이 파일을 Key가 박힌 파일로 보고 막는다 — 검사 쪽이 옳다.
 	local pk="PRIVATE KEY"
-	check_not_contains "로그에 Private Key가 없다" "$(cat "$logs")" "BEGIN EC $pk"
-	check_not_contains "로그에 Private Key(PKCS8)가 없다" "$(cat "$logs")" "BEGIN $pk"
-	check_not_contains "로그에 인증서 원문이 없다" "$(cat "$logs")" "BEGIN CERTIFICATE"
-	check_not_contains "로그에 CSR 원문이 없다" "$(cat "$logs")" "BEGIN CERTIFICATE REQUEST"
-	check_not_contains "로그에 Enrollment Token 평문이 없다" "$(cat "$logs")" "cg_enroll_"
+	local content; content="$(cat "$logs" 2>/dev/null)"
+	check_not_contains "로그에 Private Key가 없다" "$content" "BEGIN EC $pk"
+	check_not_contains "로그에 Private Key(PKCS8)가 없다" "$content" "BEGIN $pk"
+	check_not_contains "로그에 인증서 원문이 없다" "$content" "BEGIN CERTIFICATE"
+	check_not_contains "로그에 CSR 원문이 없다" "$content" "BEGIN CERTIFICATE REQUEST"
+	check_not_contains "로그에 Enrollment Token 평문이 없다" "$content" "cg_enroll_"
+
+	local internal_token
+	internal_token="$(grep '^GATEWAY_INTERNAL_TOKEN=' "$REPO_DIR/.env.example" | cut -d= -f2-)"
+	if [ -n "$internal_token" ]; then
+		check_not_contains "로그에 Gateway 내부 Service Token이 없다" "$content" "$internal_token"
+	fi
+
+	# Device Agent 자체도 Key·CSR을 직접 다루는 경계다 — Compose 로그와는 별도로
+	# 각 Device의 agent.log도 같은 기준으로 검사한다.
+	local agent_logs
+	agent_logs="$(cat "$WORK_DIR"/*/agent.log 2>/dev/null)"
+	check_not_contains "device-agent 로그에 Private Key가 없다" "$agent_logs" "BEGIN EC $pk"
+	check_not_contains "device-agent 로그에 Private Key(PKCS8)가 없다" "$agent_logs" "BEGIN $pk"
+	check_not_contains "device-agent 로그에 Enrollment Token 평문이 없다" "$agent_logs" "cg_enroll_"
 
 	# 작업 디렉터리는 종료 시 지운다. 저장소 안에 새로 생긴 Key·인증서가 없어야 한다.
 	local tracked
