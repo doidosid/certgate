@@ -407,4 +407,5 @@ Security Event가 원본 데이터이며 SSE는 저장된 CRITICAL Event의 전�
 - <code>METHOD_NOT_ALLOWED</code>: Issue #3 공통 오류 처리 보강 중 추가. 지원하지 않는 HTTP Method (405)
 - <code>UNSUPPORTED_MEDIA_TYPE</code>: Issue #3 공통 오류 처리 보강 중 추가. 지원하지 않는 Content-Type (415)
 - <code>SECURITY_EVENT_NOT_FOUND</code>: Issue #6 Console 조회 API 구현 중 추가. <code>GET /security-events/{eventId}</code>의 <code>eventId</code>가 존재하지 않음 (404)
+- <code>RESOURCE_NOT_FOUND</code>: Issue #39에서 추가. 어떤 Controller에도 매핑되지 않은 경로(오타·삭제된 경로) — 이 문서에 정의된 특정 Resource를 찾지 못한 것이 아니라 경로 자체가 없다는 뜻이다 (404)
 - <code>CONFLICT</code>: 위 목록에 없는 DB 제약 위반(동시 요청 경합) 일반 응답 (409). Certificate 재폐기 시도도 이 Code를 사용한다

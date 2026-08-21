@@ -46,6 +46,14 @@ class CaSigningFailureIntegrationTests {
 		registry.add("certgate.ca.intermediate-cert-path", () -> ca.intermediateCertPath().toString());
 		// Deliberately wrong: readPrivateKey() will fail every time loadCaMaterial() is called.
 		registry.add("certgate.ca.intermediate-key-path", () -> dir.resolve("does-not-exist.key").toString());
+
+		// Issue #30: the default Pool (10) is large enough that a regression
+		// where the outer approve() Transaction holds its Connection while
+		// waiting on SecurityEventRecorder's REQUIRES_NEW Connection would
+		// still pass here by accident. Pool=1 makes that specific bug
+		// deterministically fail with a Connection-timeout instead.
+		registry.add("spring.datasource.hikari.maximum-pool-size", () -> "1");
+		registry.add("spring.datasource.hikari.connection-timeout", () -> "2000");
 	}
 
 	@Autowired

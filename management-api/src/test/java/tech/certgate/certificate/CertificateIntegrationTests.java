@@ -3,6 +3,7 @@ package tech.certgate.certificate;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
@@ -17,6 +18,7 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -55,6 +57,19 @@ class CertificateIntegrationTests {
 
 	private static HttpServer fakeGateway;
 	private static final ConcurrentLinkedQueue<String> invalidationRequests = new ConcurrentLinkedQueue<>();
+	/**
+	 * Snapshot, taken from a brand-new connection at the exact moment each
+	 * invalidation call reaches the fake Gateway, of whether the revoked
+	 * Certificate's row was already visible as committed. A different thread
+	 * (the JDK HttpServer's) reading through {@link CertificateRepository}
+	 * cannot see another transaction's uncommitted write — so if the
+	 * revocation Transaction hadn't actually committed yet when the listener
+	 * fired (e.g. the phase regressed from AFTER_COMMIT), this reads {@code
+	 * false} instead of the revoke() call's own in-progress changes.
+	 */
+	private static final ConcurrentLinkedQueue<Boolean> revokedVisibleAtInvalidation = new ConcurrentLinkedQueue<>();
+	private static volatile CertificateRepository certificateRepositoryRef;
+	private static final ObjectMapper objectMapper = new ObjectMapper();
 
 	@DynamicPropertySource
 	static void properties(DynamicPropertyRegistry registry) throws Exception {
@@ -73,7 +88,9 @@ class CertificateIntegrationTests {
 				exchange.close();
 				return;
 			}
-			invalidationRequests.add(new String(body));
+			String bodyText = new String(body);
+			invalidationRequests.add(bodyText);
+			recordVisibilityAtInvalidation(bodyText);
 			exchange.sendResponseHeaders(204, -1);
 			exchange.close();
 		});
@@ -83,13 +100,39 @@ class CertificateIntegrationTests {
 		registry.add("certgate.gateway.internal-token", () -> INTERNAL_TOKEN);
 	}
 
+	/** Reads the invalidated Certificate through a fresh Repository call — a new Connection, no shared Transaction. */
+	private static void recordVisibilityAtInvalidation(String invalidationBody) {
+		CertificateRepository repository = certificateRepositoryRef;
+		if (repository == null) {
+			return;
+		}
+		try {
+			String serialNumber = objectMapper.readTree(invalidationBody).get("key").asText();
+			boolean revokedVisible = repository.findBySerialNumber(serialNumber)
+					.map(certificate -> certificate.getRevokedAt() != null)
+					.orElse(false);
+			revokedVisibleAtInvalidation.add(revokedVisible);
+		} catch (Exception e) {
+			revokedVisibleAtInvalidation.add(false);
+		}
+	}
+
 	@AfterEach
 	void clearInvalidationRequests() {
 		invalidationRequests.clear();
+		revokedVisibleAtInvalidation.clear();
 	}
 
 	@Autowired
 	private TestRestTemplate restTemplate;
+
+	@Autowired
+	private CertificateRepository certificateRepository;
+
+	@BeforeEach
+	void captureCertificateRepositoryForFakeGateway() {
+		certificateRepositoryRef = certificateRepository;
+	}
 
 	private record IssuedTestCertificate(String certificateId, String serialNumber) {
 	}
@@ -172,6 +215,15 @@ class CertificateIntegrationTests {
 				Map.of("reason", "KEY_COMPROMISE"), Map.class);
 
 		await().atMost(Duration.ofSeconds(2)).until(() -> invalidationRequests.stream().anyMatch(body -> body.contains(issued.serialNumber())));
+
+		// docs/security-design.md §6 requires the Commit to happen before the
+		// invalidation call, not just that the call happens at some point.
+		// revokedVisibleAtInvalidation was read through a brand-new
+		// Repository call from the HttpServer's own thread at the exact
+		// moment each invalidation arrived — a different Transaction phase
+		// (e.g. BEFORE_COMMIT) would still eventually make this call, but
+		// the row wouldn't be visibly REVOKED yet when it did.
+		assertThat(revokedVisibleAtInvalidation).isNotEmpty().allMatch(Boolean::booleanValue);
 	}
 
 	@Test

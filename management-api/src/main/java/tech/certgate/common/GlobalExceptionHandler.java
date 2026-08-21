@@ -11,6 +11,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -87,6 +88,19 @@ public class GlobalExceptionHandler {
 	public ResponseEntity<ErrorResponse> handleUnsupportedMediaType(HttpMediaTypeNotSupportedException ex) {
 		return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE).body(ErrorResponse.of(
 				"UNSUPPORTED_MEDIA_TYPE", "지원하지 않는 Content-Type입니다.", TraceIdFilter.current()));
+	}
+
+	/**
+	 * No Controller mapping matched the request path at all (a typo'd or
+	 * removed URL) — Spring MVC 6 raises this instead of the old
+	 * NoHandlerFoundException. Without this handler it falls through to the
+	 * generic 500 below, which makes an unmapped path indistinguishable from
+	 * a real server fault (Issue #39, docs/api-spec.md §1 "404: Resource 없음").
+	 */
+	@ExceptionHandler(NoResourceFoundException.class)
+	public ResponseEntity<ErrorResponse> handleNoResourceFound(NoResourceFoundException ex) {
+		return ResponseEntity.status(HttpStatus.NOT_FOUND)
+				.body(ErrorResponse.of("RESOURCE_NOT_FOUND", "요청한 경로를 찾을 수 없습니다.", TraceIdFilter.current()));
 	}
 
 	@ExceptionHandler(Exception.class)

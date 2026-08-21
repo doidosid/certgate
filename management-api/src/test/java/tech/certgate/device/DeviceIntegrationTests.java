@@ -5,8 +5,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyPair;
+import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -18,6 +22,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -45,6 +50,9 @@ class DeviceIntegrationTests {
 
 	@Autowired
 	private TestRestTemplate restTemplate;
+
+	@Autowired
+	private JdbcTemplate jdbcTemplate;
 
 	private Map<String, Object> registerDevice(String deviceKey, String roleName) {
 		var response = restTemplate.postForEntity(
@@ -269,6 +277,46 @@ class DeviceIntegrationTests {
 				"/api/v1/devices/" + java.util.UUID.randomUUID() + "/enrollment-token", null, Map.class);
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
 		assertThat(response.getBody().get("code")).isEqualTo("DEVICE_NOT_REGISTERED");
+	}
+
+	/**
+	 * Regression for Issue #27. {@code DEFAULT_SORT} adds {@code id} as a
+	 * tiebreaker after {@code createdAt} specifically so that Devices created
+	 * in the same instant still get a total order — without it, Postgres is
+	 * free to return ties in a different order per page fetch, and default
+	 * (sort-less) pagination can silently duplicate or skip rows across pages.
+	 */
+	@Test
+	void list_defaultSort_isStableAcrossPagesWhenCreatedAtTies() {
+		String prefix = "d-sort-tie-";
+		Set<String> ids = new HashSet<>();
+		for (int i = 0; i < 5; i++) {
+			ids.add((String) registerDevice(prefix + i, "SENSOR").get("id"));
+		}
+		Instant sameInstant = Instant.parse("2026-01-01T00:00:00Z");
+		jdbcTemplate.update(
+				"UPDATE device SET created_at = ? WHERE id IN (" + String.join(",", ids.stream().map(id -> "?").toList()) + ")",
+				Stream.concat(Stream.of(java.sql.Timestamp.from(sameInstant)), ids.stream().map(java.util.UUID::fromString))
+						.toArray());
+
+		Set<String> seenAcrossPages = new HashSet<>();
+		int page = 0;
+		int totalPages;
+		do {
+			var response = restTemplate.getForEntity(
+					"/api/v1/devices?query=" + prefix + "&size=2&page=" + page, Map.class);
+			@SuppressWarnings("unchecked")
+			List<Map<String, Object>> pageContent = (List<Map<String, Object>>) response.getBody().get("content");
+			for (Map<String, Object> device : pageContent) {
+				assertThat(seenAcrossPages.add((String) device.get("id")))
+						.as("Device %s must not appear on more than one page", device.get("id"))
+						.isTrue();
+			}
+			totalPages = (int) response.getBody().get("totalPages");
+			page++;
+		} while (page < totalPages);
+
+		assertThat(seenAcrossPages).as("every registered Device must appear exactly once across all pages").isEqualTo(ids);
 	}
 
 	@SuppressWarnings("unchecked")
