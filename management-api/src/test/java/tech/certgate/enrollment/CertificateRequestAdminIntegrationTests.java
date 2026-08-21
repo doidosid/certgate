@@ -2,14 +2,20 @@ package tech.certgate.enrollment;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.ResponseEntity;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,6 +29,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -47,6 +54,9 @@ class CertificateRequestAdminIntegrationTests {
 
 	@Autowired
 	private TestRestTemplate restTemplate;
+
+	@MockitoSpyBean
+	private IntermediateCertificateAuthority certificateAuthority;
 
 	private String submitCsrFor(String deviceKey) throws Exception {
 		var registerResponse = restTemplate.postForEntity(
@@ -136,6 +146,60 @@ class CertificateRequestAdminIntegrationTests {
 			} else {
 				assertThat(certificates).hasSize(1);
 			}
+		} finally {
+			executor.shutdownNow();
+		}
+	}
+
+	/**
+	 * Regression for Issue #27: the CyclicBarrier above only lines up when the
+	 * two HTTP calls *start*, not when both have actually read the PENDING row —
+	 * a reject that commits before approve's first read would make the test
+	 * above pass even with {@code findByIdForUpdate}'s Row Lock removed. This
+	 * test instead holds approve inside its locked Transaction (via a Latch in
+	 * the CA-signing step, after the lock is acquired but before commit) and
+	 * proves reject cannot finish until that Transaction ends — the Lock
+	 * itself, not incidental timing, is what's under test.
+	 */
+	@Test
+	void approveAndReject_concurrent_rejectBlocksUntilApproveTransactionEnds() throws Exception {
+		String requestId = submitCsrFor("sensor-approve-reject-race-02");
+		CountDownLatch signingStarted = new CountDownLatch(1);
+		CountDownLatch releaseSigning = new CountDownLatch(1);
+		doAnswer(invocation -> {
+			signingStarted.countDown();
+			if (!releaseSigning.await(5, TimeUnit.SECONDS)) {
+				throw new AssertionError("releaseSigning was never released — approve() likely isn't holding the row lock");
+			}
+			return invocation.callRealMethod();
+		}).when(certificateAuthority).sign(any());
+
+		ExecutorService executor = Executors.newFixedThreadPool(2);
+		try {
+			var approveFuture = CompletableFuture.supplyAsync(
+					() -> restTemplate.postForEntity("/api/v1/certificate-requests/" + requestId + "/approve", null, Map.class),
+					executor);
+			assertThat(signingStarted.await(5, TimeUnit.SECONDS)).as("approve() reached the CA-signing step").isTrue();
+
+			var rejectFuture = CompletableFuture.supplyAsync(
+					() -> restTemplate.postForEntity("/api/v1/certificate-requests/" + requestId + "/reject", null, Map.class),
+					executor);
+
+			// approve() is still inside its Transaction, holding the Row Lock
+			// from findByIdForUpdate. If that Lock is real, reject()'s own
+			// findByIdForUpdate on a separate Connection must block here — it
+			// cannot have finished yet.
+			Thread.sleep(300);
+			assertThat(rejectFuture).as("reject() must block on the Row Lock while approve() still holds it").isNotDone();
+
+			releaseSigning.countDown();
+			var approveResponse = approveFuture.get(5, TimeUnit.SECONDS);
+			var rejectResponse = rejectFuture.get(5, TimeUnit.SECONDS);
+
+			assertThat(List.of(approveResponse.getStatusCode(), rejectResponse.getStatusCode()))
+					.containsExactlyInAnyOrder(HttpStatus.OK, HttpStatus.CONFLICT);
+			assertThat(rejectResponse.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+			assertThat(rejectResponse.getBody().get("code")).isEqualTo("CERTIFICATE_REQUEST_NOT_PENDING");
 		} finally {
 			executor.shutdownNow();
 		}
