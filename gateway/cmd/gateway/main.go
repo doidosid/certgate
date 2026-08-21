@@ -34,6 +34,12 @@ const senderFlushInterval = 2 * time.Second
 // the check itself is two counting queries against the local SQLite file.
 const monitorCheckInterval = 10 * time.Second
 
+// readinessPollInterval and readinessPingTimeout govern how often the
+// Gateway checks Management API reachability for /readyz (Issue #36). The
+// timeout is short so a hung Management API doesn't delay the next poll.
+const readinessPollInterval = 10 * time.Second
+const readinessPingTimeout = 3 * time.Second
+
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -68,6 +74,9 @@ func main() {
 		log.Printf("gateway: outbox send error: %v", err)
 	})
 
+	healthTracker := management.NewHealthTracker(mgmtClient)
+	go healthTracker.Run(ctx, readinessPollInterval, readinessPingTimeout)
+
 	go monitor.Run(ctx, monitorCheckInterval, logSystemEvent, func(err error) {
 		// A CRITICAL Event that could not be stored gets the structured
 		// Outbox-failure line docs/architecture.md "장애 원칙" requires; a read
@@ -96,6 +105,7 @@ func main() {
 
 	internalMux := http.NewServeMux()
 	internalMux.HandleFunc("/healthz", healthzHandler)
+	internalMux.HandleFunc("/readyz", readyzHandler(healthTracker))
 	internalMux.HandleFunc("/internal/cache/invalidations", cacheInvalidationHandler(cfg.InternalToken, accessCache))
 	internalMux.HandleFunc("/internal/outbox/stats", outboxStatsHandler(cfg.InternalToken, store))
 	internalServer := &http.Server{Addr: ":" + cfg.InternalPort, Handler: internalMux}
@@ -125,4 +135,23 @@ func healthzHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "UP"})
+}
+
+// readyzHandler reports whether the Gateway can currently reach the
+// Management API (Issue #36, docs/operations.md "Health"). Kept separate
+// from healthzHandler: Compose's own healthcheck stays on /healthz so a
+// transient Management API outage doesn't restart the Gateway Container and
+// interrupt Outbox delivery (docs/architecture.md "장애 원칙" — Fail Closed
+// is the correct response to that outage, not a Process restart).
+func readyzHandler(tracker *management.HealthTracker) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if tracker.Ready() {
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]string{"status": "READY"})
+			return
+		}
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "NOT_READY"})
+	}
 }
