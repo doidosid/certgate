@@ -125,6 +125,8 @@ export interface CertificateRequestItem {
 	id: string;
 	deviceId: string;
 	status: CertificateRequestStatus;
+	sanUri: string | null;
+	publicKeyAlgorithm: string;
 	requestedAt: string;
 }
 
@@ -146,6 +148,10 @@ export interface CertificateItem {
 	deviceId: string;
 	serialNumber: string;
 	status: CertificateStatus;
+	subjectDn: string | null;
+	sanUri: string | null;
+	issuerDn: string;
+	fingerprintSha256: string;
 	notBefore: string;
 	notAfter: string;
 	issuedAt: string;

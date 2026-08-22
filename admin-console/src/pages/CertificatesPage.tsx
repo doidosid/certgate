@@ -28,12 +28,7 @@ import PageHeader from "../shared/ui/PageHeader";
 import QueryState from "../shared/ui/QueryState";
 import StatusChip from "../shared/ui/StatusChip";
 
-/**
- * ui-design.md §6 목록: Serial Number, 디바이스, 상태, 발급일, 만료일, 발급 CA.
- *
- * "발급 CA"는 만들지 않는다 — 서버 응답(CertificateResponse)에 없는 값이다. 이 MVP에서
- * 발급자는 항상 하나의 Intermediate CA이므로(ADR-002) 화면에 지어내 넣을 이유도 없다.
- */
+/** ui-design.md §6 목록: Serial Number, 디바이스, 상태, 발급일, 만료일, 발급 CA. */
 const COLUMNS: Column<CertificateItem>[] = [
 	{ key: "serialNumber", header: "Serial", render: (row) => <Mono>{row.serialNumber}</Mono> },
 	{ key: "deviceId", header: "디바이스", render: (row) => <DeviceNameLink deviceId={row.deviceId} /> },
@@ -46,6 +41,7 @@ const COLUMNS: Column<CertificateItem>[] = [
 	},
 	{ key: "issuedAt", header: "발급일", render: (row) => <DateTimeText value={row.issuedAt} /> },
 	{ key: "notAfter", header: "만료일", render: (row) => <DateTimeText value={row.notAfter} /> },
+	{ key: "issuerDn", header: "발급 CA", render: (row) => <Mono breakAll>{row.issuerDn}</Mono> },
 ];
 
 export default function CertificatesPage() {
@@ -200,6 +196,18 @@ export default function CertificatesPage() {
 							<Field label="발급일">
 								<DateTimeText value={detail.data.issuedAt} />
 							</Field>
+							<Field label="발급 CA">
+								<Mono breakAll>{detail.data.issuerDn}</Mono>
+							</Field>
+							<Field label="Subject">
+								<Mono breakAll>{detail.data.subjectDn ?? "-"}</Mono>
+							</Field>
+							<Field label="SAN URI">
+								<Mono breakAll>{detail.data.sanUri ?? "-"}</Mono>
+							</Field>
+							<Field label="SHA-256 지문">
+								<Mono breakAll>{detail.data.fingerprintSha256}</Mono>
+							</Field>
 							<Field label="폐기 시각">
 								<DateTimeText value={detail.data.revokedAt} />
 							</Field>
@@ -207,14 +215,6 @@ export default function CertificatesPage() {
 								<Field label="폐기 사유">{detail.data.revocationReason}</Field>
 							)}
 							{detail.data.revocationNote && <Field label="폐기 메모">{detail.data.revocationNote}</Field>}
-
-							{/*
-							 * Subject·SAN URI·SHA-256 지문은 ui-design.md §6이 상세에 요구하지만
-							 * Certificate 응답에 없다. 그 값들은 CSR에 있고 Certificate Requests
-							 * 화면이 보여준다. 인증서에서 읽지 않은 값을 인증서 정보처럼 표시하지
-							 * 않는다 — 추론한 값을 사실로 보이게 만드는 것이 이 도메인에서 가장
-							 * 위험하다.
-							 */}
 
 							{revoked && (
 								<Alert severity="success" sx={{ mt: 2 }}>

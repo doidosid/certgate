@@ -79,16 +79,6 @@ Gateway의 모든 접근 판단 기록입니다. 위 캡처에는 정상 허용(
 
 Critical 등급 Event는 접속 중인 콘솔에 SSE Toast로 즉시 뜹니다. 자동으로 사라지지 않고, 사용자가 닫아야 없어집니다. 연결이 끊겼다 복구되면 서버가 준 시각을 기준으로 놓친 구간을 다시 조회해 채우고, 한 번에 보여줄 수 있는 5건을 넘으면 버리지 않고 큐에 두었다가 위의 것을 닫으면 이어서 보여줍니다.
 
-### 알려진 화면 계약 차이
-
-[UI 설계](docs/ui-design.md)가 요구하지만 아직 화면에 없는 항목이 있습니다. 서버 응답 DTO에 해당 값이 없어서이며, 없는 값을 화면에서 지어내지 않기로 했습니다. 구현 범위는 [Issue #50](https://github.com/doidosid/certgate/issues/50)으로 분리했습니다.
-
-| 계약 | 현재 |
-|---|---|
-| §5 인증서 요청 **목록**의 SAN URI·키 알고리즘 | 목록에 없음. 상세에서만 보여줌 (`CertificateRequestResponse`에 없음) |
-| §6 인증서 **목록**의 발급 CA | 없음 (`CertificateResponse`에 없음) |
-| §6 인증서 **상세**의 Subject·SAN URI·SHA-256 지문 | 없음 (`CertificateResponse`에 없음) |
-
 ## 현재 상태
 
 | 단계 | 상태 |
@@ -98,11 +88,11 @@ Critical 등급 Event는 접속 중인 콘솔에 SSE Toast로 즉시 뜹니다. 
 | Gateway mTLS·정책·차단 (Issue #2) | 완료 — SAN URI 기반 Device 식별, Access Context Cache, Role 정책, Fail Closed |
 | Event Outbox·SSE (Issue #6) | 완료 — SQLite Outbox 보존·재전송, Critical Event SSE Broadcast |
 | Management API (Issue #3) | 완료 — Device·CSR·Certificate·Policy·Security Event·Dashboard API |
-| Admin Console 실제 연결 (Issue #7) | 완료 — 위 "관리 콘솔 화면"의 5개 화면과 전역 Critical Toast. 위 "알려진 화면 계약 차이" 참고 |
+| Admin Console 실제 연결 (Issue #7) | 완료 — 위 "관리 콘솔 화면"의 5개 화면과 전역 Critical Toast |
 | E2E·장애 복구 (Issue #4) | 완료 — 아래 "E2E 검증"의 12개 시나리오·65개 단언이 실제 스택에서 통과(Issue #55의 커버리지 틈 포함) |
 | 제출 패키지 (Issue #8) | 진행 중 — 이 문서 갱신이 그 일부 |
 
-부수적으로 발견·해결된 것: Gateway가 handshake에서 Intermediate CA를 보내지 않던 문제(Issue #42), Gateway Readiness Endpoint 부재(Issue #36), Management API 미매핑 경로가 500을 반환하던 문제(Issue #39), Low 등급 테스트 검출력 3건(Issue #25·#27·#30), E2E가 검증하지 않던 SSE 재연결 재조회·Cache 무효화 실패 시 TTL 수렴 경로(Issue #55). 남은 것: [Issue #50](https://github.com/doidosid/certgate/issues/50)(위 "알려진 화면 계약 차이").
+부수적으로 발견·해결된 것: Gateway가 handshake에서 Intermediate CA를 보내지 않던 문제(Issue #42), Gateway Readiness Endpoint 부재(Issue #36), Management API 미매핑 경로가 500을 반환하던 문제(Issue #39), Low 등급 테스트 검출력 3건(Issue #25·#27·#30), E2E가 검증하지 않던 SSE 재연결 재조회·Cache 무효화 실패 시 TTL 수렴 경로(Issue #55), 인증서 화면의 미구현 UI 계약 항목(Issue #50 — 발급 CA·Subject·SAN URI·SHA-256 지문을 서버 DTO에 추가하고 화면에 반영).
 
 세부 순서는 [`docs/implementation-plan.md`](docs/implementation-plan.md)를 따릅니다.
 
