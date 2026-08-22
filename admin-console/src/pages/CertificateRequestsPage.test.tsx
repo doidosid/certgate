@@ -60,12 +60,21 @@ describe("CertificateRequestsPage", () => {
 	/** ui-design.md §5 상세: CSR Subject, SAN, 공개키 정보, CSR 지문. */
 	it("shows the subject, SAN URI, key algorithm and fingerprint", async () => {
 		renderAt("/certificate-requests");
-		await openFirstRequest();
+		const drawer = await openFirstRequest();
 
-		expect(screen.getByText(certificateRequestDetail.subjectDn)).toBeInTheDocument();
-		expect(screen.getByText("urn:certgate:device:sensor-floor-01")).toBeInTheDocument();
-		expect(screen.getByText("EC P-256")).toBeInTheDocument();
-		expect(screen.getByText(certificateRequestDetail.fingerprintSha256)).toBeInTheDocument();
+		expect(within(drawer).getByText(certificateRequestDetail.subjectDn)).toBeInTheDocument();
+		expect(within(drawer).getByText("urn:certgate:device:sensor-floor-01")).toBeInTheDocument();
+		expect(within(drawer).getByText("EC P-256")).toBeInTheDocument();
+		expect(within(drawer).getByText(certificateRequestDetail.fingerprintSha256)).toBeInTheDocument();
+	});
+
+	/** ui-design.md §5 목록: SAN URI, 키 알고리즘도 이제 목록 컬럼으로 나온다. */
+	it("shows SAN URI and key algorithm columns in the list", async () => {
+		renderAt("/certificate-requests");
+
+		expect(await screen.findByText("urn:certgate:device:sensor-floor-01")).toBeInTheDocument();
+		expect(screen.getByText("SAN URI")).toBeInTheDocument();
+		expect(screen.getByText("키 알고리즘")).toBeInTheDocument();
 	});
 
 	/**

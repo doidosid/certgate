@@ -94,14 +94,17 @@ describe("CertificatesPage", () => {
 		expect(screen.getByText("유효")).toBeInTheDocument();
 	});
 
-	/** ui-design.md §6 상세: 유효기간, 폐기 정보. 발급 CA는 서버 응답에 없어 만들지 않는다. */
-	it("shows the validity window in the detail drawer", async () => {
+	/** ui-design.md §6 상세: 유효기간, 발급일, 발급 CA, Subject, SAN URI, SHA-256 지문. */
+	it("shows the validity window and issuance details in the detail drawer", async () => {
 		renderAt("/certificates");
 		const drawer = await openFirstCertificate();
 
 		expect(within(drawer).getByText("유효기간")).toBeInTheDocument();
 		expect(within(drawer).getByText("발급일")).toBeInTheDocument();
-		expect(within(drawer).queryByText("발급 CA")).not.toBeInTheDocument();
+		expect(within(drawer).getByText("발급 CA")).toBeInTheDocument();
+		expect(within(drawer).getByText(CERTIFICATE.issuerDn)).toBeInTheDocument();
+		expect(within(drawer).getByText("SHA-256 지문")).toBeInTheDocument();
+		expect(within(drawer).getByText(CERTIFICATE.fingerprintSha256)).toBeInTheDocument();
 	});
 
 	/** 인증서 원문은 목록·상세에 담기지 않고 다운로드로만 나간다(CertificateResponse). */

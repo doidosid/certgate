@@ -27,15 +27,12 @@ import PageHeader from "../shared/ui/PageHeader";
 import QueryState from "../shared/ui/QueryState";
 import StatusChip from "../shared/ui/StatusChip";
 
-/**
- * ui-design.md §5는 목록에 SAN URI·키 알고리즘까지 요구하지만, 목록 응답
- * (CertificateRequestResponse)에는 id·deviceId·status·requestedAt만 있다. 목록을
- * 채우려면 행마다 상세를 한 번씩 더 불러야 하므로, 그 두 항목은 상세 Drawer에서
- * 보여준다. 계약을 바꾸는 대신 화면 구성을 맞춘 것이다.
- */
+/** ui-design.md §5 목록: 요청 ID, 디바이스, SAN URI, 키 알고리즘, 요청일, 상태. */
 const COLUMNS: Column<CertificateRequestItem>[] = [
 	{ key: "id", header: "요청 ID", render: (row) => <Mono>{row.id}</Mono> },
 	{ key: "deviceId", header: "디바이스", render: (row) => <DeviceNameLink deviceId={row.deviceId} /> },
+	{ key: "sanUri", header: "SAN URI", render: (row) => <Mono breakAll>{row.sanUri ?? "-"}</Mono> },
+	{ key: "publicKeyAlgorithm", header: "키 알고리즘", render: (row) => row.publicKeyAlgorithm },
 	{ key: "requestedAt", header: "요청일", render: (row) => <DateTimeText value={row.requestedAt} /> },
 	{
 		key: "status",
