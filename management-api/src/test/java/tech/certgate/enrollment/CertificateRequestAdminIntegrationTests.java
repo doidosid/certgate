@@ -252,6 +252,9 @@ class CertificateRequestAdminIntegrationTests {
 		@SuppressWarnings("unchecked")
 		List<Map<String, Object>> content = (List<Map<String, Object>>) response.getBody().get("content");
 		assertThat(content).extracting(r -> r.get("id")).contains(rejectedId).doesNotContain(pendingId);
+		Map<String, Object> pendingRow = content.stream().filter(r -> r.get("id").equals(rejectedId)).findFirst().orElseThrow();
+		assertThat(pendingRow.get("sanUri")).isEqualTo("urn:certgate:device:sensor-list-rejected-01");
+		assertThat(pendingRow.get("publicKeyAlgorithm")).asString().isNotBlank();
 	}
 
 	@Test

@@ -146,6 +146,8 @@ Header: <code>Authorization: Bearer cg_enroll_xxx</code>
   "id": "241a9ba8-b4d0-4a20-8684-486847ae98a4",
   "deviceId": "0d6515ae-d560-4777-b102-054e71f98ef9",
   "status": "PENDING",
+  "sanUri": "urn:certgate:device:sensor-01",
+  "publicKeyAlgorithm": "EC",
   "requestedAt": "2026-08-13T05:40:00Z"
 }
 ~~~
