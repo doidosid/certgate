@@ -27,7 +27,7 @@ class CertificateServiceTest {
 	private Certificate newCertificate(UUID id) {
 		IssuedCertificate issued = new IssuedCertificate(
 				"-----BEGIN CERTIFICATE-----test-----END CERTIFICATE-----", "-----BEGIN CERTIFICATE-----chain-----END CERTIFICATE-----",
-				"SERIAL-1", "CN=sensor-01", "urn:certgate:device:sensor-01", "fp-1",
+				"SERIAL-1", "CN=sensor-01", "urn:certgate:device:sensor-01", "CN=CertGate Intermediate CA", "fp-1",
 				NOW.minus(Duration.ofDays(1)), NOW.plus(Duration.ofDays(29)));
 		return new Certificate(id, UUID.randomUUID(), UUID.randomUUID(), issued, NOW.minus(Duration.ofDays(1)));
 	}

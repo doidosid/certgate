@@ -15,8 +15,8 @@ class CertificateTest {
 
 	private Certificate certificateExpiringAt(Instant notAfter) {
 		IssuedCertificate issued = new IssuedCertificate(
-				"cert-pem", "chain-pem", "SERIAL", "CN=test", "urn:certgate:device:test", "fingerprint",
-				NOW.minus(Duration.ofDays(30)), notAfter);
+				"cert-pem", "chain-pem", "SERIAL", "CN=test", "urn:certgate:device:test", "CN=CertGate Intermediate CA",
+				"fingerprint", NOW.minus(Duration.ofDays(30)), notAfter);
 		return new Certificate(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), issued, NOW.minus(Duration.ofDays(30)));
 	}
 

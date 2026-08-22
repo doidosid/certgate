@@ -178,6 +178,10 @@ class CertificateIntegrationTests {
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
 		assertThat(response.getBody().get("status")).isEqualTo("VALID");
 		assertThat(response.getBody().get("serialNumber")).isEqualTo(issued.serialNumber());
+		assertThat(response.getBody().get("subjectDn")).asString().contains("sensor-cert-get-01");
+		assertThat(response.getBody().get("sanUri")).isEqualTo("urn:certgate:device:sensor-cert-get-01");
+		assertThat(response.getBody().get("issuerDn")).asString().isNotBlank();
+		assertThat(response.getBody().get("fingerprintSha256")).asString().hasSize(64);
 	}
 
 	@Test

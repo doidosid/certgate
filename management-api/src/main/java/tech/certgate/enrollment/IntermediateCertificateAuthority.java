@@ -131,6 +131,7 @@ public class IntermediateCertificateAuthority {
 					serial.toString(16).toUpperCase(),
 					csr.subject().toString(),
 					csr.sanUri(),
+					issuer.toString(),
 					fingerprint(certificate),
 					certificate.getNotBefore().toInstant(),
 					certificate.getNotAfter().toInstant());

@@ -48,6 +48,7 @@ PostgreSQL은 관리 영역의 Source of Truth다. Gateway 전송 대기는 별�
 - <code>serial_number</code>: Unique
 - <code>certificate_pem</code>: 공개 인증서 원문
 - <code>subject_dn</code>, <code>san_uri</code>
+- <code>issuer_dn</code>: 서명한 Intermediate CA의 Subject DN
 - <code>fingerprint_sha256</code>: Unique
 - <code>not_before</code>, <code>not_after</code>
 - <code>issued_at</code>
