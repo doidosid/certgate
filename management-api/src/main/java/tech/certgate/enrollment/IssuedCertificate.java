@@ -8,6 +8,7 @@ public record IssuedCertificate(
 		String serialNumber,
 		String subjectDn,
 		String sanUri,
+		String issuerDn,
 		String fingerprintSha256,
 		Instant notBefore,
 		Instant notAfter) {

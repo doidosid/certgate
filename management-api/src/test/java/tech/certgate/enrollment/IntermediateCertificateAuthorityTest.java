@@ -66,6 +66,25 @@ class IntermediateCertificateAuthorityTest {
 		assertThat(issued.notAfter()).isEqualTo(now.plus(Duration.ofDays(30)));
 	}
 
+	@Test
+	void sign_issuerDnMatchesTheIntermediateCasOwnSubject() throws Exception {
+		Path dir = Files.createTempDirectory("certgate-issuer-dn-test");
+		Instant now = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+		TestCaFixture.CaPaths ca = TestCaFixture.generate(dir);
+
+		IntermediateCertificateAuthority authority = new IntermediateCertificateAuthority(
+				ca.rootCertPath().toString(), ca.intermediateCertPath().toString(), ca.intermediateKeyPath().toString(),
+				30, Clock.fixed(now, ZoneOffset.UTC));
+
+		KeyPair deviceKeyPair = TestCaFixture.generateEcKeyPair();
+		String csrPem = TestCaFixture.createDeviceCsrPem("sensor-issuer-dn-test", deviceKeyPair);
+		ParsedCsr parsed = new CsrValidator().validate(csrPem, "sensor-issuer-dn-test");
+
+		IssuedCertificate issued = authority.sign(parsed);
+
+		assertThat(issued.issuerDn()).isEqualTo(readCertificate(ca.intermediateCertPath()).getSubjectX500Principal().getName());
+	}
+
 	private static X509Certificate readCertificate(Path path) throws Exception {
 		CertificateFactory factory = CertificateFactory.getInstance("X.509");
 		try (InputStream in = Files.newInputStream(path)) {

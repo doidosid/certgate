@@ -9,6 +9,10 @@ public record CertificateResponse(
 		UUID deviceId,
 		String serialNumber,
 		CertificateStatus status,
+		String subjectDn,
+		String sanUri,
+		String issuerDn,
+		String fingerprintSha256,
 		Instant notBefore,
 		Instant notAfter,
 		Instant issuedAt,
@@ -19,6 +23,7 @@ public record CertificateResponse(
 	public static CertificateResponse from(Certificate certificate, Instant now) {
 		return new CertificateResponse(
 				certificate.getId(), certificate.getDeviceId(), certificate.getSerialNumber(), certificate.status(now),
+				certificate.getSubjectDn(), certificate.getSanUri(), certificate.getIssuerDn(), certificate.getFingerprintSha256(),
 				certificate.getNotBefore(), certificate.getNotAfter(), certificate.getIssuedAt(),
 				certificate.getRevokedAt(), certificate.getRevocationReason(), certificate.getRevocationNote());
 	}

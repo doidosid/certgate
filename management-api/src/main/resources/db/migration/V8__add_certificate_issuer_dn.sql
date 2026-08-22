@@ -1,0 +1,2 @@
+ALTER TABLE certificate ADD COLUMN issuer_dn VARCHAR(255) NOT NULL DEFAULT '';
+ALTER TABLE certificate ALTER COLUMN issuer_dn DROP DEFAULT;

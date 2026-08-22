@@ -34,6 +34,9 @@ public class Certificate {
 	@Column(name = "san_uri")
 	private String sanUri;
 
+	@Column(name = "issuer_dn", nullable = false)
+	private String issuerDn;
+
 	@Column(name = "fingerprint_sha256", nullable = false, unique = true)
 	private String fingerprintSha256;
 
@@ -66,6 +69,7 @@ public class Certificate {
 		this.certificatePem = issued.certificatePem();
 		this.subjectDn = issued.subjectDn();
 		this.sanUri = issued.sanUri();
+		this.issuerDn = issued.issuerDn();
 		this.fingerprintSha256 = issued.fingerprintSha256();
 		this.notBefore = issued.notBefore();
 		this.notAfter = issued.notAfter();
@@ -129,6 +133,14 @@ public class Certificate {
 
 	public String getSanUri() {
 		return sanUri;
+	}
+
+	public String getIssuerDn() {
+		return issuerDn;
+	}
+
+	public String getFingerprintSha256() {
+		return fingerprintSha256;
 	}
 
 	/** docs/api-spec.md §5: REVOKED > EXPIRED > EXPIRING_SOON (7 days) > VALID. */
