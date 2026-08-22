@@ -62,4 +62,23 @@
 - **틀렸거나 채택하지 않은 제안**: 없음
 - **관련 PR**: #56·#57
 
+## 2026-08-22 - Issue #50·#55 마감 전 마지막 두 Issue 정리
+
+- **목표**: 제출 전 남은 Issue를 모두 처리해 #8(제출 패키지)만 남긴다
+- **AI가 도운 부분**:
+  - Issue #50: `CertificateResponse`에 subjectDn·sanUri·fingerprintSha256(Entity에는 있었지만 getter가 없던 것 포함)·issuerDn(신규)을, `CertificateRequestResponse`에 sanUri·publicKeyAlgorithm을 추가(management-api PR #62). Admin Console의 인증서 목록·상세, 인증서 요청 목록에 새 필드를 반영하고 "서버 응답에 없어서 만들지 않는다"던 기존 주석·테스트 단언을 지움(PR #64).
+  - Issue #55: `tests/e2e/run.sh`에 SSE 재연결 후 CRITICAL Event 재조회, Cache 무효화 실패 시 30초 TTL 수렴 시나리오 2개를 추가(PR #63) — 별도 병렬 작업(Sub-agent)으로 진행
+- **내가 내린 결정**:
+  - Issue #50 방향은 "서버 DTO 확장"으로 직접 선택(문서(ui-design.md) 계약을 축소하는 대안 대신). 이미 완성한 화면 계약을 지키는 쪽이 Portfolio 완성도에 맞다고 판단
+  - "발급 CA" 식별자(issuerDn)는 별도 CA 테이블·enum을 새로 만들지 않고, `IntermediateCertificateAuthority.sign()`이 서명 시점에 이미 계산해 두는 Intermediate CA 자신의 Subject DN을 그대로 저장하는 쪽으로 결정 — 이 프로젝트는 Intermediate CA가 항상 하나뿐이라(ADR-002) 여러 CA를 구분하는 모델은 지금 범위에 없는 요구다(YAGNI)
+  - Migration은 `ALTER TABLE ... ADD COLUMN issuer_dn ... DEFAULT '' → DROP DEFAULT` 패턴으로, 기존 행이 있는 배포에서도 깨지지 않게 함
+  - 두 PR 모두 Codex 리뷰를 건너뛰기로 결정 — 순수 조회 노출/테스트 코드로 새 보안 경계·쓰기 경로가 없고, 근거를 각 PR 본문에 남김(Codex는 이 시점 크레딧 소진 상태였음)
+- **검증 방법**:
+  - management-api: `./gradlew test` 23개 스위트 전부 통과(Testcontainers 실제 Postgres 포함, CertificateIntegrationTests가 새 필드 4개가 실제 서명 흐름부터 HTTP 응답까지 흘러나오는지 확인)
+  - admin-console: `npm run typecheck`, `npm test` 20개 파일·203개 테스트 전부 통과
+  - E2E: `./tests/e2e/run.sh`를 실제 Compose 스택(Docker·Postgres·SQLite Outbox)에서 실행, 12개 시나리오·65개 단언 전부 통과
+  - 제출 전 `gitleaks detect`로 전체 Git 히스토리(146 Commit) 재검사, 결과 없음(Leak 0)
+- **틀렸거나 채택하지 않은 제안**: 없음. 다만 진행 중 작업 방식의 실수 하나를 기록한다 — Issue #50과 #55를 같은 작업 디렉터리에서 격리 없이 병렬로 진행하다가, 브랜치를 전환하는 동안 서로의 미Commit 변경이 뒤섞일 뻔했다. Commit 자체는 안전했지만 이후로는 병렬 작업마다 별도 `git worktree`로 분리했다
+- **관련 PR**: #62·#63·#64
+
 실제 코드 작성 이후에는 AI가 생성한 코드, 직접 수정한 오류, 실행한 Test 명령과 결과를 작업별로 추가한다.
