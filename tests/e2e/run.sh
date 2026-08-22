@@ -160,6 +160,30 @@ latest_severity() {
 		json 'd["content"][0]["severity"] if d["content"] else "NONE"'
 }
 
+# latest_occurred_at <deviceId> -> 그 Device의 가장 최근 Security Event의 occurredAt.
+# admin-console CriticalEventProvider가 재연결 보완 조회의 커서로 쓰는 것과 같은 값 —
+# 서버가 준 시각만 쓴다(브라우저 시계를 쓰면 안 되는 이유는 그 파일의 주석 참고).
+latest_occurred_at() {
+	curl -sf "$V1/security-events?deviceId=$1&size=1" |
+		json 'd["content"][0]["occurredAt"] if d["content"] else ""'
+}
+
+# backfill_count <cursor> -> severity=CRITICAL&from=<cursor> 로 잡히는 총 건수.
+# CriticalEventProvider.backfill()과 같은 질의(deviceId로 좁히지 않는다).
+backfill_count() {
+	curl -sf --get --data-urlencode 'severity=CRITICAL' --data-urlencode "from=$1" \
+		--data-urlencode 'size=50' "$V1/security-events" | json 'd["totalElements"]'
+}
+
+# backfill_grew <cursor> <이전 건수> -> 그 뒤로 새 CRITICAL Event가 하나라도 잡혔는가
+backfill_grew() {
+	local n; n="$(backfill_count "$1" 2>/dev/null)"
+	[ -n "$n" ] && [ "$n" -gt "$2" ]
+}
+
+# gw_blocked <deviceKey> -> 지금 요청하면 403인가 (Cache TTL 수렴 확인용 Polling)
+gw_blocked() { [ "$(gw "$1" POST /telemetry)" = "403" ]; }
+
 outbox_pending() {
 	"${COMPOSE[@]}" exec -T gateway wget -qO- \
 		--header="Authorization: Bearer $(grep '^GATEWAY_INTERNAL_TOKEN=' "$REPO_DIR/.env.example" | cut -d= -f2-)" \
@@ -458,8 +482,55 @@ s9_recovery_resend() {
 	fi
 }
 
+s10_cache_invalidation_failure() {
+	scenario "10. Cache 무효화 실패 시 TTL 수렴"
+
+	local out tok dev_id
+	out="$(register e2e-sensor-04 "E2E TTL 수렴 확인" SENSOR)" || { ng "Device 등록 실패"; return; }
+	dev_id="${out%%$'\t'*}"; tok="${out##*$'\t'}"
+	if ! enroll e2e-sensor-04 "$tok"; then ng "Device Enrollment 실패"; return; fi
+
+	check "폐기 전 허용" "$(gw e2e-sensor-04 POST /telemetry)" "200"
+
+	# management-api → gateway 방향의 Cache 무효화 호출만 끊는다. gateway 컨테이너
+	# 자체와 gateway → management-api 방향(Access Context 조회), Device의 mTLS
+	# 요청(8443)은 그대로 둔다 — management-api 컨테이너 안에서만 "gateway"라는
+	# 호스트명을 자기 자신(127.0.0.1)으로 가리키게 해서, 그 포트(8081)에 아무도
+	# 없어 즉시 연결이 거부되게 만든다(GatewayCacheClient는 이 실패를 삼키고
+	# Revoke 자체는 Rollback하지 않는다 — CLAUDE.md 보안 필수 규칙).
+	if ! "${COMPOSE[@]}" exec -T management-api sh -c "echo '127.0.0.1 gateway' >> /etc/hosts" >/dev/null 2>&1; then
+		skip "Cache 무효화 실패 시 TTL 수렴 (management-api 컨테이너의 /etc/hosts를 바꿀 수 없다)"
+		return
+	fi
+
+	local cert_id
+	cert_id="$(curl -sf "$V1/certificates?deviceId=$dev_id" | json 'd["content"][0]["id"]')"
+	if ! curl -sf -o /dev/null -X POST "$V1/certificates/$cert_id/revoke" \
+		-H 'Content-Type: application/json' -d '{"reason":"KEY_COMPROMISE","note":"E2E"}'; then
+		ng "인증서 폐기 실패"
+		"${COMPOSE[@]}" exec -T management-api sed -i '/127\.0\.0\.1 gateway/d' /etc/hosts >/dev/null 2>&1
+		return
+	fi
+	ok "인증서 폐기 (Cache 무효화 대상 통신은 끊긴 상태)"
+
+	local code
+	code="$(gw e2e-sensor-04 POST /telemetry)"
+	check "무효화가 실패해도 폐기 자체는 Rollback되지 않는다 (당장은 여전히 허용)" "$code" "200"
+
+	# 무효화 경로를 되돌린다 — 나머지 시나리오에 영향이 남지 않게. TTL 수렴은
+	# 이 되돌림과 무관하게 처음 실패했던 30초 TTL 그대로 진행된다.
+	"${COMPOSE[@]}" exec -T management-api sed -i '/127\.0\.0\.1 gateway/d' /etc/hosts >/dev/null 2>&1
+
+	if wait_for 35 "gw_blocked e2e-sensor-04"; then
+		ok "Cache 무효화가 실패해도 30초 TTL로 결국 차단에 수렴한다"
+		check_contains "TTL 수렴 후 차단 Reason Code" "$(cat "$WORK_DIR/last-body")" "CERTIFICATE_REVOKED"
+	else
+		ng "TTL이 지나도 차단으로 수렴하지 않았다"
+	fi
+}
+
 s11_sse_critical() {
-	scenario "10. CRITICAL SSE 알림"
+	scenario "11. CRITICAL SSE 알림과 재연결 보완 조회"
 
 	# 새 CRITICAL Event를 만들면서 SSE Stream을 함께 열어 둔다.
 	local sse_out="$WORK_DIR/sse.txt"
@@ -485,10 +556,37 @@ s11_sse_critical() {
 	fi
 	kill "$sse_pid" 2>/dev/null
 	wait "$sse_pid" 2>/dev/null
+
+	# 필수 시나리오 14: 연결이 끊긴 뒤 다시 열릴 때 놓친 구간을 재조회한다.
+	# admin-console CriticalEventProvider가 매 연결마다 하는 동작 그대로 —
+	# 커서는 방금 SSE로 받은 Event의 occurredAt(서버 시각)이다.
+	local cursor before
+	cursor="$(latest_occurred_at "$DEV_B_ID")"
+	before="$(backfill_count "$cursor" 2>/dev/null)"
+
+	# SSE 연결이 끊긴 상태에서 놓치는 Event를 하나 더 만든다.
+	local code2
+	code2="$(gw e2e-sensor-02 POST /telemetry)" # 여전히 폐기된 인증서 → 또 CRITICAL
+	check "연결이 끊긴 동안에도 계속 차단된다" "$code2" "403"
+
+	if wait_for 20 "backfill_grew $cursor ${before:-0}"; then
+		ok "재연결 시 severity=CRITICAL&from=커서로 놓친 Event를 재조회할 수 있다"
+	else
+		ng "재연결 보완 조회가 끊긴 동안 생긴 Event를 찾지 못했다"
+	fi
+
+	# 재연결 자체도 확인한다 — Console이 마운트마다 새 SSE를 여는 것과 같다.
+	local sse_headers2="$WORK_DIR/sse2-headers.txt"
+	curl -sN -D "$sse_headers2" --max-time 5 "$V1/security-events/stream" >/dev/null 2>&1 &
+	local sse_pid2=$!
+	sleep 2
+	kill "$sse_pid2" 2>/dev/null
+	wait "$sse_pid2" 2>/dev/null
+	check_contains "끊긴 뒤 새 SSE Stream을 다시 열 수 있다" "$(cat "$sse_headers2" 2>/dev/null)" "200"
 }
 
 s12_no_secrets() {
-	scenario "11. Secret 노출 확인"
+	scenario "12. Secret 노출 확인"
 
 	local logs="$WORK_DIR/all.log"
 	if ! "${COMPOSE[@]}" logs --no-color >"$logs" 2>&1 || [ ! -s "$logs" ]; then
@@ -544,6 +642,7 @@ s6_identity_headers
 s7_outbox_during_outage
 s8_gateway_restart
 s9_recovery_resend
+s10_cache_invalidation_failure
 s11_sse_critical
 s12_no_secrets
 
