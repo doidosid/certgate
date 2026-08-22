@@ -66,9 +66,7 @@
 
 아직 CI에 넣지 않았다(development-guide.md "E2E는 안정화 후 CI에 포함"). 실행 시간이 길고 Docker·Go·OpenSSL 3.2 이상을 요구하며, 만료 인증서 시나리오는 OpenSSL이 낮으면 SKIP된다.
 
-**알려진 커버리지 차이(2026-08-21).** 위 11개 시나리오는 필수 시나리오 1~13을 검증하지만 두 곳은 정상 경로만 확인한다.
+**필수 시나리오 14곳을 모두 검증한다(2026-08-22, Issue #55로 남겼던 두 틈을 마저 닫았다).**
 
-- **필수 시나리오 14(SSE 재연결 후 최근 Event 재조회)는 아직 검증하지 않는다.** `s11_sse_critical`은 연결된 SSE로 실시간 전달만 확인하고, 연결을 끊었다가 다시 연 뒤 `severity=CRITICAL`로 놓친 구간을 재조회하는 흐름(admin-console `CriticalEventProvider`가 실제로 하는 동작)은 스크립트가 재현하지 않는다.
-- **시나리오 12(폐기 후 Cache 무효화)는 무효화가 성공하는 경로만 본다.** Gateway Cache 무효화 호출 자체가 실패했을 때 30초 TTL로 최종 수렴하는지(security-design.md·CLAUDE.md 보안 필수 규칙)는 정상적으로는 무효화 실패를 스크립트에서 인위적으로 만들기 어려워 검증하지 않는다.
-
-두 항목은 후속 Issue로 분리했다(#55).
+- **시나리오 12(폐기 후 Cache 무효화)의 실패 경로.** `s10_cache_invalidation_failure`가 management-api 컨테이너의 `/etc/hosts`에서 `gateway` 호스트명만 자기 자신(127.0.0.1)으로 가리키게 해 management-api → gateway 방향의 무효화 호출만 끊는다(gateway 컨테이너 자체와 gateway → management-api 방향, Device의 mTLS 요청은 그대로 둔다). 그 상태에서 폐기해도 Rollback되지 않고 당장은 여전히 허용됨을 먼저 확인한 뒤, 무효화 경로를 되돌리고 30초 TTL로 결국 차단에 수렴하는지 본다.
+- **필수 시나리오 14(SSE 재연결 후 최근 Event 재조회).** `s11_sse_critical`이 SSE 연결을 끊은 뒤 `severity=CRITICAL&from=<커서>`로 그 사이 놓친 CRITICAL Event를 재조회하고, 새 SSE Stream을 다시 열 수 있는지까지 확인한다 — admin-console `CriticalEventProvider`가 재연결마다 하는 동작과 같다.

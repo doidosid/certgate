@@ -99,10 +99,10 @@ Critical 등급 Event는 접속 중인 콘솔에 SSE Toast로 즉시 뜹니다. 
 | Event Outbox·SSE (Issue #6) | 완료 — SQLite Outbox 보존·재전송, Critical Event SSE Broadcast |
 | Management API (Issue #3) | 완료 — Device·CSR·Certificate·Policy·Security Event·Dashboard API |
 | Admin Console 실제 연결 (Issue #7) | 완료 — 위 "관리 콘솔 화면"의 5개 화면과 전역 Critical Toast. 위 "알려진 화면 계약 차이" 참고 |
-| E2E·장애 복구 (Issue #4) | 완료 — 아래 "E2E 검증"의 11개 시나리오·50개 단언이 실제 스택에서 통과 |
+| E2E·장애 복구 (Issue #4) | 완료 — 아래 "E2E 검증"의 12개 시나리오·65개 단언이 실제 스택에서 통과(Issue #55의 커버리지 틈 포함) |
 | 제출 패키지 (Issue #8) | 진행 중 — 이 문서 갱신이 그 일부 |
 
-부수적으로 발견·해결된 것: Gateway가 handshake에서 Intermediate CA를 보내지 않던 문제(Issue #42), Gateway Readiness Endpoint 부재(Issue #36), Management API 미매핑 경로가 500을 반환하던 문제(Issue #39), Low 등급 테스트 검출력 3건(Issue #25·#27·#30). 남은 것: [Issue #50](https://github.com/doidosid/certgate/issues/50)(위 "알려진 화면 계약 차이"), [Issue #55](https://github.com/doidosid/certgate/issues/55)(E2E가 아직 검증하지 않는 SSE 재연결 재조회·Cache 무효화 실패 시 TTL 수렴 경로).
+부수적으로 발견·해결된 것: Gateway가 handshake에서 Intermediate CA를 보내지 않던 문제(Issue #42), Gateway Readiness Endpoint 부재(Issue #36), Management API 미매핑 경로가 500을 반환하던 문제(Issue #39), Low 등급 테스트 검출력 3건(Issue #25·#27·#30), E2E가 검증하지 않던 SSE 재연결 재조회·Cache 무효화 실패 시 TTL 수렴 경로(Issue #55). 남은 것: [Issue #50](https://github.com/doidosid/certgate/issues/50)(위 "알려진 화면 계약 차이").
 
 세부 순서는 [`docs/implementation-plan.md`](docs/implementation-plan.md)를 따릅니다.
 
@@ -135,16 +135,16 @@ Backend 없이 콘솔 화면만 보려면 `admin-console`에서 `VITE_USE_MOCK=t
 
 핵심 보안 흐름을 실제 스택에서 한 번에 검증합니다. Mock이나 Stub을 쓰지 않고, Compose로 5개 서비스를 띄운 뒤 실제 Device Agent가 만든 Key·CSR로 인증서를 발급받아 실제 mTLS로 Gateway에 요청합니다.
 
-검증하는 것: Enrollment(Token·CSR·승인·수령), Token 오류와 SAN 불일치 거절, 정상 요청 허용, 다른 CA·만료·폐기 인증서 차단, Role 정책, 외부 Identity Header 제거와 재생성, Management API 장애 중 Outbox 보관, Gateway 재시작 후 보존, 복구 후 재전송과 중복 방지, 폐기 후 Cache 무효화, CRITICAL SSE 알림, 그리고 로그와 작업 트리에 Key·인증서·Token이 남지 않았는지.
+검증하는 것: Enrollment(Token·CSR·승인·수령), Token 오류와 SAN 불일치 거절, 정상 요청 허용, 다른 CA·만료·폐기 인증서 차단, Role 정책, 외부 Identity Header 제거와 재생성, Management API 장애 중 Outbox 보관, Gateway 재시작 후 보존, 복구 후 재전송과 중복 방지, 폐기 후 Cache 무효화(성공·실패 후 TTL 수렴 양쪽), CRITICAL SSE 알림과 재연결 후 놓친 구간 재조회, 그리고 로그와 작업 트리에 Key·인증서·Token이 남지 않았는지.
 
-실제 실행 결과(11개 시나리오, 50개 단언):
+실제 실행 결과(12개 시나리오, 65개 단언):
 
 ~~~text
 == 결과
-  통과 50 · 실패 0 · 건너뜀 0
+  통과 65 · 실패 0 · 건너뜀 0
 ~~~
 
-**DB Volume을 지우고 시작하며** 5분 안팎 걸립니다. 자세한 내용은 [테스트 전략](docs/testing.md#e2e-실행)을 참고하십시오. 커버리지의 알려진 한계(필수 시나리오 14 SSE 재연결 재조회, Cache 무효화 실패 시 TTL 수렴 경로)는 [Issue #55](https://github.com/doidosid/certgate/issues/55)에 남겼습니다.
+**DB Volume을 지우고 시작하며** 5분 안팎 걸립니다. 자세한 내용은 [테스트 전략](docs/testing.md#e2e-실행)을 참고하십시오.
 
 ## 관측 (Observability)
 
