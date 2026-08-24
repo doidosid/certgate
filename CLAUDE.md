@@ -77,13 +77,13 @@ CertGate는 X.509 인증서와 mTLS로 네트워크 Device의 신원을 검증�
 
 ## 현재 상태
 
-**최종 갱신: 2026-08-22.** 제출 목표는 2026-08-23(내일)이다.
+**최종 갱신: 2026-08-24.** 제출 목표는 2026-08-23이었고, 하루 앞선 2026-08-22에 모든 Issue가 닫혔다.
 
-완료된 Issue: #5 Foundation, #1 Enrollment·PKI, #2 Gateway mTLS, #3 Management API, #6 Event Outbox·SSE, #7 Admin Console 실제 연결, **#4 E2E·장애 복구**. `device-agent`·`gateway`·`backend-service`(Go), `management-api`(Spring), `admin-console`(React), `infra`, `pki`에 실제 소스와 테스트가 있고 CI 9개 Job이 돈다.
+완료된 Issue: #5 Foundation, #1 Enrollment·PKI, #2 Gateway mTLS, #3 Management API, #6 Event Outbox·SSE, #7 Admin Console 실제 연결, #4 E2E·장애 복구, **#8 제출 패키지**(마지막). `device-agent`·`gateway`·`backend-service`(Go), `management-api`(Spring), `admin-console`(React), `infra`, `pki`에 실제 소스와 테스트가 있고 CI 9개 Job이 돈다.
 
 **`admin-console`의 5개 화면(Dashboard, Devices, Certificate Requests, Certificates, Security Events)과 전역 CRITICAL SSE Toast는 모두 구현돼 실제 API에 연결돼 있다.** 자리표시자는 남아 있지 않다. 실제 화면 캡처는 [README의 "관리 콘솔 화면"](README.md#관리-콘솔-화면)에 있다.
 
-**남은 것: #8 제출 패키지뿐이다.** `tests/e2e/run.sh`(12개 시나리오·65개 단언)가 Compose 스택 위로 Device → Gateway → Backend를 끝까지 도는 핵심 흐름과 장애 복구를 검증한다.
+**남은 열린 Issue가 없다.** `tests/e2e/run.sh`(12개 시나리오·65개 단언)가 Compose 스택 위로 Device → Gateway → Backend를 끝까지 도는 핵심 흐름과 장애 복구를 검증하고, `docs/ai-usage.md`·Secret 최종 검사(`gitleaks`, Leak 0건)까지 마쳤다.
 
 후속 개선 Issue는 전부 처리됐다: #25·#27·#30(Codex Low 테스트 검출력), #36(Gateway readiness 미구현), #39(매핑되지 않은 경로가 404 대신 500), #42(Gateway가 handshake에서 Intermediate를 보내지 않음 — PR #51), #50(인증서 화면의 미구현 UI 계약 항목 — 서버 DTO 확장 + Console 반영), #55(E2E가 검증하지 않던 SSE 재연결 재조회·Cache 무효화 실패 시 TTL 수렴).
 
