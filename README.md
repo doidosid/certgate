@@ -90,7 +90,7 @@ Critical 등급 Event는 접속 중인 콘솔에 SSE Toast로 즉시 뜹니다. 
 | Management API (Issue #3) | 완료 — Device·CSR·Certificate·Policy·Security Event·Dashboard API |
 | Admin Console 실제 연결 (Issue #7) | 완료 — 위 "관리 콘솔 화면"의 5개 화면과 전역 Critical Toast |
 | E2E·장애 복구 (Issue #4) | 완료 — 아래 "E2E 검증"의 12개 시나리오·65개 단언이 실제 스택에서 통과(Issue #55의 커버리지 틈 포함) |
-| 제출 패키지 (Issue #8) | 진행 중 — 이 문서 갱신이 그 일부 |
+| 제출 패키지 (Issue #8) | 완료 — 이 문서 갱신, `docs/ai-usage.md` 기록, Secret 최종 검사(`gitleaks`, Leak 0건) |
 
 부수적으로 발견·해결된 것: Gateway가 handshake에서 Intermediate CA를 보내지 않던 문제(Issue #42), Gateway Readiness Endpoint 부재(Issue #36), Management API 미매핑 경로가 500을 반환하던 문제(Issue #39), Low 등급 테스트 검출력 3건(Issue #25·#27·#30), E2E가 검증하지 않던 SSE 재연결 재조회·Cache 무효화 실패 시 TTL 수렴 경로(Issue #55), 인증서 화면의 미구현 UI 계약 항목(Issue #50 — 발급 CA·Subject·SAN URI·SHA-256 지문을 서버 DTO에 추가하고 화면에 반영).
 
