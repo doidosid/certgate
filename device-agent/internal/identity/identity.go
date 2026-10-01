@@ -16,7 +16,15 @@ import (
 	"path/filepath"
 )
 
-const keyFileName = "device.key"
+// Runtime directory file layout. These are the single source of truth for
+// where Device key and certificate material live under RuntimeDir; callers
+// outside this package (main, client) must use these constants rather than
+// repeating the file names.
+const (
+	KeyFileName     = "device.key"
+	CertFileName    = "device.crt"
+	CAChainFileName = "ca-chain.crt"
+)
 
 // sanURIPrefix is the single allowed SAN URI prefix for Device identity
 // (docs/adr/001-device-identity.md).
@@ -41,7 +49,7 @@ func EnsureKey(runtimeDir string) (Identity, error) {
 		return Identity{}, fmt.Errorf("identity: create runtime dir: %w", err)
 	}
 
-	keyPath := filepath.Join(runtimeDir, keyFileName)
+	keyPath := filepath.Join(runtimeDir, KeyFileName)
 
 	if pemBytes, err := os.ReadFile(keyPath); err == nil {
 		key, parseErr := parseECPrivateKey(pemBytes)

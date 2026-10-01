@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func setValidEnv(t *testing.T) {
 	t.Helper()
@@ -23,12 +26,72 @@ func TestLoad_Valid(t *testing.T) {
 	}
 }
 
+func TestLoad_HeartbeatIntervalDefaultsWhenUnset(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv("HEARTBEAT_INTERVAL", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.HeartbeatInterval != defaultHeartbeatInterval {
+		t.Errorf("HeartbeatInterval = %v, want default %v", cfg.HeartbeatInterval, defaultHeartbeatInterval)
+	}
+}
+
+func TestLoad_HeartbeatIntervalParsesOverride(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv("HEARTBEAT_INTERVAL", "5s")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.HeartbeatInterval != 5*time.Second {
+		t.Errorf("HeartbeatInterval = %v, want 5s", cfg.HeartbeatInterval)
+	}
+}
+
+func TestLoad_HeartbeatIntervalRejectsInvalidDuration(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv("HEARTBEAT_INTERVAL", "not-a-duration")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error for invalid HEARTBEAT_INTERVAL")
+	}
+}
+
+func TestLoad_HeartbeatIntervalRejectsNonPositive(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv("HEARTBEAT_INTERVAL", "0s")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error for non-positive HEARTBEAT_INTERVAL")
+	}
+}
+
+func TestLoad_EnrollmentTokenNotRequired(t *testing.T) {
+	// A Device that already has a usable certificate on disk never needs to
+	// enroll again, so Load must not require a Token up front — only
+	// whoever actually attempts enrollment does
+	// (codexReview/feature-device-agent-mtls.md Medium finding).
+	setValidEnv(t)
+	t.Setenv("DEVICE_ENROLLMENT_TOKEN", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.EnrollmentToken != "" {
+		t.Errorf("EnrollmentToken = %q, want empty", cfg.EnrollmentToken)
+	}
+}
+
 func TestLoad_MissingRequiredVars(t *testing.T) {
 	required := []string{
 		"DEVICE_KEY",
 		"MANAGEMENT_API_URL",
 		"GATEWAY_URL",
-		"DEVICE_ENROLLMENT_TOKEN",
 		"DEVICE_RUNTIME_DIR",
 	}
 
@@ -47,13 +110,13 @@ func TestLoad_MissingRequiredVars(t *testing.T) {
 
 func TestLoad_ErrorDoesNotLeakSecretValues(t *testing.T) {
 	setValidEnv(t)
-	t.Setenv("DEVICE_ENROLLMENT_TOKEN", "")
+	t.Setenv("DEVICE_KEY", "")
 
 	_, err := Load()
 	if err == nil {
-		t.Fatal("expected error when DEVICE_ENROLLMENT_TOKEN is missing")
+		t.Fatal("expected error when DEVICE_KEY is missing")
 	}
-	if err.Error() != "config: missing required environment variables: DEVICE_ENROLLMENT_TOKEN" {
+	if err.Error() != "config: missing required environment variables: DEVICE_KEY" {
 		t.Errorf("error = %q, want only the variable name, no value", err.Error())
 	}
 }

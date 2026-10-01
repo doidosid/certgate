@@ -110,6 +110,11 @@ enroll() {
 		kill "$agent_pid" 2>/dev/null
 		return 1
 	fi
+
+	# device-agent는 더 이상 인증서 발급 후 스스로 종료하지 않는다 — mTLS로
+	# Gateway에 Heartbeat를 계속 보낸다(Issue 기준 device-agent mTLS Client).
+	# 여기서는 인증서만 있으면 되므로 SIGTERM으로 정상 종료시킨다.
+	kill "$agent_pid" 2>/dev/null
 	wait "$agent_pid" 2>/dev/null
 
 	# Gateway의 Client CA Pool에는 root-ca.crt만 있다(security-design.md §5).
