@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -308,9 +309,15 @@ func TestHeartbeat_RequiresClientCertificate(t *testing.T) {
 }
 
 func TestRun_StopsOnContextCancel(t *testing.T) {
-	var count int
+	// count is incremented on the server's per-request goroutine. The
+	// client's ctx can expire mid-request (aborting an in-flight Heartbeat
+	// before it cleanly reads a response), so there is no guarantee the
+	// handler goroutine has fully synchronized with this test's goroutine
+	// by the time Run returns — an atomic counter avoids a data race
+	// regardless of that timing.
+	var count atomic.Int64
 	fixture := newMTLSFixture(t, func(w http.ResponseWriter, r *http.Request) {
-		count++
+		count.Add(1)
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -329,7 +336,7 @@ func TestRun_StopsOnContextCancel(t *testing.T) {
 	if elapsed > 500*time.Millisecond {
 		t.Errorf("Run took %v after context cancellation, expected a prompt return", elapsed)
 	}
-	if count == 0 {
+	if count.Load() == 0 {
 		t.Error("expected at least one heartbeat attempt before cancellation")
 	}
 }
