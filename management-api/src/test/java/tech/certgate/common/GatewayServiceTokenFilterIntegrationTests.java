@@ -24,7 +24,11 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import tech.certgate.enrollment.TestCaFixture;
 
 /**
- * Runs against the real embedded Tomcat with a raw socket, because the bypass
+ * Regression for the 2026-10-02 review (docs/deployment-roadmap.md Phase 0
+ * High): <code>/%69nternal/...</code> and <code>/internal;x=1/...</code> reached
+ * <code>/internal/**</code> Handlers without a Service Token.
+ *
+ * <p>Runs against the real embedded Tomcat with a raw socket, because the bypass
  * depends on how Tomcat and Spring MVC each normalize the request path —
  * MockMvc and HTTP client libraries would re-encode or normalize the path
  * before it ever reaches the server.
@@ -58,35 +62,80 @@ class GatewayServiceTokenFilterIntegrationTests {
 			"/internal;x=1/access-context?serialNumber=01",
 			"/internal/access-context;x=1?serialNumber=01",
 			"/internal/%61ccess-context?serialNumber=01",
+			"/internal/access-context/?serialNumber=01",
+			"/internal",
 			"//internal/access-context?serialNumber=01",
+			"/;x/internal/access-context?serialNumber=01",
 			"/./internal/access-context?serialNumber=01",
+			"/%2e/internal/access-context?serialNumber=01",
 			"/x/../internal/access-context?serialNumber=01",
+			"/x/%2e%2e/internal/access-context?serialNumber=01",
+			"http://localhost/%69nternal/access-context?serialNumber=01",
 	})
-	void internalPathVariantsNeverReachHandlerWithoutServiceToken(String rawPath) throws IOException {
-		RawResponse response = get(rawPath);
+	void internalPathVariantsRequireServiceToken(String target) throws IOException {
+		assertServiceTokenRejected(target, send("GET", target));
+	}
 
-		// 401 from the filter, or 400 if Tomcat rejects the path outright. Anything
-		// else — 200 or the handler's own 404 CERTIFICATE_NOT_FOUND — means the
-		// request reached an /internal handler without a Service Token.
-		assertThat(response.status())
-				.as("%s -> %s", rawPath, response.raw())
-				.isIn(400, 401);
-		assertThat(response.raw()).doesNotContain("CERTIFICATE_NOT_FOUND");
+	@ParameterizedTest
+	@ValueSource(strings = {
+			"/internal/security-events/batch",
+			"/%69nternal/security-events/batch",
+			"/internal;x=1/security-events/batch",
+	})
+	void eventBatchPathVariantsRequireServiceToken(String target) throws IOException {
+		assertServiceTokenRejected(target, send("POST", target));
+	}
+
+	/**
+	 * Tomcat rejects these outright (400) or Spring MVC maps them to no Handler
+	 * (404 RESOURCE_NOT_FOUND), so the filter not guarding some of them is fine —
+	 * what must never happen is the access-context Handler running.
+	 */
+	@ParameterizedTest
+	@ValueSource(strings = {
+			"/internal%2Faccess-context?serialNumber=01",
+			"/internal%5Caccess-context?serialNumber=01",
+			"/internal\\access-context?serialNumber=01",
+			"/%2569nternal/access-context?serialNumber=01",
+			"/internal%3Bx/access-context?serialNumber=01",
+			"/internal/access-context%00?serialNumber=01",
+			"/%C0%AEinternal/access-context?serialNumber=01",
+			"/INTERNAL/access-context?serialNumber=01",
+	})
+	void rejectedOrUnmappedVariantsNeverReachHandler(String target) throws IOException {
+		RawResponse response = send("GET", target);
+
+		assertThat(response.status()).as("%s -> %s", target, response.raw()).isIn(400, 401, 404);
+		assertThat(response.raw()).as("%s -> %s", target, response.raw()).doesNotContain("CERTIFICATE_NOT_FOUND");
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = {"/api/v1/devices", "/actuator/health", "/internalx"})
-	void nonInternalPathsDoNotRequireServiceToken(String rawPath) throws IOException {
-		RawResponse response = get(rawPath);
+	void nonInternalPathsDoNotRequireServiceToken(String target) throws IOException {
+		RawResponse response = send("GET", target);
 
-		assertThat(response.raw()).as("%s -> %s", rawPath, response.raw()).doesNotContain("SERVICE_TOKEN_INVALID");
+		assertThat(response.status()).as("%s -> %s", target, response.raw()).isNotEqualTo(401);
+		assertThat(response.raw()).doesNotContain("SERVICE_TOKEN_INVALID");
 	}
 
-	private RawResponse get(String rawPath) throws IOException {
+	/** 401 from this filter specifically — not a Handler response, not a Tomcat rejection. */
+	private static void assertServiceTokenRejected(String target, RawResponse response) {
+		assertThat(response.status()).as("%s -> %s", target, response.raw()).isEqualTo(401);
+		assertThat(response.raw())
+				.contains("\"code\":\"SERVICE_TOKEN_INVALID\"")
+				.contains("Gateway Service Token이 유효하지 않습니다.")
+				.containsPattern("\"traceId\":\"[^\"]+\"");
+	}
+
+	private RawResponse send(String method, String target) throws IOException {
 		try (Socket socket = new Socket("127.0.0.1", port)) {
 			socket.setSoTimeout(10_000);
 			OutputStream out = socket.getOutputStream();
-			out.write(("GET " + rawPath + " HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+			String body = "POST".equals(method) ? "{\"events\":[]}" : "";
+			String headers = "POST".equals(method)
+					? "Content-Type: application/json\r\nContent-Length: " + body.length() + "\r\n"
+					: "";
+			out.write((method + " " + target + " HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n" + headers + "\r\n" + body)
 					.getBytes(StandardCharsets.US_ASCII));
 			out.flush();
 			InputStream in = socket.getInputStream();

@@ -59,6 +59,8 @@ public class GatewayServiceTokenFilter extends HttpFilter {
 		if (!isValid(header)) {
 			response.setStatus(HttpStatus.UNAUTHORIZED.value());
 			response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+			// Without this the Servlet default (ISO-8859-1) turns the Korean message into "?".
+			response.setCharacterEncoding(StandardCharsets.UTF_8.name());
 			objectMapper.writeValue(
 					response.getWriter(),
 					ErrorResponse.of("SERVICE_TOKEN_INVALID", "Gateway Service Token이 유효하지 않습니다.", TraceIdFilter.current()));
