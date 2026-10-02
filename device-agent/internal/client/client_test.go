@@ -8,7 +8,9 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"math/big"
 	"net"
 	"net/http"
@@ -16,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -85,14 +88,10 @@ func (parent *testCA) issueIntermediateCA(t *testing.T, serial int64) *testCA {
 	return &testCA{cert: cert, key: key}
 }
 
-func (ca *testCA) pemBlock() *pem.Block {
-	return &pem.Block{Type: "CERTIFICATE", Bytes: ca.cert.Raw}
-}
-
-// issueLeaf signs a leaf certificate with this CA's key, returning its DER
-// bytes and private key (not yet PEM-encoded, so callers decide which chain
-// segments to write to which file).
-func (ca *testCA) issueLeaf(t *testing.T, serial int64, extKeyUsage []x509.ExtKeyUsage) ([]byte, *ecdsa.PrivateKey) {
+// issueLeaf signs a leaf certificate with this CA's key, expiring at
+// notAfter, returning its DER bytes and private key (not yet PEM-encoded,
+// so callers decide which chain segments to write to which file).
+func (ca *testCA) issueLeaf(t *testing.T, serial int64, extKeyUsage []x509.ExtKeyUsage, notAfter time.Time) ([]byte, *ecdsa.PrivateKey) {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -101,8 +100,8 @@ func (ca *testCA) issueLeaf(t *testing.T, serial int64, extKeyUsage []x509.ExtKe
 	template := &x509.Certificate{
 		SerialNumber: big.NewInt(serial),
 		Subject:      pkix.Name{CommonName: "test-leaf"},
-		NotBefore:    time.Now().Add(-time.Hour),
-		NotAfter:     time.Now().Add(30 * 24 * time.Hour),
+		NotBefore:    time.Now().Add(-2 * time.Hour),
+		NotAfter:     notAfter,
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  extKeyUsage,
 		DNSNames:     []string{"localhost"},
@@ -147,15 +146,18 @@ type mtlsFixture struct {
 	caChainPath       string
 }
 
-func newMTLSFixture(t *testing.T, handler http.HandlerFunc) *mtlsFixture {
+// newMTLSFixtureWithDeviceNotAfter is newMTLSFixture but lets the caller
+// control the Device leaf's own expiry, for testing Client's locally
+// detected certificate expiry.
+func newMTLSFixtureWithDeviceNotAfter(t *testing.T, handler http.HandlerFunc, deviceNotAfter time.Time) *mtlsFixture {
 	t.Helper()
 	dir := t.TempDir()
 
 	root := newRootCA(t)
 	intermediate := root.issueIntermediateCA(t, 2)
 
-	serverLeafDER, serverKey := intermediate.issueLeaf(t, 10, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth})
-	deviceLeafDER, deviceKey := intermediate.issueLeaf(t, 20, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
+	serverLeafDER, serverKey := intermediate.issueLeaf(t, 10, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, time.Now().Add(30*24*time.Hour))
+	deviceLeafDER, deviceKey := intermediate.issueLeaf(t, 20, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}, deviceNotAfter)
 
 	// The Gateway's own server certificate chain carries its Intermediate
 	// issuer too (Issue #42), which is what lets the Device's RootCAs pool
@@ -192,6 +194,32 @@ func newMTLSFixture(t *testing.T, handler http.HandlerFunc) *mtlsFixture {
 		keyPath:     keyPath,
 		caChainPath: caChainPath,
 	}
+}
+
+func newMTLSFixture(t *testing.T, handler http.HandlerFunc) *mtlsFixture {
+	t.Helper()
+	return newMTLSFixtureWithDeviceNotAfter(t, handler, time.Now().Add(30*24*time.Hour))
+}
+
+// closedPortURL returns an https:// URL for a loopback port that nothing is
+// listening on, for simulating "connection refused".
+func closedPortURL(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve a port: %v", err)
+	}
+	addr := ln.Addr().String()
+	if err := ln.Close(); err != nil {
+		t.Fatalf("close reserved port: %v", err)
+	}
+	return "https://" + addr
+}
+
+func writeJSONReason(w http.ResponseWriter, status int, code string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{"code": code, "traceId": "test-trace"})
 }
 
 func TestNewClient_MissingCertFileErrors(t *testing.T) {
@@ -282,6 +310,14 @@ func TestHeartbeat_NonOKStatus(t *testing.T) {
 	if strings.Contains(err.Error(), bodyMarker) {
 		t.Errorf("error must not contain the response body, got %q", err.Error())
 	}
+
+	var hbErr *HeartbeatError
+	if !errors.As(err, &hbErr) {
+		t.Fatalf("expected *HeartbeatError, got %T", err)
+	}
+	if hbErr.Kind != FailureTemporary {
+		t.Errorf("Kind = %v, want FailureTemporary for a 503", hbErr.Kind)
+	}
 }
 
 func TestHeartbeat_RequiresClientCertificate(t *testing.T) {
@@ -305,6 +341,152 @@ func TestHeartbeat_RequiresClientCertificate(t *testing.T) {
 	_, err = noCertClient.Get(fixture.server.URL + "/heartbeat")
 	if err == nil {
 		t.Fatal("expected the mTLS fixture to reject a request without a client certificate")
+	}
+}
+
+func TestHeartbeat_CertificateRevokedReasonCode(t *testing.T) {
+	fixture := newMTLSFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		writeJSONReason(w, http.StatusForbidden, "CERTIFICATE_REVOKED")
+	})
+
+	c, err := NewClient(fixture.server.URL, fixture.certPath, fixture.keyPath, fixture.caChainPath)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	err = c.Heartbeat(context.Background())
+	var hbErr *HeartbeatError
+	if !errors.As(err, &hbErr) {
+		t.Fatalf("expected *HeartbeatError, got %T (%v)", err, err)
+	}
+	if hbErr.Kind != FailureReenrollRequired {
+		t.Errorf("Kind = %v, want FailureReenrollRequired", hbErr.Kind)
+	}
+	if hbErr.ReasonCode != "CERTIFICATE_REVOKED" {
+		t.Errorf("ReasonCode = %q, want CERTIFICATE_REVOKED", hbErr.ReasonCode)
+	}
+}
+
+func TestHeartbeat_CertificateExpiredReasonCode(t *testing.T) {
+	// Exercises the HTTP-reasonCode path (the Gateway's own app-layer
+	// decision), distinct from TestHeartbeat_LocalCertificateExpired below,
+	// which exercises the locally-detected path that is what actually
+	// fires in production (an expired client certificate normally never
+	// reaches the HTTP layer at all — see client.go's NewClient comment).
+	fixture := newMTLSFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		writeJSONReason(w, http.StatusForbidden, "CERTIFICATE_EXPIRED")
+	})
+
+	c, err := NewClient(fixture.server.URL, fixture.certPath, fixture.keyPath, fixture.caChainPath)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	err = c.Heartbeat(context.Background())
+	var hbErr *HeartbeatError
+	if !errors.As(err, &hbErr) {
+		t.Fatalf("expected *HeartbeatError, got %T (%v)", err, err)
+	}
+	if hbErr.Kind != FailureReenrollRequired {
+		t.Errorf("Kind = %v, want FailureReenrollRequired", hbErr.Kind)
+	}
+}
+
+func TestHeartbeat_OtherAuthReasonCodeIsPermanentNotReenroll(t *testing.T) {
+	fixture := newMTLSFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		writeJSONReason(w, http.StatusForbidden, "DEVICE_DISABLED")
+	})
+
+	c, err := NewClient(fixture.server.URL, fixture.certPath, fixture.keyPath, fixture.caChainPath)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	err = c.Heartbeat(context.Background())
+	var hbErr *HeartbeatError
+	if !errors.As(err, &hbErr) {
+		t.Fatalf("expected *HeartbeatError, got %T (%v)", err, err)
+	}
+	if hbErr.Kind != FailurePermanent {
+		t.Errorf("Kind = %v, want FailurePermanent (a new certificate would not fix DEVICE_DISABLED)", hbErr.Kind)
+	}
+}
+
+// TestHeartbeat_UnparseableAuthBodyIsTemporary guards against treating an
+// ambiguous 401/403 as a diagnosed auth failure. The Gateway's own
+// responses always carry a known reasonCode; an empty or undecodable body
+// could come from something else entirely (a reverse proxy, a transient
+// decode failure), so it must not permanently stop the heartbeat loop.
+func TestHeartbeat_UnparseableAuthBodyIsTemporary(t *testing.T) {
+	fixture := newMTLSFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte("not json"))
+	})
+
+	c, err := NewClient(fixture.server.URL, fixture.certPath, fixture.keyPath, fixture.caChainPath)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	err = c.Heartbeat(context.Background())
+	var hbErr *HeartbeatError
+	if !errors.As(err, &hbErr) {
+		t.Fatalf("expected *HeartbeatError, got %T (%v)", err, err)
+	}
+	if hbErr.Kind != FailureTemporary {
+		t.Errorf("Kind = %v, want FailureTemporary for an undecodable 403 body", hbErr.Kind)
+	}
+}
+
+func TestHeartbeat_EmptyReasonCodeOn403IsTemporary(t *testing.T) {
+	fixture := newMTLSFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		writeJSONReason(w, http.StatusForbidden, "")
+	})
+
+	c, err := NewClient(fixture.server.URL, fixture.certPath, fixture.keyPath, fixture.caChainPath)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	err = c.Heartbeat(context.Background())
+	var hbErr *HeartbeatError
+	if !errors.As(err, &hbErr) {
+		t.Fatalf("expected *HeartbeatError, got %T (%v)", err, err)
+	}
+	if hbErr.Kind != FailureTemporary {
+		t.Errorf("Kind = %v, want FailureTemporary for an empty reasonCode", hbErr.Kind)
+	}
+}
+
+// TestHeartbeat_LocalCertificateExpired is the realistic expiry path: the
+// Client detects its own certificate has expired locally and never even
+// attempts the request, since a genuinely expired client certificate fails
+// the Gateway's TLS handshake before any HTTP response could be parsed.
+func TestHeartbeat_LocalCertificateExpired(t *testing.T) {
+	var requests atomic.Int64
+	fixture := newMTLSFixtureWithDeviceNotAfter(t, func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}, time.Now().Add(-time.Hour))
+
+	c, err := NewClient(fixture.server.URL, fixture.certPath, fixture.keyPath, fixture.caChainPath)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	err = c.Heartbeat(context.Background())
+	var hbErr *HeartbeatError
+	if !errors.As(err, &hbErr) {
+		t.Fatalf("expected *HeartbeatError, got %T (%v)", err, err)
+	}
+	if hbErr.Kind != FailureReenrollRequired {
+		t.Errorf("Kind = %v, want FailureReenrollRequired", hbErr.Kind)
+	}
+	if hbErr.ReasonCode != "CERTIFICATE_EXPIRED" {
+		t.Errorf("ReasonCode = %q, want CERTIFICATE_EXPIRED", hbErr.ReasonCode)
+	}
+	if requests.Load() != 0 {
+		t.Errorf("expected no request to reach the server, got %d", requests.Load())
 	}
 }
 
@@ -341,6 +523,31 @@ func TestRun_StopsOnContextCancel(t *testing.T) {
 	}
 }
 
+func TestRun_StopsOnContextCancelDuringBackoff(t *testing.T) {
+	// Same as TestRun_StopsOnContextCancel, but the server never succeeds,
+	// so Run is cancelled while sitting in a backoff wait rather than
+	// between successful attempts.
+	fixture := newMTLSFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+
+	c, err := NewClient(fixture.server.URL, fixture.certPath, fixture.keyPath, fixture.caChainPath)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	c.Run(ctx, time.Hour, nil) // interval far longer than the test timeout: only the first attempt + backoff wait happen
+	elapsed := time.Since(start)
+
+	if elapsed > 500*time.Millisecond {
+		t.Errorf("Run took %v after context cancellation during backoff, expected a prompt return", elapsed)
+	}
+}
+
 func TestRun_SendsFirstHeartbeatImmediately(t *testing.T) {
 	results := make(chan error, 1)
 	fixture := newMTLSFixture(t, func(w http.ResponseWriter, r *http.Request) {
@@ -355,7 +562,10 @@ func TestRun_SendsFirstHeartbeatImmediately(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	go c.Run(ctx, time.Hour, func(err error) {
+	go c.Run(ctx, time.Hour, func(state State, err error) {
+		if state != StateRunning {
+			return
+		}
 		select {
 		case results <- err:
 		default:
@@ -369,5 +579,242 @@ func TestRun_SendsFirstHeartbeatImmediately(t *testing.T) {
 		}
 	case <-time.After(1 * time.Second):
 		t.Fatal("expected an immediate first heartbeat before the first tick")
+	}
+}
+
+func TestRun_ConnectionRefusedRetries(t *testing.T) {
+	// Reuse a valid cert fixture just for its files; baseURL points at a
+	// closed port so the connection itself fails before any TLS/HTTP.
+	fixture := newMTLSFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	c, err := NewClient(closedPortURL(t), fixture.certPath, fixture.keyPath, fixture.caChainPath)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	var retryCount atomic.Int64
+	var sawAuthFailedOrReenroll atomic.Bool
+	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
+	defer cancel()
+
+	c.Run(ctx, 5*time.Millisecond, func(state State, err error) {
+		switch state {
+		case StateRetrying:
+			retryCount.Add(1)
+		case StateAuthFailed, StateReenrollRequired:
+			sawAuthFailedOrReenroll.Store(true)
+		}
+	})
+
+	if retryCount.Load() == 0 {
+		t.Error("expected at least one RETRYING transition for connection refused")
+	}
+	if sawAuthFailedOrReenroll.Load() {
+		t.Error("connection refused must never be classified as a permanent auth failure")
+	}
+}
+
+func TestRun_5xxRetries(t *testing.T) {
+	var requests atomic.Int64
+	fixture := newMTLSFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+	c, err := NewClient(fixture.server.URL, fixture.certPath, fixture.keyPath, fixture.caChainPath)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	var retryCount atomic.Int64
+	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
+	defer cancel()
+
+	c.Run(ctx, 5*time.Millisecond, func(state State, err error) {
+		if state == StateRetrying {
+			retryCount.Add(1)
+		}
+	})
+
+	if requests.Load() < 2 {
+		t.Errorf("expected multiple retried requests, got %d", requests.Load())
+	}
+	if retryCount.Load() == 0 {
+		t.Error("expected at least one RETRYING transition for repeated 5xx")
+	}
+}
+
+func TestRun_RecoversAfterGatewayRestored(t *testing.T) {
+	var requests atomic.Int64
+	const failuresBeforeRecovery = 3
+	fixture := newMTLSFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		n := requests.Add(1)
+		if n <= failuresBeforeRecovery {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	c, err := NewClient(fixture.server.URL, fixture.certPath, fixture.keyPath, fixture.caChainPath)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	var mu sync.Mutex
+	var sawRetrying, sawRunningAfterRetrying bool
+	done := make(chan struct{})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go c.Run(ctx, 2*time.Millisecond, func(state State, err error) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch state {
+		case StateRetrying:
+			sawRetrying = true
+		case StateRunning:
+			if sawRetrying {
+				sawRunningAfterRetrying = true
+			}
+		}
+		if sawRunningAfterRetrying {
+			select {
+			case <-done:
+			default:
+				close(done)
+			}
+		}
+	})
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected Run to report RUNNING again after the Gateway recovered")
+	}
+	cancel()
+
+	mu.Lock()
+	defer mu.Unlock()
+	if !sawRunningAfterRetrying {
+		t.Error("expected a RUNNING transition after RETRYING once the Gateway recovered")
+	}
+}
+
+func TestRun_StopsOnCertificateRevoked(t *testing.T) {
+	var requests atomic.Int64
+	fixture := newMTLSFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		writeJSONReason(w, http.StatusForbidden, "CERTIFICATE_REVOKED")
+	})
+	c, err := NewClient(fixture.server.URL, fixture.certPath, fixture.keyPath, fixture.caChainPath)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	var transitions atomic.Int64
+	var lastState atomic.Value
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	c.Run(ctx, 5*time.Millisecond, func(state State, err error) {
+		transitions.Add(1)
+		lastState.Store(state)
+	})
+	elapsed := time.Since(start)
+
+	if elapsed > 150*time.Millisecond {
+		t.Errorf("Run took %v, expected to stop promptly on CERTIFICATE_REVOKED rather than run out the full ctx timeout", elapsed)
+	}
+	if got := lastState.Load(); got != StateReenrollRequired {
+		t.Errorf("final state = %v, want REENROLL_REQUIRED", got)
+	}
+	if requests.Load() != 1 {
+		t.Errorf("expected exactly one request before Run stopped, got %d", requests.Load())
+	}
+}
+
+func TestRun_StopsOnLocallyExpiredCertificate(t *testing.T) {
+	var requests atomic.Int64
+	fixture := newMTLSFixtureWithDeviceNotAfter(t, func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}, time.Now().Add(-time.Hour))
+	c, err := NewClient(fixture.server.URL, fixture.certPath, fixture.keyPath, fixture.caChainPath)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	var lastState atomic.Value
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	c.Run(ctx, 5*time.Millisecond, func(state State, err error) {
+		lastState.Store(state)
+	})
+
+	if got := lastState.Load(); got != StateReenrollRequired {
+		t.Errorf("final state = %v, want REENROLL_REQUIRED", got)
+	}
+	if requests.Load() != 0 {
+		t.Errorf("expected no request to ever reach the server, got %d", requests.Load())
+	}
+}
+
+func TestRun_DoesNotRepeatIdenticalRetryTransitions(t *testing.T) {
+	fixture := newMTLSFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+	c, err := NewClient(fixture.server.URL, fixture.certPath, fixture.keyPath, fixture.caChainPath)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	var retryTransitions atomic.Int64
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Millisecond)
+	defer cancel()
+
+	c.Run(ctx, 2*time.Millisecond, func(state State, err error) {
+		if state == StateRetrying {
+			retryTransitions.Add(1)
+		}
+	})
+
+	// Multiple heartbeat attempts happen (backoff keeps retrying at a short
+	// interval within 60ms), but since every failure is the exact same 503,
+	// only the first should have produced a RETRYING transition.
+	if n := retryTransitions.Load(); n != 1 {
+		t.Errorf("RETRYING transitions = %d, want exactly 1 for repeated identical failures", n)
+	}
+}
+
+// TestRun_DoesNotRepeatRunningTransitions guards against RUNNING being
+// reported on every single successful Heartbeat: at production scale
+// (thousands of Devices on a short interval) that is the same kind of log
+// volume problem as repeating identical RETRYING failures — only the first
+// success (at startup, or right after recovering from RETRYING) should be
+// reported; a long steady-state run of successes must stay quiet.
+func TestRun_DoesNotRepeatRunningTransitions(t *testing.T) {
+	fixture := newMTLSFixture(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	c, err := NewClient(fixture.server.URL, fixture.certPath, fixture.keyPath, fixture.caChainPath)
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+
+	var runningTransitions atomic.Int64
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Millisecond)
+	defer cancel()
+
+	c.Run(ctx, 2*time.Millisecond, func(state State, err error) {
+		if state == StateRunning {
+			runningTransitions.Add(1)
+		}
+	})
+
+	if n := runningTransitions.Load(); n != 1 {
+		t.Errorf("RUNNING transitions = %d, want exactly 1 for a steady run of successes", n)
 	}
 }

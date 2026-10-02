@@ -25,7 +25,7 @@ func main() {
 		log.Fatalf("device-agent: %v", err)
 	}
 
-	log.Printf("device-agent: starting for device %s (management-api=%s)", cfg.DeviceKey, cfg.ManagementAPIURL)
+	log.Printf("device-agent: state=%s starting for device %s (management-api=%s)", client.StateStarting, cfg.DeviceKey, cfg.ManagementAPIURL)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -60,18 +60,25 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		mtlsClient.Run(ctx, cfg.HeartbeatInterval, func(err error) {
-			if err != nil {
-				log.Printf("device-agent: heartbeat failed: %v", err)
-				return
+		mtlsClient.Run(ctx, cfg.HeartbeatInterval, func(state client.State, err error) {
+			switch state {
+			case client.StateRunning:
+				log.Printf("device-agent: state=%s heartbeat ok", state)
+			case client.StateRetrying:
+				log.Printf("device-agent: state=%s heartbeat retrying after failure: %v", state, err)
+			case client.StateAuthFailed:
+				log.Printf("device-agent: state=%s heartbeat stopped, authentication failed: %v", state, err)
+			case client.StateReenrollRequired:
+				log.Printf("device-agent: state=%s heartbeat stopped, certificate no longer usable: %v", state, err)
+			case client.StateStopping:
+				// Shutdown is already logged below once Run returns.
 			}
-			log.Print("device-agent: heartbeat ok")
 		})
 	}()
 
-	log.Printf("device-agent: running (gateway=%s, heartbeat every %s)", cfg.GatewayURL, cfg.HeartbeatInterval)
+	log.Printf("device-agent: state=%s gateway=%s heartbeat_interval=%s", client.StateRunning, cfg.GatewayURL, cfg.HeartbeatInterval)
 	<-ctx.Done()
-	log.Print("device-agent: shutting down")
+	log.Printf("device-agent: state=%s shutting down", client.StateStopping)
 	wg.Wait()
 }
 
@@ -89,7 +96,7 @@ func enrollAndPersist(ctx context.Context, cfg config.Config, id identity.Identi
 	log.Printf("device-agent: local key and CSR ready for SAN URI urn:certgate:device:%s", cfg.DeviceKey)
 
 	enrollClient := enrollment.NewClient(cfg.ManagementAPIURL, cfg.EnrollmentToken)
-	log.Print("device-agent: submitting CSR and waiting for administrator approval")
+	log.Printf("device-agent: state=%s submitting CSR and waiting for administrator approval", client.StateEnrolling)
 	result, err := enrollClient.Enroll(ctx, csrPEM)
 	if err != nil {
 		return err
