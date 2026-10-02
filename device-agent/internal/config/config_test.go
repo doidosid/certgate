@@ -70,6 +70,34 @@ func TestLoad_HeartbeatIntervalRejectsNonPositive(t *testing.T) {
 	}
 }
 
+func TestLoad_RejectsGatewayURLWithoutHTTPSScheme(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv("GATEWAY_URL", "http://gateway:8443")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error for a non-https GATEWAY_URL")
+	}
+}
+
+func TestLoad_RejectsGatewayURLWithoutHost(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv("GATEWAY_URL", "https:///no-host")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error for a GATEWAY_URL with no host")
+	}
+}
+
+func TestLoad_RejectsUnparseableGatewayURL(t *testing.T) {
+	setValidEnv(t)
+	// A raw control character makes url.Parse itself fail.
+	t.Setenv("GATEWAY_URL", "https://gateway:8443/\x7f")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error for an unparseable GATEWAY_URL")
+	}
+}
+
 func TestLoad_EnrollmentTokenNotRequired(t *testing.T) {
 	// A Device that already has a usable certificate on disk never needs to
 	// enroll again, so Load must not require a Token up front — only

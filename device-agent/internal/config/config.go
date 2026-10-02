@@ -4,6 +4,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -37,6 +38,15 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	// A malformed GATEWAY_URL is a permanent configuration error, never a
+	// transient one — client.Heartbeat has no way to tell "the URL never
+	// parses" apart from a real network blip, so it would otherwise retry
+	// forever with backoff instead of ever reporting the real problem
+	// (codexReview/PR-69.md Medium finding). Fail fast here instead.
+	if err := validateGatewayURL(cfg.GatewayURL); err != nil {
+		return Config{}, err
+	}
+
 	interval, err := parseHeartbeatInterval(os.Getenv("HEARTBEAT_INTERVAL"))
 	if err != nil {
 		return Config{}, err
@@ -44,6 +54,17 @@ func Load() (Config, error) {
 	cfg.HeartbeatInterval = interval
 
 	return cfg, nil
+}
+
+func validateGatewayURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("config: invalid GATEWAY_URL: %w", err)
+	}
+	if u.Scheme != "https" || u.Host == "" {
+		return fmt.Errorf("config: invalid GATEWAY_URL: must be an https URL with a host, got %q", raw)
+	}
+	return nil
 }
 
 func parseHeartbeatInterval(raw string) (time.Duration, error) {
