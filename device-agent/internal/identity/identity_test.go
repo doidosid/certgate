@@ -16,7 +16,7 @@ func TestEnsureKey_GeneratesAndPersistsKey(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	keyPath := filepath.Join(dir, keyFileName)
+	keyPath := filepath.Join(dir, KeyFileName)
 	info, err := os.Stat(keyPath)
 	if err != nil {
 		t.Fatalf("expected key file to exist: %v", err)
