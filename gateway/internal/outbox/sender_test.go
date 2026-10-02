@@ -163,4 +163,11 @@ func TestFlush_FitsOversizedEventsAlreadyInOutbox(t *testing.T) {
 	if strings.ContainsRune(got.RequestPath, 0) || utf8.RuneCountInString(got.RequestPath) != 255 {
 		t.Errorf("RequestPath = %q, want 255 characters without NUL", got.RequestPath)
 	}
+	due, err := store.Due(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("Due: %v", err)
+	}
+	if len(due) != 0 {
+		t.Errorf("legacy event still in the Outbox after delivery: %+v", due)
+	}
 }
