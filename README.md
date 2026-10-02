@@ -17,7 +17,7 @@ Device 등록 → 단기 Enrollment Token 발급 → Device에서 Key·CSR 생�
 
 | 영역 | 기술 | 사용 목적 |
 | --- | --- | --- |
-| Device Agent | Go | 개인키·CSR 생성, 인증서 보관, 가상 디바이스 테스트 (mTLS Client는 미구현) |
+| Device Agent | Go | 개인키·CSR 생성, 인증서 보관, mTLS Heartbeat Client, 가상 디바이스 테스트 |
 | Security Gateway | Go | TLS 1.3, X.509 검증, 접근 정책, Reverse Proxy, Event Outbox |
 | Management API | Java, Spring Boot | Device·Enrollment·CSR·Certificate·Policy·Event API와 SSE |
 | Admin Console | React, TypeScript, Vite, MUI | 운영 정보 조회와 인증서 관리 |

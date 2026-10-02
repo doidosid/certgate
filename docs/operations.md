@@ -29,7 +29,7 @@ Root CA Key는 실행 Compose에 Mount하지 않는다. Management API에는 Int
 
 ## Health
 
-- Gateway: `GET /healthz`(내부 Port, Process Liveness — 항상 200)와 `GET /readyz`(내부 Port, Readiness — Management API에 주기적으로(10초) `/actuator/health`를 Ping해 마지막 결과를 반영, 실패 시 503)를 분리한다(Issue #36). Compose healthcheck는 `/healthz`를 그대로 쓴다 — Readiness를 Compose healthcheck에 물리면 일시적인 Management API 장애에도 Gateway Container가 재시작되어 Outbox 전송이 끊긴다.
+- Gateway: `GET /healthz`(내부 Port, Process Liveness — 항상 200)와 `GET /readyz`(내부 Port, Readiness — Management API에 주기적으로(10초) `/actuator/health`를 Ping해 마지막 결과를 반영, 실패 시 503)를 분리한다(Issue #36). Compose healthcheck는 `/healthz`를 그대로 쓴다 — Readiness를 Compose healthcheck에 물리면 일시적인 Management API 장애에도 Gateway가 unhealthy로 표시되고, unhealthy Container를 재시작하는 Orchestrator(Swarm, Kubernetes, autoheal 등) 아래에서는 재시작되어 Outbox 전송이 끊긴다. 참고로 Docker Compose 자체는 unhealthy Container를 재시작하지 않으며, 현재 `infra/compose.yaml`에는 `restart:` 정책도 없다.
 - Management API: Spring Actuator, PostgreSQL
 - Backend Service: HTTP Health
 - Console: 정적 Serving Health

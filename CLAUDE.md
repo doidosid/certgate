@@ -79,7 +79,7 @@ CertGate는 X.509 인증서와 mTLS로 네트워크 Device의 신원을 검증�
 
 **최종 갱신: 2026-08-24.** 제출 목표는 2026-08-23이었고, 하루 앞선 2026-08-22에 모든 Issue가 닫혔다.
 
-완료된 Issue: #5 Foundation, #1 Enrollment·PKI, #2 Gateway mTLS, #3 Management API, #6 Event Outbox·SSE, #7 Admin Console 실제 연결, #4 E2E·장애 복구, **#8 제출 패키지**(마지막). `device-agent`·`gateway`·`backend-service`(Go), `management-api`(Spring), `admin-console`(React), `infra`, `pki`에 실제 소스와 테스트가 있고 CI 9개 Job이 돈다.
+완료된 Issue: #5 Foundation, #1 Enrollment·PKI, #2 Gateway mTLS, #3 Management API, #6 Event Outbox·SSE, #7 Admin Console 실제 연결, #4 E2E·장애 복구, **#8 제출 패키지**(마지막). `device-agent`·`gateway`·`backend-service`(Go), `management-api`(Spring), `admin-console`(React), `infra`, `pki`에 실제 소스와 테스트가 있고 CI 8개 Job(Go Job은 3개 Module Matrix)이 돈다. E2E(`tests/e2e/run.sh`)는 아직 CI Job에 없다.
 
 **`admin-console`의 5개 화면(Dashboard, Devices, Certificate Requests, Certificates, Security Events)과 전역 CRITICAL SSE Toast는 모두 구현돼 실제 API에 연결돼 있다.** 자리표시자는 남아 있지 않다. 실제 화면 캡처는 [README의 "관리 콘솔 화면"](README.md#관리-콘솔-화면)에 있다.
 

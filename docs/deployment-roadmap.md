@@ -155,6 +155,19 @@ admin-console:
 
 # 단계별 확장 계획
 
+## Phase 0. 현재 코드의 결함 정리
+
+배포·확장 여부와 관계없이 지금 코드에 있는 결함이다. 2026-10-02 전체 코드 검토에서 확인했다. 확장 작업 전에 먼저 처리한다.
+
+| 우선순위 | 결함 | 위치 |
+|---|---|---|
+| High | `/internal/**` Service Token Filter가 디코딩 전 원본 URI(`getRequestURI()`)로 경로를 판단한다. Spring MVC는 디코딩하고 `;param`을 제거한 경로로 Handler를 매칭하므로, `/%69nternal/...`·`/internal;x=1/...` 같은 경로가 Token 검사 없이 Handler에 도달할 수 있다(코드·Spring 소스 기준, 재현 테스트 미작성) | `management-api/.../common/GatewayServiceTokenFilter.java` |
+| High | Gateway가 요청 Method·Path를 길이 제한 없이 Event에 복사한다. 컬럼 한도(`http_method` 10자, `request_path` 255자)를 넘는 Event 하나가 batch INSERT 전체를 실패시키고, Sender는 그 batch를 계속 재시도한다. 같은 batch의 CRITICAL Event도 전달되지 않는다 | `gateway/internal/event`, `gateway/internal/outbox/sender.go`, `SecurityEventBatchService.validate` |
+| Medium | 신원 Header를 `Director` 단계에서 넣는데, `httputil.ReverseProxy`는 그 뒤에 hop-by-hop Header를 제거한다. 그래서 Client가 `Connection: X-CertGate-Role` 같은 값을 보내면 Gateway가 넣은 신원 Header가 Backend에 도달하지 않는다 | `gateway/cmd/gateway/handler.go`, `gateway/internal/proxy` |
+| Medium | Enrollment Token을 재발급해도 이전 Token으로 제출한 PENDING CSR이 그대로 승인 가능하다(설계 판단 필요 — ADR-005) | `DeviceService` Token 재발급, `EnrollmentService.approve` |
+| Medium | Device Agent가 Enrollment 중 일시 오류에 바로 종료된다. 재시작하면 이전에 제출한 PENDING 요청 때문에 `409 CERTIFICATE_REQUEST_DUPLICATE`로 다시 실패한다 | `device-agent/cmd/device-agent/main.go` |
+| Low | E2E 단언의 검출력: Event ID 중복 검사가 PRIMARY KEY 때문에 실패할 수 없다. SKIP을 통과로 센다. 차단된 요청이 Backend에 도달하지 않았는지는 직접 확인하지 않는다 | `tests/e2e/run.sh`, `tests/e2e/lib.sh` |
+
 ## Phase 1. 관리자 인증·인가
 
 현재 가장 먼저 추가할 기능.
@@ -190,6 +203,11 @@ VIEWER
 - 주요 관리 API 권한 테스트 존재
 - Secret은 코드나 Git에 포함하지 않음
 
+### 함께 정리할 것
+
+- Spring Security를 도입하면 기본 `StrictHttpFirewall`이 `;`와 일부 인코딩 문자를 거부해 Phase 0의 `/internal/**` 우회를 부분적으로 막는다. 그래도 Service Token Filter 자체의 경로 판단은 별도로 고친다. `/internal/**`도 Security Filter Chain 안에서 Service Token 인증으로 다루는 구조를 검토한다.
+- Console API 호출이 경로 세그먼트를 `encodeURIComponent` 없이 조합한다(`admin-console/src/features/*/api.ts`). 관리자 인증이 붙으면 조작된 Link로 다른 Endpoint를 호출하게 만들 수 있다.
+
 ---
 
 ## Phase 2. Ubuntu VPS 첫 배포
@@ -222,6 +240,14 @@ Ubuntu VPS
 8. Compose 배포
 9. Container Health 확인
 10. 재부팅 후 서비스 복구 확인
+
+### 배포 전 선결 조건
+
+- **`restart:` 정책 추가**: 현재 `infra/compose.yaml`에는 `restart:` 정책이 없어 위 10번이 실패한다. `restart: unless-stopped`를 추가한다.
+- **`init-ca.sh` 덮어쓰기 방지**: 이미 `root-ca.key`가 있어도 경고 없이 새 Root·Intermediate CA를 만든다. 이미 발급된 Device 인증서와 DB 기록이 모두 무효가 된다. 기존 자료가 있으면 거부하고 `--force`일 때만 진행하게 한다.
+- **Container 권한 축소**: 모든 Runtime Container가 root로 실행된다. Intermediate CA Key를 가진 `management-api`도 마찬가지다. 비root `USER`, `no-new-privileges`, `cap_drop: [ALL]`, 가능한 곳은 `read_only`를 적용한다. Key 파일 권한(`chmod 600`)과 UID를 맞춘다.
+- **Base Image 갱신**: Gateway·Backend Image는 지원이 끝난 `alpine:3.20`을 쓴다.
+- **Gateway Timeout 설정**: mTLS 서버에 `ReadHeaderTimeout`·`ReadTimeout`·`WriteTimeout`·`IdleTimeout`이 없다. 그래서 TLS Handshake에도 기한이 없다. Backend Proxy에도 `ResponseHeaderTimeout`이 없다. 8443을 인터넷에 열기 전에 반드시 설정한다.
 
 ### 운영에서 확인할 것
 
@@ -274,6 +300,12 @@ Edge Reverse Proxy
 
 CertGate 내부 Admin Console Container가 Nginx를 사용하더라도, 외부 진입 경계에는 별도 Edge Reverse Proxy를 두는 구조를 고려한다.
 
+### 주의할 점
+
+- Gateway는 mTLS로 Client 인증서를 직접 검증한다. Edge가 Gateway 앞에서 TLS를 종료하면 Client 인증서를 잃는다. 그래서 Gateway 경로는 TLS를 종료하지 않는 L4 Passthrough(Nginx `stream`, Caddy L4 등)로 구성한다.
+- L4 Passthrough에서는 Edge가 TLS Handshake Timeout을 대신 걸어주지 못한다. Phase 2의 Gateway Timeout 설정은 Edge가 있어도 Gateway 자체에 있어야 한다.
+- 이 Phase의 "인증서 발급·갱신"은 Edge의 공개 HTTPS 인증서(예: Let's Encrypt)를 말한다. Device 인증서 자동 갱신과는 별개다. Device 인증서 자동 갱신은 MVP 제외 범위다(`docs/adr/003-certificate-validity.md`). 하려면 mTLS로 인증하는 갱신 API 설계가 따로 필요하다.
+
 ---
 
 ## Phase 4. CI에서 CD까지 확장
@@ -321,6 +353,13 @@ Ubuntu VPS Deploy
 - 운영 Secret은 GitHub Secret 또는 서버 Secret으로 분리
 - 배포 버전 확인 가능
 - 실패 시 이전 버전으로 돌아갈 수 있는 절차 존재
+
+### 함께 정리할 것
+
+- **E2E를 CI Job으로 추가**: 위 "현재 검증" 목록에 E2E(`tests/e2e/run.sh`)가 없다. "테스트 실패 시 배포 중단"을 지키려면 E2E가 파이프라인에 있어야 한다. `compose-smoke`와 같은 Docker Runner에서 돌릴 수 있다. CI에서는 SKIP을 실패로 취급하는 Strict 모드로 실행한다.
+- **CI 의존성 고정**: Action을 Tag(`@v4` 등)로 참조하고 `govulncheck@latest`를 쓴다. Commit SHA나 Version으로 고정하고 Dependabot을 추가한다.
+- **device-agent Image 스캔**: `image-scan` Job이 device-agent Image를 빌드·스캔하지 않는다.
+- **Gateway Graceful Shutdown**: `Shutdown`이 처리 중인 요청을 기다리기 전에 `main`이 반환하고 Outbox Store를 닫는다. 배포마다 Gateway가 재시작되므로 그때마다 이미 내린 접근 판단의 Event가 유실될 수 있다.
 
 ---
 
@@ -372,6 +411,15 @@ Host           ─┘
 
 관측 없이 부하만 주면 무엇이 병목인지 알기 어렵다.
 
+### 부하 테스트 전에 고칠 것
+
+아래는 이미 코드에서 확인한 한계다. 그대로 두면 첫 부하 테스트는 이 한계를 다시 측정하는 데 그친다.
+
+- **Outbox 처리량 상한**: Sender가 2초마다 batch 하나(50건)만 보낸다. 초당 약 25건을 넘는 요청이 계속되면 Management API가 정상이어도 Outbox가 계속 쌓인다. 그러면 거짓 `EVENT_OUTBOX_BACKLOG` 경보가 난다. Tick마다 batch가 가득 찬 동안 계속 보내도록 바꾼다.
+- **Access Context Cache Stampede**: 같은 Serial의 동시 Cache Miss가 모두 Management API를 호출한다. 만료된 Entry도 Map에서 지우지 않는다. `singleflight`와 주기적 정리를 넣는다. Redis 없이도 할 수 있다.
+- **SSE Broadcast 작업 거부**: Broadcast Executor(core 2, max 4, queue 100, AbortPolicy)가 CRITICAL Event 폭주 시 작업을 거부한다. 거부된 Event는 실시간 알림에서 빠진다. 연결이 끊기지 않아 재연결 재조회로도 복구되지 않는다.
+- **`security_event` 보관 정책 없음**: 허용된 요청까지 한 건씩 저장하고 삭제·Partition이 없다. 보관 기간 정책을 정한다(설계 판단 필요).
+
 ### 확인 대상
 
 - Gateway 처리량
@@ -419,6 +467,16 @@ Certificate 폐기 시 두 Gateway Cache 모두를 어떻게 일관되게 무효
 
 이 시점부터 Shared Cache 도입에 명확한 이유가 생긴다.
 
+### 단일 Gateway에도 이미 있는 일관성 문제
+
+Gateway가 한 대여도 Cache 무효화가 조회와 경합한다(`gateway/internal/access/access.go`).
+
+1. 폐기 직전에 시작된 Access Context 조회가 있다.
+2. 그 사이에 무효화가 들어온다. 아직 Entry가 없어 지울 것이 없다.
+3. 조회가 끝나면 그 VALID 결과가 30초 동안 Cache에 들어간다.
+
+Key별 세대 번호(generation)로 무효화 이후의 조회 결과는 저장하지 않게 고친다. 이 방식은 Scale-out과 Redis 설계에도 그대로 이어진다.
+
 ---
 
 ## Phase 8. Redis 도입
@@ -463,6 +521,8 @@ Gateway B ─┘
 Redis 장애가 인증 우회로 이어지면 안 된다.
 
 CertGate 특성상 Cache를 확인할 수 없고 원본도 확인할 수 없다면 Fail Closed 원칙을 유지한다.
+
+이 Redis는 Access Context Cache 용도다. 2026-08-13에 기각한 "원격 Redis Event 보관"(Security Event를 Redis에 보관하는 안, `docs/ai-usage.md`)과는 다른 용도다. Security Event의 원본은 계속 Gateway SQLite Outbox → PostgreSQL이다.
 
 ---
 
@@ -522,6 +582,8 @@ git pull
 ## Step 2
 
 기존 Stack이 정상적으로 뜨는지 다시 확인.
+
+> 주의: `init-ca.sh`는 기존 CA 자료를 경고 없이 덮어쓴다(Phase 2 "배포 전 선결 조건"). `pki/runtime`에 이미 CA가 있으면 아래 두 PKI 명령은 건너뛴다. `.env`도 이미 있으면 덮어쓰지 않는다.
 
 ```bash
 cp .env.example .env
