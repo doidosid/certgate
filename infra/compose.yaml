@@ -11,6 +11,8 @@ volumes:
 services:
   postgres:
     image: postgres:16.15-alpine
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT}:5432"
     networks:
       - certgate-net
     environment:

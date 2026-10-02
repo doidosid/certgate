@@ -44,7 +44,7 @@ Codex가 기존 XML 결과 파일을 읽어 확인한 합계는 8개 테스트 �
 
 - Token 재발급 시 이전 Token으로 제출한 PENDING CSR을 같은 트랜잭션에서 자동 거절한다.
 - Security Event 보관 기간은 설정값으로 구현한다. 0은 무기한이며 매일 batch 단위로 삭제한다. ADMIN 전용 Console 설정 화면은 관리자 인증 구현 이후 진행한다. 보관 기간 구현은 아직 착수하지 않았다.
-- 루트의 `.env.example`, `admin-console/vite.config.ts`, `infra/compose.yaml` 로컬 수정은 유지한다. 이 보존 커밋에 포함하지 않는다.
+- 후속 사용자 지시로 `.env.example`과 `infra/compose.yaml` 로컬 변경은 Git 업로드 대상에 포함한다. PostgreSQL 포트 설정 `POSTGRES_PORT=5432`와 loopback 포트 공개를 보존한다. `admin-console/vite.config.ts`의 로컬 API 프록시 변경은 Git 업로드에서 제외한다.
 - PR #73·#74는 머지 조건을 충족하면 머지한다. PR #73은 이미 머지됐으며 #74는 현재 상태 재확인이 필요하다.
 
 ## 재개 순서
@@ -61,6 +61,6 @@ Issue #75에는 Upgrade 101 터널 처리와 신원 이름 request Trailer 관�
 
 ## 보존 범위와 제외 항목
 
-CSR 파일 3개는 원본과 SHA-256이 일치하도록 복사했다. 원본 worktree와 루트 작업 폴더는 변경하지 않았다. 로컬 리뷰 원문 `codexReview/`, Claude 세션 원문·개인 메모리, `.env`, Key·Certificate·Token, runtime DB, build 산출물은 포함하지 않는다. 리뷰 산출물은 AGENTS.md에 따라 Git에 추가하지 않는다.
+CSR 파일 3개는 원본과 SHA-256이 일치하도록 복사했다. 원본 worktree와 루트 작업 폴더는 변경하지 않았다. 후속 커밋에는 사용자가 허용한 `.env.example`과 `infra/compose.yaml` 변경도 포함한다. `.env.example`에는 기존 로컬 개발용 placeholder만 있으며 실제 `.env`는 포함하지 않는다. 로컬 리뷰 원문 `codexReview/`, Claude 세션 원문·개인 메모리, Key·Certificate·실제 Token, runtime DB, build 산출물과 `vite.config.ts` 로컬 변경은 포함하지 않는다. 리뷰 산출물은 AGENTS.md에 따라 Git에 추가하지 않는다.
 
 다른 기기에서는 원격을 fetch한 뒤 `management-api-reissue-handoff-20261002` 브랜치를 체크아웃하면 이 코드와 기록을 함께 확인할 수 있다. 이 브랜치에 PR #74나 `docs` 브랜치 내용이 자동으로 포함되는 것은 아니므로 각각의 상태를 확인한 뒤 필요한 변경을 통합한다.
