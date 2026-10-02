@@ -76,7 +76,10 @@ func main() {
 		})
 	}()
 
-	log.Printf("device-agent: state=%s gateway=%s heartbeat_interval=%s", client.StateRunning, cfg.GatewayURL, cfg.HeartbeatInterval)
+	// Not state=RUNNING here: that would claim success before the first
+	// Heartbeat attempt has even run. The Run callback reports the real
+	// first transition (codexReview/PR-69.md Low finding).
+	log.Printf("device-agent: gateway=%s heartbeat_interval=%s starting heartbeat loop", cfg.GatewayURL, cfg.HeartbeatInterval)
 	<-ctx.Done()
 	log.Printf("device-agent: state=%s shutting down", client.StateStopping)
 	wg.Wait()

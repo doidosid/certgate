@@ -185,9 +185,11 @@ func (c *Client) Heartbeat(ctx context.Context) error {
 // corresponding terminal State and returns; it does not resume on its own.
 //
 // Failures classified FailureTemporary (including an unclassified error)
-// are retried with exponential backoff starting at interval, doubling on
-// each consecutive failure, capped at maxBackoffInterval. A success resets
-// the backoff to interval immediately.
+// are retried with exponential backoff starting at interval (or
+// maxBackoffInterval, whichever is smaller — a HEARTBEAT_INTERVAL configured
+// larger than the cap never waits longer than the cap even on the first
+// retry), doubling on each consecutive failure, capped at maxBackoffInterval.
+// A success resets the backoff to interval immediately.
 func (c *Client) Run(ctx context.Context, interval time.Duration, onTransition func(State, error)) {
 	report := func(state State, err error) {
 		if onTransition != nil {
@@ -243,15 +245,29 @@ func (c *Client) Run(ctx context.Context, interval time.Duration, onTransition f
 		}
 		lastState = StateRetrying
 
-		switch {
-		case backoff <= 0:
-			backoff = interval
-		case backoff < maxBackoffInterval:
-			backoff *= 2
-			if backoff > maxBackoffInterval {
-				backoff = maxBackoffInterval
-			}
-		}
+		backoff = nextBackoff(backoff, interval, maxBackoffInterval)
 		timer.Reset(backoff)
 	}
+}
+
+// nextBackoff computes the next retry delay given the current backoff (0
+// before the first retry), the configured interval, and the cap. The first
+// retry waits interval, or max if interval itself exceeds the cap — a
+// HEARTBEAT_INTERVAL configured larger than max must never produce a wait
+// longer than max, even on the very first retry (codexReview/PR-69.md
+// Medium finding). Every subsequent retry doubles, also capped at max.
+func nextBackoff(current, interval, max time.Duration) time.Duration {
+	var next time.Duration
+	switch {
+	case current <= 0:
+		next = interval
+	case current < max:
+		next = current * 2
+	default:
+		return current
+	}
+	if next > max {
+		next = max
+	}
+	return next
 }

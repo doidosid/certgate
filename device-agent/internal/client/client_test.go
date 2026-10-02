@@ -818,3 +818,36 @@ func TestRun_DoesNotRepeatRunningTransitions(t *testing.T) {
 		t.Errorf("RUNNING transitions = %d, want exactly 1 for a steady run of successes", n)
 	}
 }
+
+func TestNextBackoff(t *testing.T) {
+	const max = 100 * time.Millisecond
+
+	cases := []struct {
+		name     string
+		current  time.Duration
+		interval time.Duration
+		want     time.Duration
+	}{
+		{"first retry uses interval", 0, 10 * time.Millisecond, 10 * time.Millisecond},
+		{"doubles on second retry", 10 * time.Millisecond, 10 * time.Millisecond, 20 * time.Millisecond},
+		{"doubles again", 20 * time.Millisecond, 10 * time.Millisecond, 40 * time.Millisecond},
+		{"clamps when doubling exceeds max", 80 * time.Millisecond, 10 * time.Millisecond, max},
+		{"stays at max once reached", max, 10 * time.Millisecond, max},
+		{
+			// codexReview/PR-69.md Medium finding: HEARTBEAT_INTERVAL
+			// configured larger than the cap must not produce a first wait
+			// longer than the cap.
+			"first retry clamps when interval itself exceeds max",
+			0, 500 * time.Millisecond, max,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := nextBackoff(tc.current, tc.interval, max)
+			if got != tc.want {
+				t.Errorf("nextBackoff(%v, %v, %v) = %v, want %v", tc.current, tc.interval, max, got, tc.want)
+			}
+		})
+	}
+}
