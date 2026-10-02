@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"tech.certgate/gateway/internal/event"
 	"tech.certgate/gateway/internal/management"
@@ -131,5 +133,41 @@ func TestRun_FlushesOnEveryTickUntilCancelled(t *testing.T) {
 	}
 	if count != 0 {
 		t.Fatalf("expected Run to have flushed the pending event, pendingCount = %d", count)
+	}
+}
+
+// Events enqueued by a Gateway built before event.New fitted method and path
+// to the storage columns are still in existing Outbox files. Flush must fit
+// them too, or that one event keeps failing every batch it is in.
+func TestFlush_FitsOversizedEventsAlreadyInOutbox(t *testing.T) {
+	store := newTestStore(t)
+	legacy := testEvent("t-legacy")
+	legacy.HTTPMethod = "VERYLONGMETHODNAME"
+	legacy.RequestPath = "/a\x00" + strings.Repeat("b", 400)
+	if err := store.Enqueue(context.Background(), legacy); err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+	publisher := &fakePublisher{}
+	sender := NewSender(store, publisher, 50, 60)
+
+	if _, err := sender.Flush(context.Background()); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+	if len(publisher.batch) != 1 {
+		t.Fatalf("published %d event(s), want 1", len(publisher.batch))
+	}
+	got := publisher.batch[0]
+	if got.HTTPMethod != "VERYLONGME" {
+		t.Errorf("HTTPMethod = %q, want the first 10 characters", got.HTTPMethod)
+	}
+	if strings.ContainsRune(got.RequestPath, 0) || utf8.RuneCountInString(got.RequestPath) != 255 {
+		t.Errorf("RequestPath = %q, want 255 characters without NUL", got.RequestPath)
+	}
+	due, err := store.Due(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("Due: %v", err)
+	}
+	if len(due) != 0 {
+		t.Errorf("legacy event still in the Outbox after delivery: %+v", due)
 	}
 }
