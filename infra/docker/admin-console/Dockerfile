@@ -9,7 +9,10 @@ RUN npm ci
 COPY admin-console/. .
 RUN npm run build
 
-FROM nginx:1.31.4-alpine
+FROM nginx:1.31.6-alpine
+# 태그가 갱신되기 전에 공개된 OS 패키지 보안 수정(예: libexpat, pcre2)을 반영한다.
+# CI image-scan은 수정본이 있는 HIGH·CRITICAL을 실패로 본다.
+RUN apk upgrade --no-cache
 COPY infra/docker/admin-console/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /src/dist /usr/share/nginx/html
 EXPOSE 80
