@@ -48,6 +48,9 @@ func (s *Sender) Flush(ctx context.Context) (int, error) {
 		return 0, nil
 	}
 
+	for i := range due {
+		due[i] = event.Sanitize(due[i])
+	}
 	if _, err := s.publisher.PostSecurityEvents(ctx, due); err != nil {
 		for _, evt := range due {
 			if markErr := s.store.MarkFailed(ctx, evt.ID, s.maxIntervalSeconds); markErr != nil {

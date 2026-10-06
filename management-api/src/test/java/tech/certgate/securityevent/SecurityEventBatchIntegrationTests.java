@@ -19,6 +19,7 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -43,6 +44,9 @@ class SecurityEventBatchIntegrationTests {
 
 	@Autowired
 	private TestRestTemplate restTemplate;
+
+	@Autowired
+	private JdbcTemplate jdbcTemplate;
 
 	private HttpEntity<Map<String, Object>> requestWithEvents(List<Map<String, Object>> events) {
 		HttpHeaders headers = new HttpHeaders();
@@ -81,6 +85,41 @@ class SecurityEventBatchIntegrationTests {
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
 		assertThat(response.getBody().get("acceptedCount")).isEqualTo(1);
 		assertThat(response.getBody().get("duplicateCount")).isEqualTo(0);
+	}
+
+	/**
+	 * The Gateway fits httpMethod and requestPath to these columns by counting
+	 * code points (gateway/internal/event fitColumn), because one value the
+	 * columns cannot hold fails the whole batch and stalls the Gateway Outbox.
+	 * This pins that count through Jackson (UTF-16 surrogate pairs) and JDBC
+	 * to Postgres: 255 supplementary-plane characters fit, 256 do not.
+	 */
+	@Test
+	void batch_storesMethodAndPathAtTheColumnWidthsTheGatewayFitsThemTo() {
+		String emoji = new String(Character.toChars(0x1F600));
+		String fittedPath = "/" + new String(Character.toChars(0xFFFD)) + emoji.repeat(253);
+		Map<String, Object> fitted = sampleEvent(UUID.randomUUID());
+		fitted.put("httpMethod", "VERYLONGME");
+		fitted.put("requestPath", fittedPath);
+
+		var accepted = restTemplate.postForEntity(
+				"/internal/security-events/batch", requestWithEvents(List.of(fitted)), Map.class);
+
+		assertThat(accepted.getStatusCode()).isEqualTo(HttpStatus.OK);
+		Map<String, Object> row = jdbcTemplate.queryForMap(
+				"SELECT http_method, request_path, char_length(request_path) AS path_chars FROM security_event WHERE id = ?",
+				UUID.fromString((String) fitted.get("id")));
+		assertThat(row.get("http_method")).isEqualTo("VERYLONGME");
+		assertThat(row.get("request_path")).isEqualTo(fittedPath);
+		assertThat(row.get("path_chars")).isEqualTo(255);
+
+		Map<String, Object> oneOver = sampleEvent(UUID.randomUUID());
+		oneOver.put("requestPath", fittedPath + emoji);
+
+		var rejected = restTemplate.postForEntity(
+				"/internal/security-events/batch", requestWithEvents(List.of(oneOver)), Map.class);
+
+		assertThat(rejected.getStatusCode().is2xxSuccessful()).isFalse();
 	}
 
 	@Test

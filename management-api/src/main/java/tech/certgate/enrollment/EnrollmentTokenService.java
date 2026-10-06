@@ -23,17 +23,21 @@ import tech.certgate.common.ApiException;
 public class EnrollmentTokenService {
 
 	private static final String TOKEN_PREFIX = "cg_enroll_";
+	static final String REISSUE_REJECTION_NOTE = "Enrollment Token 재발급으로 자동 거절";
 
 	private final EnrollmentCredentialRepository credentials;
+	private final CertificateRequestRepository certificateRequests;
 	private final Clock clock;
 	private final SecureRandom random = new SecureRandom();
 	private final long tokenTtlHours;
 
 	public EnrollmentTokenService(
 			EnrollmentCredentialRepository credentials,
+			CertificateRequestRepository certificateRequests,
 			Clock clock,
 			@org.springframework.beans.factory.annotation.Value("${certgate.enrollment.token-ttl-hours:24}") long tokenTtlHours) {
 		this.credentials = credentials;
+		this.certificateRequests = certificateRequests;
 		this.clock = clock;
 		this.tokenTtlHours = tokenTtlHours;
 	}
@@ -41,7 +45,13 @@ public class EnrollmentTokenService {
 	public record IssuedToken(String rawToken, Instant expiresAt) {
 	}
 
-	/** Revokes any existing active credential for deviceId, then issues a new token. */
+	/**
+	 * Revokes any existing active credential for deviceId, rejects the PENDING
+	 * request submitted under an earlier Token, then issues a new token
+	 * (ADR-005). Without the rejection the old request would block the new
+	 * Token's CSR as a duplicate and could still be approved after the Token it
+	 * came in under was replaced.
+	 */
 	@Transactional
 	public IssuedToken issueFor(UUID deviceId) {
 		Instant now = clock.instant();
@@ -53,6 +63,15 @@ public class EnrollmentTokenService {
 			// race this revoke's UPDATE and trip idx_enrollment_credential_active_per_device
 			// (both rows briefly have revoked_at IS NULL at INSERT time).
 			credentials.flush();
+		}
+		// Runs after the revoke UPDATE, which holds the old credential's row lock
+		// until commit. A CSR submission under the old Token takes the same lock in
+		// resolve() (findByTokenHashForUpdate), so either it committed before the
+		// revoke and its PENDING request is found here, or it waits and then sees
+		// the credential revoked (ENROLLMENT_TOKEN_INVALID).
+		for (CertificateRequest pending : certificateRequests.findByDeviceIdAndStatusForUpdate(
+				deviceId, CertificateRequestStatus.PENDING)) {
+			pending.reject(now, REISSUE_REJECTION_NOTE);
 		}
 
 		byte[] tokenBytes = new byte[24];
@@ -76,7 +95,7 @@ public class EnrollmentTokenService {
 		if (rawToken == null || rawToken.isBlank()) {
 			throw invalidToken();
 		}
-		EnrollmentCredential credential = credentials.findByTokenHash(hash(rawToken)).orElseThrow(this::invalidToken);
+		EnrollmentCredential credential = credentials.findByTokenHashForUpdate(hash(rawToken)).orElseThrow(this::invalidToken);
 		Instant now = clock.instant();
 		if (!credential.isActive(now)) {
 			throw invalidToken();

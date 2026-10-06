@@ -4,7 +4,9 @@
 package event
 
 import (
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 )
@@ -69,6 +71,14 @@ type Event struct {
 	TraceID           string    `json:"traceId"`
 }
 
+// Column widths the Management API stores HTTPMethod and RequestPath in
+// (V7__create_security_event.sql: http_method VARCHAR(10), request_path
+// VARCHAR(255)). Postgres counts VARCHAR length in characters.
+const (
+	maxHTTPMethodLength  = 10
+	maxRequestPathLength = 255
+)
+
 // Params carries the fields needed to record one access decision.
 type Params struct {
 	Now               time.Time
@@ -92,8 +102,8 @@ func New(p Params) Event {
 		Severity:          severityFor(p.ReasonCode),
 		DeviceID:          p.DeviceID,
 		CertificateSerial: p.CertificateSerial,
-		HTTPMethod:        p.HTTPMethod,
-		RequestPath:       p.RequestPath,
+		HTTPMethod:        fitColumn(p.HTTPMethod, maxHTTPMethodLength),
+		RequestPath:       fitColumn(p.RequestPath, maxRequestPathLength),
 		Decision:          decisionFor(p.ReasonCode),
 		ReasonCode:        p.ReasonCode,
 		ClientIP:          p.ClientIP,
@@ -154,4 +164,28 @@ func decisionFor(reasonCode string) string {
 	default:
 		return DecisionDenied
 	}
+}
+
+// Sanitize fits the request-derived fields of evt to the Management API's
+// storage columns. The Management API accepts or rejects a batch as a whole
+// (docs/api-spec.md §7), so one event Postgres cannot store would fail every
+// batch it rides in and, being oldest, keep the Outbox from draining. New
+// already applies it; the Outbox Sender applies it again so events enqueued
+// before New did are still deliverable.
+func Sanitize(evt Event) Event {
+	evt.HTTPMethod = fitColumn(evt.HTTPMethod, maxHTTPMethodLength)
+	evt.RequestPath = fitColumn(evt.RequestPath, maxRequestPathLength)
+	return evt
+}
+
+// fitColumn makes s storable in a Postgres VARCHAR(maxChars) text column:
+// invalid UTF-8 and NUL, which Postgres rejects in text, become U+FFFD, and
+// the result is cut to maxChars characters on a character boundary.
+func fitColumn(s string, maxChars int) string {
+	s = strings.ToValidUTF8(s, "\uFFFD")
+	s = strings.ReplaceAll(s, "\x00", "\uFFFD")
+	if utf8.RuneCountInString(s) <= maxChars {
+		return s
+	}
+	return string([]rune(s)[:maxChars])
 }

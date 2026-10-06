@@ -143,7 +143,7 @@ export default function DeviceActions({ device }: Props) {
 				<ConfirmDialog
 					open={open === "token"}
 					title="Enrollment Token 재발급"
-					description="재발급하면 기존 활성 Token은 폐기됩니다. 그 Token으로 진행 중인 등록은 실패하며, 새 Token은 이번 한 번만 표시됩니다."
+					description="재발급하면 기존 활성 Token은 폐기되고, 이 Device의 승인 대기 CSR은 자동으로 거절됩니다. 새 Token은 이번 한 번만 표시됩니다."
 					confirmLabel="재발급"
 					isPending={reissue.isPending}
 					error={reissue.error}

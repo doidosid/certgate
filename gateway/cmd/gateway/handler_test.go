@@ -18,10 +18,12 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"tech.certgate/gateway/internal/access"
+	"tech.certgate/gateway/internal/event"
 	"tech.certgate/gateway/internal/management"
 	"tech.certgate/gateway/internal/outbox"
 	"tech.certgate/gateway/internal/policy"
@@ -507,4 +509,37 @@ func TestGateway_BackendFailureRecordsInternalErrorEvent(t *testing.T) {
 	// Two events: the Gateway's own REQUEST_ALLOWED access decision, plus the
 	// INTERNAL_ERROR event for the failed Backend delivery.
 	waitForPendingCount(t, gw, 2)
+}
+
+// event.New cuts Method and Path to the Management API's storage columns
+// (V7: VARCHAR(10) / VARCHAR(255)). The cut is for the record only: policy
+// must still see the request as sent, so a request that merely starts with an
+// ALLOW rule's method and path is denied, not matched on the stored prefix.
+func TestGateway_PolicyUsesFullMethodAndPathWhileEventIsFittedToColumns(t *testing.T) {
+	ca := newTestCA(t)
+	cert := ca.issueDeviceCert(t, 210, "sensor-floor-11")
+	allowedPath := "/" + strings.Repeat("a", 254)
+	gw := startTestGateway(t, ca, map[string]management.AccessContext{
+		"D2": {SerialNumber: "D2", DeviceID: "device-11", DeviceKey: "sensor-floor-11", DeviceStatus: "ACTIVE", CertificateStatus: "VALID", RoleName: "SENSOR",
+			Rules: []policy.Rule{{HTTPMethod: "VERYLONGME", PathPattern: allowedPath, Effect: "ALLOW", Priority: 10}}},
+	})
+	client := gw.client(t, cert)
+
+	resp := doRequest(t, client, gw.addr, "VERYLONGMETHODNAME", allowedPath+"bbb")
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("status = %d, want 403 (policy must match the full method and path)", resp.StatusCode)
+	}
+	assertBackendNotReached(t, gw)
+
+	due, err := gw.store.Due(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("Due: %v", err)
+	}
+	if len(due) != 1 {
+		t.Fatalf("recorded %d event(s), want 1", len(due))
+	}
+	if got := due[0]; got.HTTPMethod != "VERYLONGME" || got.RequestPath != allowedPath || got.ReasonCode != event.ReasonAccessDenied {
+		t.Errorf("event = {method %q, path %d chars, reason %s}, want {VERYLONGME, 255 chars, %s}",
+			got.HTTPMethod, len(got.RequestPath), got.ReasonCode, event.ReasonAccessDenied)
+	}
 }

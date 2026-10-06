@@ -1,0 +1,9 @@
+# Local debugging override. Not used by CI or the default stack.
+# Opens PostgreSQL on this machine's loopback only, so a local DB client or a
+# Management API run outside Compose can reach it. Never bind it to 0.0.0.0.
+#
+#   docker compose -f infra/compose.yaml -f infra/compose.local.yaml --env-file .env up -d
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"

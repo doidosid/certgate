@@ -1,0 +1,11 @@
+# image-scan(.github/workflows/ci.yml)이 읽는 Trivy 예외 목록.
+# 항목마다 근거(statement)와 만료일(expired_at)을 둔다. 만료일이 지나면 예외가
+# 사라지고 CI가 다시 실패해 재검토를 강제한다.
+vulnerabilities:
+  # spring-webmvc 6.2.19, XsltView 경로 제한 미흡으로 인한 RCE. 수정판은 Spring
+  # Framework 7.0.9뿐이고 6.2.x 수정판은 없다(Spring Boot 4 이전 필요, Issue #80).
+  - id: CVE-2026-47884
+    statement: >-
+      management-api는 XsltView나 XSLT View를 쓰지 않는다(REST JSON API만 제공).
+      Spring Boot 4 이전(Issue #80) 시 이 항목을 제거한다.
+    expired_at: 2027-01-06
