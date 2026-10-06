@@ -15,7 +15,7 @@ Docker internal network
  └─ Backend Service
 ~~~
 
-- PostgreSQL과 Backend Service는 Host Port를 공개하지 않는다.
+- PostgreSQL과 Backend Service는 Host Port를 공개하지 않는다. 로컬 디버깅용 <code>infra/compose.local.yaml</code> Override를 함께 쓸 때만 PostgreSQL을 Host loopback(<code>127.0.0.1:${POSTGRES_PORT}</code>)에 연다. CI와 기본 실행은 이 Override를 쓰지 않는다.
 - 관리자 인증 구현 전 Management API는 개발 PC 밖에 공개하지 않는다.
 - Gateway 외부 Port와 내부 관리 Port를 분리한다.
 
