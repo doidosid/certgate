@@ -6,6 +6,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
@@ -33,13 +34,16 @@ public class SecurityEventBatchService {
 	private final SecurityEventRepository securityEvents;
 	private final DeviceService deviceService;
 	private final ApplicationEventPublisher eventPublisher;
+	private final SecurityEventRetention retention;
 	private final Clock clock;
 
 	public SecurityEventBatchService(
-			SecurityEventRepository securityEvents, DeviceService deviceService, ApplicationEventPublisher eventPublisher, Clock clock) {
+			SecurityEventRepository securityEvents, DeviceService deviceService, ApplicationEventPublisher eventPublisher,
+			SecurityEventRetention retention, Clock clock) {
 		this.securityEvents = securityEvents;
 		this.deviceService = deviceService;
 		this.eventPublisher = eventPublisher;
+		this.retention = retention;
 		this.clock = clock;
 	}
 
@@ -48,7 +52,7 @@ public class SecurityEventBatchService {
 		List<SecurityEventBatchRequest.EventPayload> events = request.events() == null ? List.of() : request.events();
 		validate(events);
 		if (events.isEmpty()) {
-			return new SecurityEventBatchResponse(0, 0);
+			return new SecurityEventBatchResponse(0, 0, 0);
 		}
 
 		Map<UUID, SecurityEventBatchRequest.EventPayload> distinctById = new LinkedHashMap<>();
@@ -59,15 +63,25 @@ public class SecurityEventBatchService {
 		Set<UUID> existingIds = new HashSet<>();
 		securityEvents.findAllByIdIn(List.copyOf(distinctById.keySet())).forEach(event -> existingIds.add(event.getId()));
 
-		List<SecurityEvent> toInsert = distinctById.values().stream()
+		List<SecurityEventBatchRequest.EventPayload> newEvents = distinctById.values().stream()
 				.filter(event -> !existingIds.contains(event.id()))
+				.toList();
+		// An Event already past retention (a late Outbox resend) is answered 200
+		// so the Gateway drops it, but not stored: the daily job would delete it
+		// again, and one the job already deleted would otherwise come back as a
+		// "new" Event and re-trigger the CRITICAL SSE alert.
+		Optional<Instant> cutoff = retention.cutoff(clock.instant());
+		List<SecurityEvent> toInsert = newEvents.stream()
+				.filter(event -> cutoff.isEmpty() || !event.occurredAt().isBefore(cutoff.get()))
 				.map(this::toEntity)
 				.toList();
+		int expiredCount = newEvents.size() - toInsert.size();
 		securityEvents.saveAll(toInsert);
 		updateDeviceLastSeen(toInsert);
 		publishCriticalEvents(toInsert);
 
-		return new SecurityEventBatchResponse(toInsert.size(), events.size() - toInsert.size());
+		return new SecurityEventBatchResponse(
+				toInsert.size(), events.size() - newEvents.size(), expiredCount);
 	}
 
 	/**

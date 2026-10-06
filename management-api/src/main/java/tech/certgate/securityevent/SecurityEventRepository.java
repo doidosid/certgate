@@ -6,12 +6,29 @@ import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface SecurityEventRepository extends JpaRepository<SecurityEvent, UUID> {
 
 	List<SecurityEvent> findAllByIdIn(List<UUID> ids);
+
+	/**
+	 * Deletes up to {@code limit} Events with occurred_at before {@code cutoff}
+	 * (SecurityEventRetentionJob). Postgres DELETE has no LIMIT, hence the
+	 * subquery, which walks idx_security_event_occurred_at.
+	 */
+	@Modifying
+	@Query(value = """
+			DELETE FROM security_event
+			WHERE id IN (
+				SELECT id FROM security_event
+				WHERE occurred_at < :cutoff
+				ORDER BY occurred_at
+				LIMIT :limit)
+			""", nativeQuery = true)
+	int deleteOccurredBefore(@Param("cutoff") Instant cutoff, @Param("limit") int limit);
 
 	/** Most recent Events for a Device, used by the Device detail view (docs/api-spec.md §3). */
 	List<SecurityEvent> findTop10ByDeviceIdOrderByOccurredAtDesc(UUID deviceId);
