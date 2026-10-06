@@ -38,7 +38,7 @@ PostgreSQL은 관리 영역의 Source of Truth다. Gateway 전송 대기는 별�
 - <code>requested_at</code>, <code>decided_at</code>
 - <code>decision_note</code>
 
-같은 Device에는 PENDING 요청을 하나만 허용한다.
+같은 Device에는 PENDING 요청을 하나만 허용한다. Enrollment Token을 재발급하면 그 Device의 PENDING 요청은 REJECTED가 된다(ADR-005).
 
 ## Certificate
 

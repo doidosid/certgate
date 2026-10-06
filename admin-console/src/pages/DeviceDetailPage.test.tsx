@@ -183,14 +183,15 @@ describe("DeviceDetailPage", () => {
 		});
 
 		/**
-		 * 재발급하면 서버가 기존 활성 Token을 폐기한다(security-design.md §2). 진행 중인
-		 * 등록이 실패하므로 누르기 전에 그 사실을 알려야 한다.
+		 * 재발급하면 서버가 기존 활성 Token을 폐기하고 승인 대기 CSR을 자동 거절한다(security-design.md §2).
+		 * 진행 중인 등록이 실패하므로 누르기 전에 두 가지를 모두 알려야 한다.
 		 */
-		it("warns that reissuing revokes the existing token, then shows the new one once", async () => {
+		it("warns that reissuing revokes the existing token and rejects the pending CSR, then shows the new one once", async () => {
 			renderAt(`/devices/${DEVICE_ID}`);
 
 			await userEvent.click(await screen.findByRole("button", { name: "Token 재발급" }));
-			expect(await screen.findByText(/기존 활성 Token은 폐기됩니다/)).toBeInTheDocument();
+			expect(await screen.findByText(/기존 활성 Token은 폐기되고/)).toBeInTheDocument();
+			expect(screen.getByText(/승인 대기 CSR은 자동으로 거절됩니다/)).toBeInTheDocument();
 
 			await userEvent.click(screen.getByRole("button", { name: "재발급" }));
 

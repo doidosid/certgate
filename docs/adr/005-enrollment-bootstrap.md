@@ -13,7 +13,7 @@
 - 평문 Token은 생성 응답에서 한 번만 보여주고 DB에는 SHA-256 Hash만 저장한다.
 - Token은 해당 Device의 CSR 제출·상태 조회·Certificate 수령에만 사용한다.
 - CSR의 SAN URI가 Token에 연결된 Device Key와 정확히 일치해야 한다.
-- Token 재발급 시 이전 활성 Token을 폐기한다.
+- Token 재발급 시 이전 활성 Token을 폐기하고, 그 Device의 PENDING CSR 요청을 같은 Transaction에서 자동 거절한다(`decision_note`: "Enrollment Token 재발급으로 자동 거절"). 폐기된 Token으로 들어온 Key가 나중에 승인되지 않게 하고, 새 Token의 CSR이 중복 PENDING 검사에 막히지 않게 한다. 이미 승인·거절된 요청은 바꾸지 않는다.
 - 관리자 로그인은 별도 과제로 두고 MVP API는 외부에 공개하지 않는다.
 
 ## 결과

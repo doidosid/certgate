@@ -1,6 +1,7 @@
 package tech.certgate.enrollment;
 
 import jakarta.persistence.LockModeType;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -29,6 +30,18 @@ public interface CertificateRequestRepository extends JpaRepository<CertificateR
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("SELECT r FROM CertificateRequest r WHERE r.id = :id")
 	Optional<CertificateRequest> findByIdForUpdate(@Param("id") UUID id);
+
+	/**
+	 * Locks a Device's requests in {@code status} for the Token reissue
+	 * Transaction (ADR-005). A request that a concurrent approve or reject has
+	 * already moved out of PENDING is re-checked against the WHERE clause once
+	 * that lock is released (Postgres READ COMMITTED) and drops out of the
+	 * result, so two decisions cannot both apply to one request.
+	 */
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("SELECT r FROM CertificateRequest r WHERE r.deviceId = :deviceId AND r.status = :status")
+	List<CertificateRequest> findByDeviceIdAndStatusForUpdate(
+			@Param("deviceId") UUID deviceId, @Param("status") CertificateRequestStatus status);
 
 	/**
 	 * has-flag + dummy-value pattern (never a bare {@code :param IS NULL}) so

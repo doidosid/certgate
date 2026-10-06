@@ -39,6 +39,7 @@
 12. Certificate 폐기 후 Cache 무효화
 13. CRITICAL Event 저장과 SSE 표시
 14. SSE 재연결 후 최근 Event 재조회
+15. Enrollment Token 재발급 시 PENDING CSR 자동 거절, 승인·옛 Token 제출과 겹칠 때의 정합성
 
 ## 완료 기준
 
