@@ -157,16 +157,26 @@ admin-console:
 
 ## Phase 0. 현재 코드의 결함 정리
 
-배포·확장 여부와 관계없이 지금 코드에 있는 결함이다. 2026-10-02 전체 코드 검토에서 확인했다. 확장 작업 전에 먼저 처리한다.
+배포·확장 여부와 관계없이 지금 코드에 있는 결함이다. 2026-10-02 전체 코드 검토에서 확인했다. 확장 작업 전에 먼저 처리한다. 상태는 2026-10-06 기준이다.
+
+### 남은 결함
 
 | 우선순위 | 결함 | 위치 |
 |---|---|---|
-| High | `/internal/**` Service Token Filter가 디코딩 전 원본 URI(`getRequestURI()`)로 경로를 판단한다. Spring MVC는 디코딩하고 `;param`을 제거한 경로로 Handler를 매칭하므로, `/%69nternal/...`·`/internal;x=1/...` 같은 경로가 Token 검사 없이 Handler에 도달할 수 있다(코드·Spring 소스 기준, 재현 테스트 미작성) | `management-api/.../common/GatewayServiceTokenFilter.java` |
-| High | Gateway가 요청 Method·Path를 길이 제한 없이 Event에 복사한다. 컬럼 한도(`http_method` 10자, `request_path` 255자)를 넘는 Event 하나가 batch INSERT 전체를 실패시키고, Sender는 그 batch를 계속 재시도한다. 같은 batch의 CRITICAL Event도 전달되지 않는다 | `gateway/internal/event`, `gateway/internal/outbox/sender.go`, `SecurityEventBatchService.validate` |
-| Medium | 신원 Header를 `Director` 단계에서 넣는데, `httputil.ReverseProxy`는 그 뒤에 hop-by-hop Header를 제거한다. 그래서 Client가 `Connection: X-CertGate-Role` 같은 값을 보내면 Gateway가 넣은 신원 Header가 Backend에 도달하지 않는다 | `gateway/cmd/gateway/handler.go`, `gateway/internal/proxy` |
-| Medium | Enrollment Token을 재발급해도 이전 Token으로 제출한 PENDING CSR이 그대로 승인 가능하다(설계 판단 필요 — ADR-005) | `DeviceService` Token 재발급, `EnrollmentService.approve` |
+| Medium | 허용된 요청이 Upgrade(`101 Switching Protocols`)되면 그 뒤 Tunnel 안의 요청에는 정책 판단·Security Event 기록·신원 Header 재생성이 적용되지 않는다. 지금의 `backend-service`는 Upgrade를 지원하지 않아 악용 경로는 없지만, 신뢰 모델이 Backend 구현에 의존한다. 거절할 경우의 Reason Code를 정해야 한다. 신원 이름의 request Trailer도 함께 다룬다(Issue #75) | `gateway/cmd/gateway/handler.go`, `gateway/internal/proxy` |
 | Medium | Device Agent가 Enrollment 중 일시 오류에 바로 종료된다. 재시작하면 이전에 제출한 PENDING 요청 때문에 `409 CERTIFICATE_REQUEST_DUPLICATE`로 다시 실패한다 | `device-agent/cmd/device-agent/main.go` |
 | Low | E2E 단언의 검출력: Event ID 중복 검사가 PRIMARY KEY 때문에 실패할 수 없다. SKIP을 통과로 센다. 차단된 요청이 Backend에 도달하지 않았는지는 직접 확인하지 않는다 | `tests/e2e/run.sh`, `tests/e2e/lib.sh` |
+| 의존성 | Spring Framework 6.2.19의 CVE-2026-47884(`XsltView`)를 image-scan에서 예외 처리했다(`XsltView` 미사용, 만료 2027-01-06). 수정판이 7.0.9뿐이라 Spring Boot 4 이전이 필요하다(Issue #80) | `.trivyignore.yaml`, `management-api/build.gradle` |
+
+### 해결한 결함
+
+| 우선순위 | 결함 | 해결 |
+|---|---|---|
+| High | `/internal/**` Service Token Filter가 디코딩 전 원본 URI로 경로를 판단해 `/%69nternal/...`·`/internal;x=1/...`가 Token 검사 없이 Handler에 도달할 수 있었다 | PR #71 |
+| High | Gateway가 요청 Method·Path를 길이 제한 없이 Event에 복사해, 컬럼 한도를 넘는 Event 하나가 batch 전체(같은 batch의 CRITICAL Event 포함)를 막았다 | PR #73: Gateway에서 rune 단위로 자르고 NUL·잘못된 UTF-8을 치환 |
+| Medium | `Director` 뒤에 hop-by-hop Header를 제거해 `Connection: X-CertGate-Role`로 신원 Header를 지울 수 있었다 | PR #74: `ReverseProxy.Rewrite`로 전환 |
+| Medium | Enrollment Token을 재발급해도 이전 Token으로 제출한 PENDING CSR이 그대로 승인 가능했다 | PR #76: 재발급 Transaction에서 자동 거절(ADR-005) |
+| 부하 | `security_event` 보관 정책이 없었다 | PR #79: `SECURITY_EVENT_RETENTION_DAYS`(`docs/operations.md` "Security Event 보관") |
 
 ## Phase 1. 관리자 인증·인가
 
@@ -205,7 +215,8 @@ VIEWER
 
 ### 함께 정리할 것
 
-- Spring Security를 도입하면 기본 `StrictHttpFirewall`이 `;`와 일부 인코딩 문자를 거부해 Phase 0의 `/internal/**` 우회를 부분적으로 막는다. 그래도 Service Token Filter 자체의 경로 판단은 별도로 고친다. `/internal/**`도 Security Filter Chain 안에서 Service Token 인증으로 다루는 구조를 검토한다.
+- Phase 0의 `/internal/**` 우회는 Service Token Filter에서 고쳤다(PR #71). Spring Security를 도입하면 기본 `StrictHttpFirewall`이 `;`와 일부 인코딩 문자를 거부해 한 겹 더 막는다. `/internal/**`도 Security Filter Chain 안에서 Service Token 인증으로 다루는 구조를 검토한다.
+- `SECURITY_EVENT_RETENTION_DAYS`는 지금 환경변수로만 바꿀 수 있다. 관리자 인증이 생기면 ADMIN만 바꿀 수 있는 Console 설정 화면을 추가한다.
 - Console API 호출이 경로 세그먼트를 `encodeURIComponent` 없이 조합한다(`admin-console/src/features/*/api.ts`). 관리자 인증이 붙으면 조작된 Link로 다른 Endpoint를 호출하게 만들 수 있다.
 
 ---
@@ -418,7 +429,7 @@ Host           ─┘
 - **Outbox 처리량 상한**: Sender가 2초마다 batch 하나(50건)만 보낸다. 초당 약 25건을 넘는 요청이 계속되면 Management API가 정상이어도 Outbox가 계속 쌓인다. 그러면 거짓 `EVENT_OUTBOX_BACKLOG` 경보가 난다. Tick마다 batch가 가득 찬 동안 계속 보내도록 바꾼다.
 - **Access Context Cache Stampede**: 같은 Serial의 동시 Cache Miss가 모두 Management API를 호출한다. 만료된 Entry도 Map에서 지우지 않는다. `singleflight`와 주기적 정리를 넣는다. Redis 없이도 할 수 있다.
 - **SSE Broadcast 작업 거부**: Broadcast Executor(core 2, max 4, queue 100, AbortPolicy)가 CRITICAL Event 폭주 시 작업을 거부한다. 거부된 Event는 실시간 알림에서 빠진다. 연결이 끊기지 않아 재연결 재조회로도 복구되지 않는다.
-- **`security_event` 보관 정책 없음**: 허용된 요청까지 한 건씩 저장하고 삭제·Partition이 없다. 보관 기간 정책을 정한다(설계 판단 필요).
+- **`security_event` 크기**: 허용된 요청까지 한 건씩 저장한다. 보관 기간 설정(`SECURITY_EVENT_RETENTION_DAYS`, PR #79)으로 매일 오래된 Event를 지우지만 Partition은 없다. 부하 테스트에서 삭제 Job 소요 시간과 Table 크기를 함께 본다.
 
 ### 확인 대상
 

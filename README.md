@@ -94,6 +94,8 @@ Critical 등급 Event는 접속 중인 콘솔에 SSE Toast로 즉시 뜹니다. 
 
 부수적으로 발견·해결된 것: Gateway가 handshake에서 Intermediate CA를 보내지 않던 문제(Issue #42), Gateway Readiness Endpoint 부재(Issue #36), Management API 미매핑 경로가 500을 반환하던 문제(Issue #39), Low 등급 테스트 검출력 3건(Issue #25·#27·#30), E2E가 검증하지 않던 SSE 재연결 재조회·Cache 무효화 실패 시 TTL 수렴 경로(Issue #55), 인증서 화면의 미구현 UI 계약 항목(Issue #50 — 발급 CA·Subject·SAN URI·SHA-256 지문을 서버 DTO에 추가하고 화면에 반영).
 
+제출 이후 2026-10-02 전체 코드 검토에서 찾아 고친 것: `/internal/**` Service Token 경로 우회(PR #71), 길이 초과 Event가 Outbox batch 전체를 막던 문제(PR #73), `Connection` Header로 신원 Header를 지울 수 있던 문제(PR #74), Token 재발급 시 PENDING CSR 자동 거절(PR #76), Security Event 보관 기간 설정(PR #79). 남은 항목은 [`docs/deployment-roadmap.md`](docs/deployment-roadmap.md) "Phase 0"에 있다.
+
 세부 순서는 [`docs/implementation-plan.md`](docs/implementation-plan.md)를 따릅니다.
 
 ## 로컬 실행
