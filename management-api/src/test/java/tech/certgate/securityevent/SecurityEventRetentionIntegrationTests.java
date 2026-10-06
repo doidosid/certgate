@@ -26,6 +26,9 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -39,6 +42,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  */
 @Testcontainers
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
+@RecordApplicationEvents
 class SecurityEventRetentionIntegrationTests {
 
 	private static final String SERVICE_TOKEN = "test-gateway-service-token";
@@ -73,6 +77,15 @@ class SecurityEventRetentionIntegrationTests {
 
 	@Autowired
 	private SecurityEventRetentionJob retentionJob;
+
+	@Autowired
+	private SecurityEventBatchService batchService;
+
+	@Autowired
+	private ApplicationEvents applicationEvents;
+
+	@Autowired
+	private ThreadPoolTaskScheduler taskScheduler;
 
 	@BeforeEach
 	void clearEvents() {
@@ -129,6 +142,36 @@ class SecurityEventRetentionIntegrationTests {
 				"SELECT last_seen_at FROM device WHERE id = ?::uuid", Timestamp.class, deviceId)).isNull();
 	}
 
+	/**
+	 * The job deleted a CRITICAL Event, then the Gateway resends the same id
+	 * (its 200 was lost). It must stay deleted and not alert the Console again.
+	 * The service is called on the test thread so ApplicationEvents sees what
+	 * it publishes; the on-time Event is the control proving it would.
+	 */
+	@Test
+	void resendAfterPurgeIsNotStoredOrAlertedAgain() {
+		UUID purged = insertEvent(CUTOFF.minusSeconds(1));
+		assertThat(retentionJob.purgeExpired()).isEqualTo(1);
+		UUID onTime = UUID.randomUUID();
+
+		SecurityEventBatchResponse response = batchService.accept(new SecurityEventBatchRequest(List.of(
+				criticalPayload(purged, CUTOFF.minusSeconds(1)), criticalPayload(onTime, CUTOFF))));
+
+		assertThat(response).isEqualTo(new SecurityEventBatchResponse(1, 0, 1));
+		assertThat(jdbcTemplate.queryForList("SELECT id FROM security_event", UUID.class)).containsExactly(onTime);
+		assertThat(applicationEvents.stream(CriticalSecurityEventStoredEvent.class).map(CriticalSecurityEventStoredEvent::eventId))
+				.containsExactly(onTime);
+	}
+
+	/**
+	 * A long purge runs on the scheduler thread; with Boot's default pool of 1
+	 * it would hold back the SSE heartbeat (CriticalEventBroadcaster) meanwhile.
+	 */
+	@Test
+	void schedulerHasRoomForPurgeAndHeartbeat() {
+		assertThat(taskScheduler.getPoolSize()).isGreaterThanOrEqualTo(2);
+	}
+
 	@Test
 	void batch_resendOfStoredEventPastRetentionCountsAsDuplicate() {
 		UUID id = insertEvent(CUTOFF.minusSeconds(1));
@@ -160,6 +203,12 @@ class SecurityEventRetentionIntegrationTests {
 					'REQUEST_ALLOWED', 'trace', ?::timestamptz
 				FROM generate_series(1, ?::int) g
 				""", Timestamp.from(newest), Timestamp.from(NOW), count);
+	}
+
+	private static SecurityEventBatchRequest.EventPayload criticalPayload(UUID id, Instant occurredAt) {
+		return new SecurityEventBatchRequest.EventPayload(
+				id, occurredAt, "ACCESS", "CRITICAL", null, null, null, null, "DENIED", "CERTIFICATE_REVOKED", null, null,
+				UUID.randomUUID().toString());
 	}
 
 	private Map<String, Object> event(UUID id, Instant occurredAt, String severity, String deviceId) {

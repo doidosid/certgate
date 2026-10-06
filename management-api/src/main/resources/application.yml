@@ -12,6 +12,12 @@ logging:
 spring:
   application:
     name: management-api
+  task:
+    scheduling:
+      pool:
+        # Boot's default is 1 thread: a long SecurityEventRetentionJob purge
+        # would then delay the Critical Event SSE heartbeat until it finished.
+        size: 2
   jpa:
     open-in-view: false
     hibernate:

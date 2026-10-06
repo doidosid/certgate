@@ -67,7 +67,8 @@ Secret, Token, Private Key, 전체 CSR·Certificate·Telemetry는 로그에서 �
 ## Security Event 보관
 
 - `SECURITY_EVENT_RETENTION_DAYS`로 보관 기간(일)을 정한다. `0`이면 무기한 보관하며, 설정하지 않았을 때의 기본값이다. `.env.example`은 `90`이다.
-- `0`이 아니면 최소 7일이다. 음수나 1~6이면 Management API가 기동하지 않는다. Management API가 며칠 멈춰도 Gateway Outbox에 쌓인 Event가 복구 뒤 버려지지 않게 하기 위해서다.
+- `0`이 아니면 최소 7일이다. 음수나 1~6이면 Management API가 기동하지 않는다. Management API가 며칠 멈춰도 Gateway Outbox에 쌓인 Event가 복구 뒤 버려지지 않게 하기 위해서다. 빈 값이나 숫자가 아닌 값도 기동 실패다. 단, Compose는 값이 없거나 비어 있으면 `0`을 넘긴다.
+- 삭제 Job이 오래 걸려도 Critical Event SSE heartbeat가 밀리지 않도록 Scheduler Thread를 2개로 둔다(`spring.task.scheduling.pool.size`).
 - 기준은 `occurred_at`(Gateway가 Event를 만든 시각)이다. 매일 03:30 UTC에 `occurred_at`이 보관 기간보다 오래된 Event를 1,000건씩 나눠 각각 별도 Transaction으로 삭제한다.
 - 보관 기간이 이미 지난 Event가 Batch로 늦게 도착하면 저장하지 않고 `200 OK`로 응답한다(`expiredCount`). Gateway는 이 Event를 Outbox에서 지운다. 저장하지 않으므로 CRITICAL SSE 알림과 Device `last_seen_at` 갱신도 일어나지 않는다.
 - 관리자 인증이 생긴 뒤 ADMIN만 바꿀 수 있는 Console 설정 화면을 추가한다(`docs/deployment-roadmap.md` Phase 1 이후). 그 전에는 환경변수로만 바꾼다.

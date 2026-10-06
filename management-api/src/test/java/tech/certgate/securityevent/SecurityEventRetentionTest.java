@@ -7,6 +7,9 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.autoconfigure.context.PropertyPlaceholderAutoConfiguration;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 class SecurityEventRetentionTest {
 
@@ -34,5 +37,33 @@ class SecurityEventRetentionTest {
 		assertThatThrownBy(() -> new SecurityEventRetention(days))
 				.isInstanceOf(IllegalStateException.class)
 				.hasMessageContaining("SECURITY_EVENT_RETENTION_DAYS");
+	}
+
+	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
+			.withConfiguration(AutoConfigurations.of(PropertyPlaceholderAutoConfiguration.class))
+			.withUserConfiguration(SecurityEventRetention.class);
+
+	@Test
+	void unsetPropertyKeepsEventsForever() {
+		contextRunner.run(context -> assertThat(context.getBean(SecurityEventRetention.class).cutoff(NOW)).isEmpty());
+	}
+
+	@Test
+	void validPropertyStartsContext() {
+		contextRunner.withPropertyValues("certgate.security-event.retention-days=7")
+				.run(context -> assertThat(context.getBean(SecurityEventRetention.class).cutoff(NOW))
+						.contains(NOW.minusSeconds(7 * 86_400L)));
+	}
+
+	/**
+	 * Outside Compose (which substitutes 0 for a missing value), an empty or
+	 * non-numeric value is a misconfiguration and fails startup rather than
+	 * silently meaning "forever" — the same as a value below the minimum.
+	 */
+	@ParameterizedTest
+	@ValueSource(strings = {"1", "-1", "", "abc"})
+	void invalidPropertyFailsStartup(String value) {
+		contextRunner.withPropertyValues("certgate.security-event.retention-days=" + value)
+				.run(context -> assertThat(context).hasFailed());
 	}
 }
