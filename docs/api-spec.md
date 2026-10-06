@@ -289,11 +289,12 @@ Gateway는 Security Event 생성과 SQLite Durable Outbox 저장을 하나의 �
 ~~~json
 {
   "acceptedCount": 1,
-  "duplicateCount": 0
+  "duplicateCount": 0,
+  "expiredCount": 0
 }
 ~~~
 
-Event ID Unique Constraint로 재전송을 멱등 처리한다.
+Event ID Unique Constraint로 재전송을 멱등 처리한다. 이미 저장된 ID는 `duplicateCount`로 센다. `SECURITY_EVENT_RETENTION_DAYS`가 설정돼 있고 `occurredAt`이 보관 기간보다 오래된 새 Event는 저장하지 않고 `expiredCount`로 센다. 이때도 응답은 <code>200 OK</code>이므로 Gateway는 해당 Event를 Outbox에서 삭제한다([operations.md](operations.md) "Security Event 보관").
 
 ## 8. Gateway 제공 내부 API
 

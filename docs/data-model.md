@@ -92,7 +92,7 @@ MVP는 ALLOW List와 기본 DENY만 사용한다.
 - <code>trace_id</code>
 - <code>created_at</code>: Management API 저장 시각
 
-Event는 수정·삭제 API를 제공하지 않는다. Critical 알림은 별도 Alert Table 없이 이 데이터의 severity로 표현한다.
+Event는 수정·삭제 API를 제공하지 않는다. `SECURITY_EVENT_RETENTION_DAYS`를 설정하면 `occurred_at`이 보관 기간보다 오래된 Event를 매일 일괄 삭제한다([operations.md](operations.md) "Security Event 보관"). Critical 알림은 별도 Alert Table 없이 이 데이터의 severity로 표현한다.
 
 ## 필수 Index
 

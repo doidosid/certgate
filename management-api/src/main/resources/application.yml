@@ -12,6 +12,12 @@ logging:
 spring:
   application:
     name: management-api
+  task:
+    scheduling:
+      pool:
+        # Boot's default is 1 thread: a long SecurityEventRetentionJob purge
+        # would then delay the Critical Event SSE heartbeat until it finished.
+        size: 2
   jpa:
     open-in-view: false
     hibernate:
@@ -38,6 +44,11 @@ certgate:
     token-ttl-hours: ${ENROLLMENT_TOKEN_TTL_HOURS:24}
   certificate:
     validity-days: ${DEVICE_CERTIFICATE_VALIDITY_DAYS:30}
+  security-event:
+    # 0 keeps Events forever. Otherwise at least 7 (SecurityEventRetention
+    # fails startup below that); Events older than this many days, by
+    # occurred_at, are deleted daily and not stored when they arrive late.
+    retention-days: ${SECURITY_EVENT_RETENTION_DAYS:0}
   gateway:
     # Left unset in environments (e.g. Foundation health tests) that never
     # call a /internal/** endpoint; GatewayServiceTokenFilter then rejects

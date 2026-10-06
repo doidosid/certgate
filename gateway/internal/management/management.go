@@ -34,6 +34,9 @@ type AccessContext struct {
 type BatchResult struct {
 	AcceptedCount  int `json:"acceptedCount"`
 	DuplicateCount int `json:"duplicateCount"`
+	// ExpiredCount: Events already past the Management API's retention period,
+	// answered 200 but not stored. The Sender still drops them from the Outbox.
+	ExpiredCount int `json:"expiredCount"`
 }
 
 // APIError mirrors the Management API's error response

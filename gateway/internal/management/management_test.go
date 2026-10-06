@@ -90,7 +90,7 @@ func TestPostSecurityEvents_Success(t *testing.T) {
 		if len(body.Events) != 1 || body.Events[0].ReasonCode != event.ReasonRequestAllowed {
 			t.Errorf("unexpected events payload: %+v", body.Events)
 		}
-		_ = json.NewEncoder(w).Encode(BatchResult{AcceptedCount: 1, DuplicateCount: 0})
+		_, _ = w.Write([]byte(`{"acceptedCount":1,"duplicateCount":0,"expiredCount":2}`))
 	}))
 	defer server.Close()
 
@@ -102,6 +102,9 @@ func TestPostSecurityEvents_Success(t *testing.T) {
 	}
 	if result.AcceptedCount != 1 {
 		t.Errorf("AcceptedCount = %d, want 1", result.AcceptedCount)
+	}
+	if result.ExpiredCount != 2 {
+		t.Errorf("ExpiredCount = %d, want 2", result.ExpiredCount)
 	}
 }
 
