@@ -100,7 +100,7 @@
 | GET | <code>/devices/{deviceId}</code> | 인증서·정책·최근 Event를 포함한 상세 |
 | PATCH | <code>/devices/{deviceId}/status</code> | <code>{"status":"ACTIVE|DISABLED"}</code> |
 | PUT | <code>/devices/{deviceId}/role</code> | <code>{"roleName":"SENSOR"}</code> |
-| POST | <code>/devices/{deviceId}/enrollment-token</code> | 이전 Token 폐기 후 새 Token 발급 |
+| POST | <code>/devices/{deviceId}/enrollment-token</code> | 이전 Token 폐기, 그 Device의 PENDING CSR 요청 자동 거절(<code>REJECTED</code>) 후 새 Token 발급 |
 
 목록 항목:
 

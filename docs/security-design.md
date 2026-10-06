@@ -23,7 +23,7 @@
 7. 관리자가 승인하면 Intermediate CA가 서명한다.
 8. Device는 같은 Enrollment 범위에서 Certificate와 CA Chain을 내려받는다.
 
-Token은 CSR 제출·상태 조회·인증서 수령에만 사용할 수 있다. 재발급 시 기존 활성 Token은 폐기한다.
+Token은 CSR 제출·상태 조회·인증서 수령에만 사용할 수 있다. 재발급 시 기존 활성 Token은 폐기하고, 그 Device의 PENDING CSR 요청은 같은 Transaction에서 자동 거절한다. 폐기된 Token으로 제출된 Key가 이후 승인되는 경로를 남기지 않기 위해서다. 승인 Transaction과 겹치면 요청 Row Lock 때문에 재발급이 기다리고, 이미 승인된 요청은 그대로 둔다.
 
 ## 3. CA 계층
 
