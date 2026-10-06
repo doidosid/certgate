@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 
+import java.sql.Connection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -11,6 +12,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -22,6 +24,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
@@ -55,8 +58,17 @@ class TokenReissuePendingRequestIntegrationTests {
 	@Autowired
 	private TestRestTemplate restTemplate;
 
+	@Autowired
+	private JdbcTemplate jdbcTemplate;
+
+	@Autowired
+	private DataSource dataSource;
+
 	@MockitoSpyBean
 	private IntermediateCertificateAuthority certificateAuthority;
+
+	@MockitoSpyBean
+	private CsrValidator csrValidator;
 
 	private Map<String, Object> registerDevice(String deviceKey) {
 		var response = restTemplate.postForEntity(
@@ -155,12 +167,29 @@ class TokenReissuePendingRequestIntegrationTests {
 		assertThat(getRequest(otherPendingId).get("status")).isEqualTo("PENDING");
 	}
 
+	@Test
+	void reissue_leavesAnAdministratorRejectionAsItWas() throws Exception {
+		Map<String, Object> device = registerDevice("reissue-pending-rejected");
+		String rejectedId = submitPendingCsr((String) device.get("enrollmentToken"), "reissue-pending-rejected");
+		assertThat(decide(rejectedId, "reject").getStatusCode()).isEqualTo(HttpStatus.OK);
+		Object decidedAt = getRequest(rejectedId).get("decidedAt");
+
+		reissueToken(device.get("id"));
+
+		Map<String, Object> rejected = getRequest(rejectedId);
+		assertThat(rejected.get("status")).isEqualTo("REJECTED");
+		assertThat(rejected.get("decisionNote")).isEqualTo("test");
+		assertThat(rejected.get("decidedAt")).isEqualTo(decidedAt);
+	}
+
 	/**
 	 * A reissue that runs while an approve of the same request is inside its
 	 * locked Transaction must wait for it and then leave the APPROVED request
 	 * alone. Without the Row Lock in findByDeviceIdAndStatusForUpdate the reissue
 	 * reads the request as PENDING and its REJECTED update lands after approve
-	 * commits, leaving a REJECTED request with a real Certificate.
+	 * commits, leaving a REJECTED request with a real Certificate. Waiting for
+	 * the reissue to show up as a Lock waiter proves it read the request while
+	 * approve was still uncommitted, with or without that Row Lock.
 	 */
 	@Test
 	void reissue_duringApprove_waitsAndLeavesTheApprovedRequest() throws Exception {
@@ -182,7 +211,7 @@ class TokenReissuePendingRequestIntegrationTests {
 			assertThat(signingStarted.await(5, TimeUnit.SECONDS)).as("approve() reached the CA-signing step").isTrue();
 
 			var reissueFuture = CompletableFuture.supplyAsync(() -> reissueToken(device.get("id")), executor);
-			Thread.sleep(300);
+			awaitLockWaiters(1);
 			assertThat(reissueFuture).as("reissue must block on the Row Lock approve() holds").isNotDone();
 
 			releaseSigning.countDown();
@@ -197,5 +226,132 @@ class TokenReissuePendingRequestIntegrationTests {
 		assertThat(request.get("decisionNote")).isEqualTo("test");
 		var certificates = restTemplate.getForEntity("/api/v1/certificates?deviceId=" + device.get("id"), Map.class);
 		assertThat((List<?>) certificates.getBody().get("content")).hasSize(1);
+	}
+
+	/**
+	 * Reissue holds the revoked credential's row lock when a CSR arrives under
+	 * the old Token. The submission must wait in resolve() and then fail as an
+	 * invalid Token (api-spec.md), not as a duplicate of the request the reissue
+	 * is about to reject or as the reissue-only ENROLLMENT_TOKEN_CONFLICT.
+	 *
+	 * The test pauses the reissue after its revoke by holding the old PENDING
+	 * request's row lock on its own Connection, so the reissue waits in
+	 * findByDeviceIdAndStatusForUpdate.
+	 */
+	@Test
+	void submitUnderOldToken_duringReissue_waitsAndFailsAsInvalidToken() throws Exception {
+		Map<String, Object> device = registerDevice("reissue-submit-race-1");
+		String oldToken = (String) device.get("enrollmentToken");
+		String pendingId = submitPendingCsr(oldToken, "reissue-submit-race-1");
+
+		ExecutorService executor = Executors.newFixedThreadPool(2);
+		ResponseEntity<Map> submission;
+		String newToken;
+		try (Connection blocker = dataSource.getConnection()) {
+			blocker.setAutoCommit(false);
+			try (var lock = blocker.prepareStatement("SELECT id FROM certificate_request WHERE id = ? FOR UPDATE")) {
+				lock.setObject(1, java.util.UUID.fromString(pendingId));
+				lock.executeQuery().close();
+			}
+			try {
+				var reissueFuture = CompletableFuture.supplyAsync(() -> reissueToken(device.get("id")), executor);
+				awaitLockWaiters(1);
+
+				var submitFuture = CompletableFuture.supplyAsync(() -> submitCsrUnchecked(oldToken, "reissue-submit-race-1"), executor);
+				awaitLockWaiters(2);
+
+				blocker.rollback();
+				newToken = reissueFuture.get(5, TimeUnit.SECONDS);
+				submission = submitFuture.get(5, TimeUnit.SECONDS);
+			} finally {
+				executor.shutdownNow();
+			}
+		}
+
+		assertThat(submission.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+		assertThat(submission.getBody().get("code")).isEqualTo("ENROLLMENT_TOKEN_INVALID");
+		assertThat(requestCount(device.get("id"))).isEqualTo(1);
+		assertThat(getRequest(pendingId).get("status")).isEqualTo("REJECTED");
+		assertThat(activeCredentialCount(device.get("id"))).isEqualTo(1);
+		assertThat(submitCsr(newToken, "reissue-submit-race-1").getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+	}
+
+	/**
+	 * The other order: a CSR submission under the old Token is between resolve()
+	 * and commit when the reissue starts. The reissue's revoke must wait for it
+	 * and then find and reject the request it committed.
+	 */
+	@Test
+	void reissue_duringSubmitUnderOldToken_waitsAndRejectsTheSubmittedRequest() throws Exception {
+		Map<String, Object> device = registerDevice("reissue-submit-race-2");
+		String oldToken = (String) device.get("enrollmentToken");
+		CountDownLatch submitResolved = new CountDownLatch(1);
+		CountDownLatch releaseSubmit = new CountDownLatch(1);
+		doAnswer(invocation -> {
+			submitResolved.countDown();
+			if (!releaseSubmit.await(5, TimeUnit.SECONDS)) {
+				throw new AssertionError("releaseSubmit was never released");
+			}
+			return invocation.callRealMethod();
+		}).when(csrValidator).validate(any(), any());
+
+		ExecutorService executor = Executors.newFixedThreadPool(2);
+		ResponseEntity<Map> submission;
+		String newToken;
+		try {
+			var submitFuture = CompletableFuture.supplyAsync(() -> submitCsrUnchecked(oldToken, "reissue-submit-race-2"), executor);
+			assertThat(submitResolved.await(5, TimeUnit.SECONDS)).as("submit resolved the old Token").isTrue();
+
+			var reissueFuture = CompletableFuture.supplyAsync(() -> reissueToken(device.get("id")), executor);
+			awaitLockWaiters(1);
+
+			releaseSubmit.countDown();
+			submission = submitFuture.get(5, TimeUnit.SECONDS);
+			newToken = reissueFuture.get(5, TimeUnit.SECONDS);
+		} finally {
+			executor.shutdownNow();
+		}
+
+		assertThat(submission.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+		Map<String, Object> request = getRequest((String) submission.getBody().get("id"));
+		assertThat(request.get("status")).isEqualTo("REJECTED");
+		assertThat(request.get("decisionNote")).isEqualTo(EnrollmentTokenService.REISSUE_REJECTION_NOTE);
+		assertThat(activeCredentialCount(device.get("id"))).isEqualTo(1);
+		assertThat(submitCsr(newToken, "reissue-submit-race-2").getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+	}
+
+	private ResponseEntity<Map> submitCsrUnchecked(String token, String deviceKey) {
+		try {
+			return submitCsr(token, deviceKey);
+		} catch (Exception e) {
+			throw new IllegalStateException(e);
+		}
+	}
+
+	/** Waits until {@code count} other Transactions are blocked on a Row Lock in Postgres. */
+	private void awaitLockWaiters(int count) throws InterruptedException {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+		while (System.nanoTime() < deadline) {
+			Integer waiters = jdbcTemplate.queryForObject(
+					"SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()",
+					Integer.class);
+			if (waiters != null && waiters >= count) {
+				return;
+			}
+			Thread.sleep(20);
+		}
+		throw new AssertionError(count + " Transaction(s) never ended up waiting on a Row Lock");
+	}
+
+	private int requestCount(Object deviceId) {
+		return jdbcTemplate.queryForObject(
+				"SELECT count(*) FROM certificate_request WHERE device_id = ?", Integer.class,
+				java.util.UUID.fromString((String) deviceId));
+	}
+
+	private int activeCredentialCount(Object deviceId) {
+		return jdbcTemplate.queryForObject(
+				"SELECT count(*) FROM enrollment_credential WHERE device_id = ? AND revoked_at IS NULL", Integer.class,
+				java.util.UUID.fromString((String) deviceId));
 	}
 }

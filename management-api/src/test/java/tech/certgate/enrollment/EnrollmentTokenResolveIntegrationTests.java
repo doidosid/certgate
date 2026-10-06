@@ -32,7 +32,7 @@ import tech.certgate.common.ApiException;
  * Token appeared to return a different device's credential after a token
  * reissue. Direct inspection of EnrollmentTokenService.resolve() and
  * EnrollmentCredentialRepository (a single unambiguous
- * findByTokenHash(String), a DB-level UNIQUE constraint on token_hash, and
+ * findByTokenHashForUpdate(String), a DB-level UNIQUE constraint on token_hash, and
  * no caching anywhere in the path) found no code defect.
  *
  * The first and second tests below go through the full public stack — the

@@ -64,11 +64,11 @@ public class EnrollmentTokenService {
 			// (both rows briefly have revoked_at IS NULL at INSERT time).
 			credentials.flush();
 		}
-		// Runs after the revoke is flushed and holds the credential row lock. A CSR
-		// submitted concurrently under the old Token can only commit its markUsed
-		// UPDATE after this Transaction ends; that UPDATE writes revoked_at back to
-		// NULL beside the new credential, trips idx_enrollment_credential_active_per_device
-		// and rolls the submission back, so no PENDING request slips in behind this query.
+		// Runs after the revoke UPDATE, which holds the old credential's row lock
+		// until commit. A CSR submission under the old Token takes the same lock in
+		// resolve() (findByTokenHashForUpdate), so either it committed before the
+		// revoke and its PENDING request is found here, or it waits and then sees
+		// the credential revoked (ENROLLMENT_TOKEN_INVALID).
 		for (CertificateRequest pending : certificateRequests.findByDeviceIdAndStatusForUpdate(
 				deviceId, CertificateRequestStatus.PENDING)) {
 			pending.reject(now, REISSUE_REJECTION_NOTE);
@@ -95,7 +95,7 @@ public class EnrollmentTokenService {
 		if (rawToken == null || rawToken.isBlank()) {
 			throw invalidToken();
 		}
-		EnrollmentCredential credential = credentials.findByTokenHash(hash(rawToken)).orElseThrow(this::invalidToken);
+		EnrollmentCredential credential = credentials.findByTokenHashForUpdate(hash(rawToken)).orElseThrow(this::invalidToken);
 		Instant now = clock.instant();
 		if (!credential.isActive(now)) {
 			throw invalidToken();
