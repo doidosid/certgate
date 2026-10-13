@@ -9,3 +9,12 @@ vulnerabilities:
       management-api는 XsltView나 XSLT View를 쓰지 않는다(REST JSON API만 제공).
       Spring Boot 4 이전(Issue #80) 시 이 항목을 제거한다.
     expired_at: 2027-01-06
+
+  # spring-webmvc 6.2.19, SSE로 View Fragment를 렌더링할 때 스트림이 손상된다
+  # (GHSA-j9f9-w8pj-32f8). 수정판은 Spring Framework 7.0.9뿐이다(Issue #80).
+  - id: CVE-2026-47890
+    statement: >-
+      management-api의 SSE(CriticalEventBroadcaster)는 JSON data와 comment만
+      보내고 View Fragment를 렌더링하지 않는다. Spring Boot 4 이전(Issue #80) 시
+      이 항목을 제거한다.
+    expired_at: 2027-01-06
