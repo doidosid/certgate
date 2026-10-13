@@ -15,9 +15,12 @@ admin-console/node_modules/
 admin-console/dist/
 admin-console/coverage/
 
-.env
-.env.*
-!.env.example
+# **/ 접두사가 없으면 Context Root의 .env만 걸러진다. admin-console/.env.local
+# (VITE_USE_MOCK=true 같은 개발자 로컬 설정)이 이미지에 들어가 Console이 Mock
+# 모드로 빌드되던 문제를 막는다. Secret이 담긴 하위 .env도 같은 이유로 막는다.
+**/.env
+**/.env.*
+!**/.env.example
 *.key
 *.pem
 *.p12
